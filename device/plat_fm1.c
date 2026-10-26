@@ -166,6 +166,8 @@ void plat_unlock(uint32_t f)
         fm1_irq_on();
     }
 }
+#ifdef APP_SYSEX
+/* (built for an app that talks SysEx, APP_SYSEX: another's image stays as it was, byte for byte) */
 int plat_sysex_send(const uint8_t *frame, uint32_t n) { return usb.config ? ota_wire_send(frame, n) : -1; }
 uint32_t plat_sysex_room(void)
 {
@@ -173,6 +175,9 @@ uint32_t plat_sysex_room(void)
 }
 uint32_t plat_sysex_queued(void) { return (so_w - so_r) * 3u; }
 uint32_t plat_usb_session(void) { return usb.config ? usb.resets + 1u : 0u; }   /* (usb.c counts the bus resets) */
+#else
+int plat_sysex_send(const uint8_t *frame, uint32_t n) { return ota_wire_send(frame, n); }
+#endif
 
 /* the data area and its two more windows (plat.h): read through the unencrypted XIP window (main_fm1.c
  * fl_plain_window_init, from 0x93000 up); erased and written by felucca-bsp's RAM driver (FL_RANGE_OK: the store, its
