@@ -366,13 +366,14 @@ void opt_core_midi(uint32_t pkt, int port)
         return;
     }
     if (midi_rx_wanted(pkt))
-        (void)midi_in_enqueue(pkt, src, fm1_ticks());
+        (void)midi_in_enqueue(pkt, src, plat_midi_in_t24());   /* (when it came in: device/midi_stamp.h) */
 }
 
 /* fm1-base's 1 kHz tick (app.c app_tick, APP_TICK: the timer interrupt), Optimist's TIMER5 work (system/main.c
  * fm1_timer5_irq) that the trial has: the MIDI in from fm1-base's queue into Optimist's, stamped within a millisecond of
- * its arrival (usb_rx_peek / uart_midi_peek: within 0.1 ms; the render's 5.8 ms half before this, which threw the
- * clock follower's tempo filter off); and CLOCK OUT's packets (io/midi/clock_out.c, rt_out_*: each due when its audio
+ * its arrival: the platform's stamp (plat_midi_in_t24: the poll that took it, within 0.25 ms; Optimist's own
+ * usb_rx_peek / uart_midi_peek look at the endpoint and the ring at 10 kHz, within 0.1 ms; the render's 5.8 ms half
+ * before this, which threw the clock follower's tempo filter off); and CLOCK OUT's packets (io/midi/clock_out.c, rt_out_*: each due when its audio
  * leaves) sent at the tick nearest their time, ahead of the notes as usb.c ep1_tx sends them (within half a
  * millisecond: a USB frame is one) */
 #define OPT_TICK_HALF (500u * FM1_TICKS_PER_US)
