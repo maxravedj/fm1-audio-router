@@ -15,7 +15,8 @@
  *   MODE OFF   nothing runs; the radio, once started, stays up.
  *   MODE MAN   the radio is up; a scan when asked (plat_wifi_scan, plat_wifi_scanning), a join when asked.
  *   MODE AUTO  as MAN, and the best saved network heard is joined, at start-up and whenever none is joined.
- * (A record's MODE AP / AP_MAN, from a firmware with an access point of its own: as OFF here.)
+ *   MODE AP, AP_MAN  (wifi_ap = true: FM1B_WIFI_AP) the FM-1 is the access point (device/wifi_own_ap.c); without
+ *                    wifi_ap a record's AP modes are as OFF.
  * The networks kept (four: the SSID and the WPA2 key made from the password, never the password) and the mode are a
  * record of WIFI_STORE_SIZE bytes (wifi/wifi_nets.h struct wn_store): in the app's store object OBJ_WIFI, or the app's
  * own (APP_WIFI_STORE: app_wifi_store gives it, app_wifi_store_dirty is told when it changed).
@@ -26,14 +27,15 @@
 #include "wifi_sta.c"
 #include "wifi_ip.c"
 #include "wifi_nets.c"
-#ifdef PLAT_HOST
-#include "wifi_ap.c"                         /* (the host: its simulated access point, host/wifi_air.c) */
+#if defined(PLAT_HOST) || FM1B_WIFI_AP
+#include "wifi_ap.c"                         /* (MODE AP: wifi_own_ap.c; the host: its simulated access point too, host/wifi_air.c) */
 #include "wifi_ap_dhcp.c"
 #endif
 
 _Static_assert(sizeof(struct plat_wifi_ap) == sizeof(struct wn_ap), "plat.h plat_wifi_ap: wifi_nets.h wn_ap");
 _Static_assert(PLAT_WIFI_STORE_SIZE == WN_STORE_SIZE, "plat.h PLAT_WIFI_STORE_SIZE: wifi_nets.h WN_STORE_SIZE");
-_Static_assert(WIFI_MODE_OFF == WN_MODE_OFF && WIFI_MODE_AUTO == WN_MODE_AUTO && WIFI_MODE_MAN == WN_MODE_MAN,
+_Static_assert(WIFI_MODE_OFF == WN_MODE_OFF && WIFI_MODE_AUTO == WN_MODE_AUTO && WIFI_MODE_MAN == WN_MODE_MAN &&
+               WIFI_MODE_AP == WN_MODE_AP && WIFI_MODE_AP_MAN == WN_MODE_AP_MAN,
                "plat.h WIFI_MODE_*: wifi_nets.h's");
 
 #define WC_CH_MS 150u                    /* one channel's listening in a scan */
@@ -219,6 +221,9 @@ static struct {
     struct wifi_sta sta;                          /* the joined station (its keys are installed in the MAC) */
     struct wifi_ip ip;
     uint32_t n_rx, n_kept, n_tx, n_tx_err;
+#if FM1B_WIFI_AP
+    uint8_t ap;                                   /* MODE AP: the service is the access point's (wifi_own_ap.c) */
+#endif
 } wl;
 static struct {
     uint16_t port;
@@ -229,8 +234,19 @@ static struct {
 static void own_link_addr(uint32_t ip);           /* link/link_own.c: the address came or went */
 static void own_link_poll(int64_t now);
 #endif
+#if FM1B_WIFI_AP
+static void wa_send(uint32_t len);                /* wifi_own_ap.c: the frame out at the right key, to one client or each */
+static void wa_rx(const uint8_t *f, uint32_t len, int8_t rssi, int64_t now);
+static uint32_t wa_udp_srv(struct wifi_ip *wip, const uint8_t *src_mac, const uint8_t *msg, uint32_t n, uint8_t *tx_buf);
+#endif
 static void wl_send(uint32_t len)                 /* what wifi_txb's frame holds, out */
 {
+#if FM1B_WIFI_AP
+    if (wl.ap) {
+        wa_send(len);
+        return;
+    }
+#endif
     fm1_wifi_tx_prepare(wifi_txb, len, 1u, 1u);   /* (WCID 1, the AP: the MAC encrypts what carries the Protected bit) */
     if (fm1_wifi_tx(wifi_txb) == 0)
         wl.n_tx++;
@@ -303,6 +319,11 @@ static void wl_poll(void)                         /* once a main-loop pass */
     int64_t now;
     if (!wl.on)
         return;
+#if FM1B_WIFI_AP
+    if (wl.ap)
+        own_rx(wa_rx, 24u);                       /* (the access point answers probes and joins among the neighbours' traffic) */
+    else
+#endif
     own_rx(wl_rx, 6u);                            /* (a few frames a pass: the rest wait in the MAC) */
     now = own_us();
     tx_len = wifi_ip_poll(&wl.ip, now, own_frame());
@@ -332,6 +353,20 @@ static void wl_start(void)                        /* the station is joined: DHCP
     wl.ip.dhcp_t0 = now;
     wl.on = 1;
 }
+#if FM1B_WIFI_AP
+static void wl_start_ap(const uint8_t mac[6], uint32_t ip)   /* MODE AP: the service at the access point's own address (no DHCP) */
+{
+    wifi_ip_ap_init(&wl.ip, mac, ip, own_rand);
+    own_ip_attach();
+    wl.ip.udp_srv = wa_udp_srv;                   /* (the clients' DHCP requests) */
+    wifi_ip_join(&wl.ip, own_group);
+    wl.n_rx = wl.n_kept = wl.n_tx = wl.n_tx_err = 0;
+    wl.lost = wl.joined = 0;
+    wl.ap = 1;
+    wl.on = 1;
+    own_on_addr(0, ip);                           /* (an address at once: Link starts) */
+}
+#endif
 static void wl_stop(void)                         /* the service off (the station stays joined as far as the AP knows) */
 {
     if (wl.on) {
@@ -398,6 +433,9 @@ static void wc_leave(void)                        /* joined (UP, LINK): tell the
         wifi_sta_clear_hw_keys();
         wc_send(wifi_sta_build_deauth(&wc.sta, own_frame()));
     }
+#if FM1B_WIFI_AP
+    if (!wl.ap)                                   /* (the access point's service is not the station's to stop) */
+#endif
     wl_stop();
     wl.joined = 0;
     wc.joined_slot = 0;
@@ -687,6 +725,10 @@ static void wc_poll(void)                         /* once a main-loop pass: one 
 }
 
 
+#if FM1B_WIFI_AP
+#include "wifi_own_ap.c"                         /* MODE AP: the FM-1 as the access point */
+#endif
+
 /* ---- the main loop's turn (main_fm1.c, plat_yield) */
 static uint8_t own_started;
 static void wifi_log_watch(const char *s) { (void)s; }   /* (radio.c: JieLi's library's log lines; none here) */
@@ -697,6 +739,9 @@ static void wifi_poll(void)
         own_store_load();
     }
     wc_poll();
+#if FM1B_WIFI_AP
+    wa_poll();
+#endif
     wl_poll();
     own_rx_second();
     own_store_poll();
@@ -714,7 +759,7 @@ void plat_wifi_on(int on)                        /* (JieLi's API: on = AUTO unle
 void plat_wifi_mode(int mode)
 {
     own_store_load();
-    if (mode < WIFI_MODE_OFF || mode > WIFI_MODE_MAN || wn_st.mode == (uint8_t)mode)
+    if (mode < WIFI_MODE_OFF || mode > (FM1B_WIFI_AP ? WIFI_MODE_AP_MAN : WIFI_MODE_MAN) || wn_st.mode == (uint8_t)mode)
         return;
     wn_st.mode = (uint8_t)mode;
     own_store_changed();

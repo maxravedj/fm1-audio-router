@@ -1,5 +1,4 @@
 /* SPDX-License-Identifier: GPL-3.0-only OR MPL-2.0 */
-/* Copyright (C) 2026 Henri David (hdavid), Optimist (github.com/w0ts/optimist) */
 /* MODE AP DHCP server (wifi_ap_dhcp.h): DISCOVER -> OFFER, REQUEST -> ACK or NAK, RELEASE frees the address. */
 #include "wifi_ap_dhcp.h"
 #ifndef __PI32V2__
