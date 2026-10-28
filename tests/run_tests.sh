@@ -183,5 +183,9 @@ run sd-app sh -c "$PY tools/build.py tests/sd_app --host && \
 # the dim lights at any brightness (APP_DIM_LEVELS, plat_dim_ns) in the host simulator: tests/dim_app
 run dim-app sh -c "$PY tools/build.py tests/dim_app --host && \
     tests/dim_app/build/host/dimtest_host tests/dim_app/tests/dim.txt tests/dim_app/build/host"
+# the backup in the host simulator (backup, expect value) on a small app with backup = true: tests/backup_app (the
+# emulator's part "backup" has its own test, emu_backup_test.mjs, on the same app)
+run backup-app sh -c "$PY tools/build.py tests/backup_app --host && mkdir -p tests/backup_app/build/out && \
+    tests/backup_app/build/host/bktest_host tests/backup_app/tests/backup.txt tests/backup_app/build/out"
 [ $FAIL -eq 0 ] && echo "all tests passed" || echo "TESTS FAILED"
 exit $FAIL
