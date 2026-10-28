@@ -3,8 +3,9 @@
 /* Optimist's Wi-Fi in the trial (WIFI_LINK: SYSTEM > WI-FI, the web editor's Wi-Fi tab, Link as a clock): its page (ui/optimist/op_wifi.c), its editor command (io/editor/ed_wifi.c, 112) and its settings record's field
  * compiled unchanged, on fm1-base's own Wi-Fi stack (fm1.toml wifi_stack = "own", link = true: gen_optimist.py --conf),
  * which is Optimist's moved (fm1-base's wifi/, device/wifi_own.c, link/), through plat.h, in place of Optimist's
- * wifi/wifi_conn.c, wifi_link.c and the stack under them: one copy of the Wi-Fi code in the build. MODE AP (WIFI_AP) is
- * not on fm1-base's stack: a configuration with it is refused (gen_optimist.py --conf, and here).
+ * wifi/wifi_conn.c, wifi_link.c and the stack under them: one copy of the Wi-Fi code in the build. MODE AP (WIFI_AP):
+ * fm1-base's (fm1.toml wifi_ap = true from gen_optimist.py --conf; device/wifi_own_ap.c, which is Optimist's
+ * wifi/wifi_apd.c moved), the page's and the editor's wa_* on plat_wifi_ap_*.
  *   the manager   wc, wc_req, wc_tab, wl.ip.ip (what the page and the editor read) mirrored from plat_wifi_step,
  *                 _fail, _fails, _found_ap, _joining, _joined_slot, _saved_join, _addr at every main loop pass
  *                 (opt_wifi_poll), before the UI; wc.scan_want (the page's) to plat_wifi_scanning; wc_request,
@@ -14,6 +15,10 @@
  *                 (APP_WIFI_STORE: app.c app_wifi_store); fm1-base's wifi_nets.c reads and writes it (the page's
  *                 wn_find / wn_forget / wn_scan_best_for are fm1-base's functions: wifi_nets.h is the same file), and
  *                 a change it makes (a join kept, a network forgotten) is saved with the settings (settings_later)
+ *   MODE AP       AP AUTO / AP MAN are the record's modes (wn_st.mode, read by fm1-base each pass); NAME, CHANNEL,
+ *                 STATE, SAVE (the password), SAVE held (CLEAR KEY), the editor's ops 5 / 6 / 7 / 8: wa_name,
+ *                 wa_channel, wa_status, wa_clients, wa_set_pass, wa_set_channel, wa_forget_key, wa_run on
+ *                 plat_wifi_ap_name, _channel, _state, _clients, _set, _set_channel, _forget, _run
  *   Link          the session as Optimist's MIDI clock (its wifi_link.c wl_clock: 24 F8 a beat at the time Link puts
  *                 each tick, FA at the next bar line, FC at a stop) from plat_link_*, through a ring to the 1 kHz tick
  *                 (opt_link_tick: MSRC_LINK input to clock_sync.c); the FM-1's own PLAY / STOP and tempo to the session
@@ -27,8 +32,9 @@
                                                  * table; their functions fm1-base's, linked from its unit) */
 _Static_assert(sizeof(struct wn_ap) == sizeof(struct plat_wifi_ap) && WN_STORE_SIZE == PLAT_WIFI_STORE_SIZE,
                "wifi_nets.h: fm1-base's plat.h records");
-#if defined(FELUCCA_WIFI_AP) && FELUCCA_WIFI_AP
-#error "WIFI_AP (MODE AP) is not on fm1-base's own Wi-Fi stack: switch it off in the configuration"
+#ifndef FELUCCA_WIFI_AP
+#define FELUCCA_WIFI_AP 0                       /* (MODE AP's plat_wifi_ap_* are fm1-base's with fm1.toml wifi_ap = true, which
+                                                 * gen_optimist.py --conf gives with the configuration's WIFI_AP) */
 #endif
 #define LK_UBEAT_US 1000000                     /* micro-beats a beat (Link's wire unit: fm1-base's link.h LK_UBEAT) */
 
@@ -37,7 +43,7 @@ static struct wn_store wn_st;
 static void wifi_nets_in(const uint8_t r[WN_STORE_SIZE])
 {
     wn_load(&wn_st, r);
-    if (wn_st.mode == WN_MODE_AP || wn_st.mode == WN_MODE_AP_MAN)
+    if (!FELUCCA_WIFI_AP && (wn_st.mode == WN_MODE_AP || wn_st.mode == WN_MODE_AP_MAN))
         wn_st.mode = WN_MODE_OFF;                /* (a record from a build with MODE AP: this one has none) */
 }
 static void wifi_nets_out(uint8_t r[WN_STORE_SIZE]) { wn_save(&wn_st, r); }
@@ -105,6 +111,27 @@ static void wc_enable(int on)
         plat_wifi_leave();                      /* (the mode is the record's: MODE OFF stops the manager at its next pass) */
 }
 static void wc_disconnect(void) { plat_wifi_leave(); }
+
+#if FELUCCA_WIFI_AP
+/* ---- MODE AP, as the page and the editor call it (Optimist's wifi_apd.c names) on fm1-base's plat_wifi_ap_* */
+enum { WAS_OFF = WIFI_AP_OFF, WAS_NOKEY = WIFI_AP_NOKEY, WAS_STARTING = WIFI_AP_STARTING, WAS_UP = WIFI_AP_UP,
+       WAS_NOCAL = WIFI_AP_FAILED, WAS_STOPPED = WIFI_AP_STOPPED };
+#define WA_CH_DEFAULT 6u                        /* (fm1-base's default channel) */
+static uint32_t wa_status(void) { return (uint32_t)plat_wifi_ap_state(); }
+static uint32_t wa_clients(void) { return plat_wifi_ap_clients(); }
+static uint32_t wa_channel(void) { return (uint32_t)plat_wifi_ap_channel(); }
+static uint32_t wa_name(uint8_t *out)           /* the network's name (no terminating zero: out holds WN_SSID_MAX) */
+{
+    char b[WN_SSID_MAX + 1];
+    uint32_t n = (uint32_t)plat_wifi_ap_name(b);
+    memcpy(out, b, n);
+    return n;
+}
+static int wa_set_pass(const uint8_t *ssid, uint32_t len, const char *pass) { return plat_wifi_ap_set(ssid, len, pass); }
+static void wa_set_channel(uint32_t ch) { (void)plat_wifi_ap_set_channel((int)ch); }
+static void wa_forget_key(void) { plat_wifi_ap_forget(); }
+static int wa_run(int on) { return plat_wifi_ap_run(on); }
+#endif
 
 /* ---- Link: the session as MIDI clock (Optimist's wifi_link.c wl_clock, wl_push_own, wl_midi_poll) */
 #define WL_Q 16u                                /* the tick ring (the main loop writes, the 1 kHz tick reads) */
