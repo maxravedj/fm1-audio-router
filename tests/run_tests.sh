@@ -205,5 +205,8 @@ run backup-app sh -c "$PY tools/build.py tests/backup_app --host && mkdir -p tes
 # link = true): the station, the crypto, the IP layer, the simulator's access point, Link; the Link example on a simulated
 # network in the host simulator
 if sh tests/wifi/run.sh; then :; else FAIL=1; fi
+# the USB port as a MIDI host (usb_host, plat_usb_host, plat_usb_host_name) in the host simulator's model of it: tests/usbh_app
+run usbh-app sh -c "$PY tools/build.py tests/usbh_app --host && \
+    tests/usbh_app/build/host/usbhtest_host tests/usbh_app/tests/usbh.txt tests/usbh_app/build/host"
 [ $FAIL -eq 0 ] && echo "all tests passed" || echo "TESTS FAILED"
 exit $FAIL
