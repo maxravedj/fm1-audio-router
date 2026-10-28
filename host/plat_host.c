@@ -789,6 +789,90 @@ int plat_data_write(uint32_t off, const void *src, uint32_t n)
         data_area[off - DATA_BASE + i] &= ((const uint8_t *)src)[i];
     return 0;
 }
+/* the app's SysEx to the computer (plat_sysex_send): the computer reads it at once; each frame is kept for the script
+ * ("sysex_out", "expect_sysex") and written to the "sysex_log" file */
+#define HSX_KEEP 65536u
+static uint8_t hsx_out[HSX_KEEP];               /* the frames sent since the last "sysex_out", one after another */
+static uint32_t hsx_n, hsx_lost;
+static FILE *hsx_log;
+static void hsx_keep(const uint8_t *p, uint32_t n)
+{
+    if (hsx_log)
+        fwrite(p, 1, n, hsx_log);
+    if (n <= HSX_KEEP - hsx_n) {
+        memcpy(hsx_out + hsx_n, p, n);
+        hsx_n += n;
+    } else {
+        hsx_lost += n;
+    }
+}
+/* the device's SysEx ring as the computer empties it (plat_sysex_room, plat_sysex_queued): HSX_RING packets of 3 bytes,
+ * HSX_READ a millisecond read while the computer reads (a 64-byte USB-MIDI transfer a 1 ms frame); a send that finds
+ * no room waits as the device's does, the computer reading meanwhile (or, stalled: -1 after its 200 ms). The script's
+ * "usb unplug | plug | stall | read" (plat_usb_session: a new number at each plug) */
+#define HSX_RING 128u                           /* (device/unity.c SXQ) */
+#define HSX_READ 16u
+static uint32_t hsx_q, hsx_session = 1, hsx_plugs = 1;
+static uint8_t hsx_stalled;
+static uint8_t hsx_streaming, hsx_scut;          /* a stream begun (plat_sysex_begin); cut short (a put gave up) */
+static uint32_t hsx_sk;                          /* the stream's bytes not yet in a packet (0..3) */
+uint32_t plat_sysex_room(void) { return hsx_session && !hsx_streaming ? (HSX_RING - hsx_q) * 3u : 0u; }
+uint32_t plat_sysex_queued(void) { return hsx_q * 3u; }
+uint32_t plat_usb_session(void) { return hsx_session; }
+static void hsx_ms(void)                        /* one millisecond of USB: the computer reads */
+{
+    if (!hsx_stalled)
+        hsx_q -= hsx_q < HSX_READ ? hsx_q : HSX_READ;
+}
+int plat_sysex_send(const uint8_t *frame, uint32_t n)
+{
+    uint32_t pk = (n + 2u) / 3u;
+    if (!hsx_session || (hsx_stalled && pk > HSX_RING - hsx_q))
+        return -1;                              /* (no computer; or the ring full and nobody reading) */
+    if (hsx_streaming)
+        return -1;                              /* (a stream under way holds the ring) */
+    hsx_q = hsx_q + pk > HSX_RING ? HSX_RING : hsx_q + pk;   /* (a wait: the computer read the rest meanwhile) */
+    hsx_keep(frame, n);
+    return 0;
+}
+/* a stream (plat_sysex_begin .. end): its bytes kept as they are put, its packets into the ring as the device's */
+int plat_sysex_begin(void)
+{
+    if (!hsx_session || hsx_streaming)
+        return -1;
+    hsx_streaming = 1, hsx_scut = 0, hsx_sk = 0;
+    return 0;
+}
+int plat_sysex_put(const uint8_t *p, uint32_t n)
+{
+    uint32_t i;
+    if (!hsx_streaming || hsx_scut || !hsx_session)
+        return -1;
+    for (i = 0; i < n; i++) {
+        if (hsx_sk == 3u) {                     /* (a full packet goes when the next byte comes) */
+            if (hsx_stalled && hsx_q >= HSX_RING) {
+                hsx_scut = 1;                   /* (nobody reading for the stall: the frame cut here) */
+                hsx_keep(p, i);
+                return -1;
+            }
+            hsx_q += hsx_q < HSX_RING;
+            hsx_sk = 0;
+        }
+        hsx_sk++;
+    }
+    hsx_keep(p, n);
+    return 0;
+}
+int plat_sysex_end(void)
+{
+    int rc = hsx_streaming && !hsx_scut && hsx_session && hsx_sk ? 0 : -1;
+    if (!rc && hsx_stalled && hsx_q >= HSX_RING)
+        rc = -1;                                /* (its last packet: no room) */
+    else if (!rc)
+        hsx_q++;
+    hsx_streaming = 0, hsx_sk = 0;
+    return rc;
+}
 #if FM1B_SD
 /* the SD card (plat.h plat_sd_*): an image file, its 512-byte blocks read and written in place (FM1B_SD=FILE in the
  * environment at the start, the script's sd FILE | sd out later; plat_sd_init finds the card then), the runs one at a
@@ -883,90 +967,6 @@ int plat_sd_close(void)
     return sd_up ? 0 : PLAT_SD_NOCARD;
 }
 #endif
-/* the app's SysEx to the computer (plat_sysex_send): the computer reads it at once; each frame is kept for the script
- * ("sysex_out", "expect_sysex") and written to the "sysex_log" file */
-#define HSX_KEEP 65536u
-static uint8_t hsx_out[HSX_KEEP];               /* the frames sent since the last "sysex_out", one after another */
-static uint32_t hsx_n, hsx_lost;
-static FILE *hsx_log;
-static void hsx_keep(const uint8_t *p, uint32_t n)
-{
-    if (hsx_log)
-        fwrite(p, 1, n, hsx_log);
-    if (n <= HSX_KEEP - hsx_n) {
-        memcpy(hsx_out + hsx_n, p, n);
-        hsx_n += n;
-    } else {
-        hsx_lost += n;
-    }
-}
-/* the device's SysEx ring as the computer empties it (plat_sysex_room, plat_sysex_queued): HSX_RING packets of 3 bytes,
- * HSX_READ a millisecond read while the computer reads (a 64-byte USB-MIDI transfer a 1 ms frame); a send that finds
- * no room waits as the device's does, the computer reading meanwhile (or, stalled: -1 after its 200 ms). The script's
- * "usb unplug | plug | stall | read" (plat_usb_session: a new number at each plug) */
-#define HSX_RING 128u                           /* (device/unity.c SXQ) */
-#define HSX_READ 16u
-static uint32_t hsx_q, hsx_session = 1, hsx_plugs = 1;
-static uint8_t hsx_stalled;
-static uint8_t hsx_streaming, hsx_scut;          /* a stream begun (plat_sysex_begin); cut short (a put gave up) */
-static uint32_t hsx_sk;                          /* the stream's bytes not yet in a packet (0..3) */
-uint32_t plat_sysex_room(void) { return hsx_session && !hsx_streaming ? (HSX_RING - hsx_q) * 3u : 0u; }
-uint32_t plat_sysex_queued(void) { return hsx_q * 3u; }
-uint32_t plat_usb_session(void) { return hsx_session; }
-static void hsx_ms(void)                        /* one millisecond of USB: the computer reads */
-{
-    if (!hsx_stalled)
-        hsx_q -= hsx_q < HSX_READ ? hsx_q : HSX_READ;
-}
-int plat_sysex_send(const uint8_t *frame, uint32_t n)
-{
-    uint32_t pk = (n + 2u) / 3u;
-    if (!hsx_session || (hsx_stalled && pk > HSX_RING - hsx_q))
-        return -1;                              /* (no computer; or the ring full and nobody reading) */
-    if (hsx_streaming)
-        return -1;                              /* (a stream under way holds the ring) */
-    hsx_q = hsx_q + pk > HSX_RING ? HSX_RING : hsx_q + pk;   /* (a wait: the computer read the rest meanwhile) */
-    hsx_keep(frame, n);
-    return 0;
-}
-/* a stream (plat_sysex_begin .. end): its bytes kept as they are put, its packets into the ring as the device's */
-int plat_sysex_begin(void)
-{
-    if (!hsx_session || hsx_streaming)
-        return -1;
-    hsx_streaming = 1, hsx_scut = 0, hsx_sk = 0;
-    return 0;
-}
-int plat_sysex_put(const uint8_t *p, uint32_t n)
-{
-    uint32_t i;
-    if (!hsx_streaming || hsx_scut || !hsx_session)
-        return -1;
-    for (i = 0; i < n; i++) {
-        if (hsx_sk == 3u) {                     /* (a full packet goes when the next byte comes) */
-            if (hsx_stalled && hsx_q >= HSX_RING) {
-                hsx_scut = 1;                   /* (nobody reading for the stall: the frame cut here) */
-                hsx_keep(p, i);
-                return -1;
-            }
-            hsx_q += hsx_q < HSX_RING;
-            hsx_sk = 0;
-        }
-        hsx_sk++;
-    }
-    hsx_keep(p, n);
-    return 0;
-}
-int plat_sysex_end(void)
-{
-    int rc = hsx_streaming && !hsx_scut && hsx_session && hsx_sk ? 0 : -1;
-    if (!rc && hsx_stalled && hsx_q >= HSX_RING)
-        rc = -1;                                /* (its last packet: no room) */
-    else if (!rc)
-        hsx_q++;
-    hsx_streaming = 0, hsx_sk = 0;
-    return rc;
-}
 /* no host to pull from (an app's transfer is tested on its own, or by writing the flash: "data") */
 int plat_host_read(uint32_t addr, uint8_t *dst, uint32_t n) { (void)addr, (void)dst, (void)n; return -1; }
 void plat_host_patience(uint32_t try_ms, uint32_t total_ms) { (void)try_ms, (void)total_ms; }
@@ -2102,11 +2102,13 @@ static int hsx_in(const char *hex)
     }
     for (i = 1, ok = 1; i + 1u < n; i++)
         ok &= raw[i] < 0x80u;
+    if (!hsx_session)
+        return 0;                                 /* (no computer: nothing comes in) */
 #ifdef APP_SYSEX_BYTE
     for (i = 0; i < n && (i == 0 || i + 1u == n || raw[i] < 0x80u); i++)
         app_sysex_byte(raw[i]);                   /* (as the USB interrupt hands them over: to a status inside) */
 #endif
-    if (!ok || n - 2u > HOST_SX_MAX || !hsx_session)
+    if (!ok || n - 2u > HOST_SX_MAX)
         return 0;                                 /* (a status byte inside, or too long: the device drops it) */
 #ifdef APP_SYSEX
     if (app_sysex(raw + 1, n - 2u))

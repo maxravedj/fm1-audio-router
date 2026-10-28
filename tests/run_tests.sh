@@ -122,6 +122,11 @@ run template template/build/host/template_host template/tests/basic.txt template
 # SysEx between the computer and an app (APP_SYSEX, plat_sysex_send) in the host simulator: tests/sysex_app
 run sysex-app sh -c "$PY tools/build.py tests/sysex_app --host && \
     tests/sysex_app/build/host/sxtest_host tests/sysex_app/tests/sysex.txt tests/sysex_app/build/host"
+# Bluetooth audio's calls (plat_bta_*) on the host simulator's stand-in, from a test app's buttons
+run bta sh -c "$PY tools/build.py tests/bta_app --host && tests/bta_app/build/host/bta_test_host tests/bta_app/tests/bta.txt tests/bta_app/build/host"
+# the own Bluetooth stack (bt/, Optimist's: ble_stack = "own"): its link layer, host, pairing, BLE-MIDI, central, the
+# radio driver against a fake engine, FM-1 to FM-1, and BR/EDR (A2DP) pieces; UBSan, and ASan where its runtime runs
+if sh tests/bt/run.sh; then :; else FAIL=1; fi
 # the simulator's USB audio (usb_play, usb_rec): a computer's signal through the template's MASTER, recorded back
 run host-usb-audio "$PY" tests/host_usb_audio_test.py template/build/host/template_host template/build/tests/usb_audio
 # the companion services (device/companion.c) in the host simulator, through tools/fm1_companion.py: tests/companion_app
@@ -148,14 +153,6 @@ if command -v emcc >/dev/null 2>&1 && command -v node >/dev/null 2>&1; then
     run emu-plain "$PY" tools/build.py template --web
 else
     echo "  skip emu (no emcc or node)"
-# and in the browser emulator (web/emu/emu_web.c web_sx_in, web_sx_out_*), its app.wasm under node
-if command -v emcc >/dev/null 2>&1 && command -v node >/dev/null 2>&1; then
-    run emu-sysex sh -c "$PY tools/build.py tests/sysex_app --web && node tests/sysex_web_test.mjs tests/sysex_app/build/emu"
-else
-    echo "  skip emu-sysex (no emcc or node)"
-fi
-# the companion services (device/companion.c) in the host simulator, through tools/fm1_companion.py: tests/companion_app
-run companion "$PY" tests/companion_test.py $OUT/companion
 fi
 # the simulated data area: a file put at its offset in each window, read back there by plat_data (tests/data.txt)
 run host-data sh -c "printf '\\022\\064\\126\\170' > $OUT/data4.bin && \
@@ -176,11 +173,6 @@ run flash-image sh -c "$CC -std=c99 -Wall -Wextra -Werror -Wno-unused-function -
 run host-flash-load sh -c "$H/template_host tests/flash_load.txt $H && \
     FM1B_FLASH=$H/flash2.bin $H/template_host tests/flash_boot.txt $H && \
     cmp $H/flash.bin $H/flash3.bin"
-# Bluetooth audio's calls (plat_bta_*) on the host simulator's stand-in, from a test app's buttons
-run bta sh -c "$PY tools/build.py tests/bta_app --host && tests/bta_app/build/host/bta_test_host tests/bta_app/tests/bta.txt tests/bta_app/build/host"
-# the own Bluetooth stack (bt/, Optimist's: ble_stack = "own"): its link layer, host, pairing, BLE-MIDI, central, the
-# radio driver against a fake engine, FM-1 to FM-1, and BR/EDR (A2DP) pieces; UBSan, and ASan where its runtime runs
-if sh tests/bt/run.sh; then :; else FAIL=1; fi
 # the SD card on the LCD's bus (device/sd.c) against a card in SPI mode byte by byte (start-ups, reads, writes, runs,
 # CRC failures, the read modes, the bus back with the LCD after every call); then an app on plat_sd_* in the host
 # simulator with a card image (tests/sd_app)
