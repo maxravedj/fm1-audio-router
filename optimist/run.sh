@@ -22,7 +22,7 @@
 # the trial's own switches (optsim.py build-trial), every reply byte for byte; backup, restore, the mirror, DX7.
 # The screens and the flashes in optimist/build/host. PYTHON: a python with Pillow (fm1-base's font generator), default
 # the first python3 on PATH. OPTSIM=0: without Optimist's simulator (no emcc / node). PROFILES: the runs (default
-# "none sd bt lights dev"; lights: the dev profile with LIGHTS on the dim levels, tests/dev/lights.txt; sd: the SD card mode, run_sd below; bt: the dev profile with its Bluetooth on the host too,
+# "none sd bt lights wifi dev"; wifi: the dev profile with Wi-Fi + Link, tests/wifi/wifi.txt (run_wifi); lights: the dev profile with LIGHTS on the dim levels, tests/dev/lights.txt; sd: the SD card mode, run_sd below; bt: the dev profile with its Bluetooth on the host too,
 # OPT_HOST_BT=1, tests/dev/bt.txt and ui.txt).
 set -e
 cd "$(dirname "$0")/.."
@@ -67,10 +67,23 @@ run_lights() {                      # the dev profile with LIGHTS (profiles/dev-
     unset OPT_PROFILE
 }
 
+run_wifi() {                        # the dev profile with Wi-Fi + Link (profiles/dev-wifi.config), its Bluetooth
+                                    # and Wi-Fi on the host too (OPT_HOST_BT=1 OPT_HOST_WIFI=1): Optimist's SYSTEM > WI-FI,
+                                    # its join and Link's clock on fm1-base's own Wi-Fi stack over the simulator's network
+                                    # (host/wifi_air.c), tests/wifi/wifi.txt
+    echo "optimist/run.sh: profile dev-wifi, Bluetooth and Wi-Fi on the host (tests/wifi/wifi.txt)"
+    export OPT_PROFILE=profiles/dev-wifi.config
+    OPT_HOST_BT=1 OPT_HOST_WIFI=1 X0X_FONTSET=terminus "$PY" tools/build.py optimist --host
+    $H/optimist_host optimist/tests/note.txt $H
+    $H/optimist_host optimist/tests/wifi/wifi.txt $H
+    unset OPT_PROFILE
+}
+
 run_profile() {                     # $1: dev (the trial's profile copy), none (Optimist's source defaults), sd or bt
     if [ "$1" = sd ]; then run_sd; return; fi
     if [ "$1" = bt ]; then run_bt; return; fi
     if [ "$1" = lights ]; then run_lights; return; fi
+    if [ "$1" = wifi ]; then run_wifi; return; fi
     if [ "$1" = none ]; then T=optimist/tests; export OPT_PROFILE=none; else T=optimist/tests/dev; unset OPT_PROFILE; fi
     echo "optimist/run.sh: profile $1"
     X0X_FONTSET=terminus "$PY" tools/build.py optimist --host
@@ -104,8 +117,8 @@ run_profile() {                     # $1: dev (the trial's profile copy), none (
     fi
 }
 
-for p in ${PROFILES:-none sd bt lights dev}; do
+for p in ${PROFILES:-none sd bt lights wifi dev}; do
     run_profile "$p"
 done
 unset OPT_PROFILE
-echo "optimist/run.sh: every check passed (${PROFILES:-none sd bt lights dev})"
+echo "optimist/run.sh: every check passed (${PROFILES:-none sd bt lights wifi dev})"

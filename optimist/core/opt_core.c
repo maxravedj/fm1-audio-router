@@ -120,6 +120,7 @@ static int midi_out_open(void) { return 1; }
 static void opt_ble_in(uint32_t pkt);          /* (ui/opt_bt.h: Bluetooth MIDI in, its time sent; the mirror's requests) */
 static void opt_ble_tick(uint32_t now);        /* (ui/opt_bt.h: Bluetooth MIDI out, CLOCK OUT's F8s at their time) */
 #endif
+static void opt_link_tick(void);               /* (ui/opt_wifi.h: Link's MIDI clock ticks whose time has come, MSRC_LINK) */
 #include "io/midi/midi_rings.c"
 #if FELUCCA_EDITOR && FELUCCA_ED_LIVE && !defined(FELUCCA_OTA)
 #define FELUCCA_OTA 1                            /* (felucca.c's, before the sequencer: the notes the live editor plays,
@@ -396,6 +397,7 @@ void opt_core_tick(void)
 #if FELUCCA_BLE
     opt_ble_tick(fm1_ticks() + OPT_TICK_HALF);      /* Bluetooth: the events and CLOCK OUT to the computer's link */
 #endif
+    opt_link_tick();                                 /* Link's session as MIDI clock (ui/opt_wifi.h: nothing without WIFI_LINK) */
 }
 
 void opt_core_panic(void)

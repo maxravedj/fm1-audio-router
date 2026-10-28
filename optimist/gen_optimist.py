@@ -130,6 +130,7 @@ def config(tree, prof):
             host_sd(configure.flags(cfg)[0], GEN / out)
             slot_check(configure.flags(cfg)[0].get("FELUCCA_LAYOUT", 0), prof)
             host_bt(configure.flags(cfg)[0], GEN / out)
+            host_wifi(configure.flags(cfg)[0], GEN / out)
             ble_peers_define(configure.flags(cfg)[0], GEN / out)
             dim_header(configure.flags(cfg)[0], GEN / "opt_dim.h")
         if env is None:
@@ -221,6 +222,23 @@ def host_bt(flags, path):
         path.write_text(text + extra)
 
 
+WIFI_ITEMS = ("FELUCCA_WIFI", "FELUCCA_LINK")
+
+
+def host_wifi(flags, path):
+    """OPT_HOST_WIFI=1 (with OPT_HOST_BT=1: Wi-Fi rides on the Bluetooth radio): the profile's Wi-Fi (WIFI_LINK: an
+    FM-1-only item) on the host too: Optimist's SYSTEM > WI-FI, its editor command and Link's clock on fm1-base's own
+    Wi-Fi stack, which the host simulator runs over its simulated network (host/wifi_air.c; optimist/run.sh's wifi run)"""
+    if os.environ.get("OPT_HOST_WIFI") != "1" or not flags.get("FELUCCA_WIFI", 0):
+        return
+    lines = "".join(f"#define {k} {flags.get(k, 0)}\n" for k in WIFI_ITEMS)
+    extra = ("/* the trial (gen_optimist.py host_wifi, OPT_HOST_WIFI=1): the profile's Wi-Fi on the host too */\n"
+             f"#if defined(PLAT_HOST)\n{lines}#endif\n")
+    text = path.read_text()
+    if not text.endswith(extra):
+        path.write_text(text + extra)
+
+
 def companion():
     """1: the build has fm1-base's companion services (fm1.toml companion = true; FM1B_COMPANION=0 / 1 over it, as
     tools/build.py opt_flags has it): OPT_COMPANION in the trial's header, for the Optimist unit (an o2 unit: on the host
@@ -255,6 +273,7 @@ def generate(tree):
     key = stamp(tree) + (f"profile {prof}\n" + prof.read_text() if prof else "profile none\n")
     key += f"companion {companion()}\n"
     key += f"host_bt {os.environ.get('OPT_HOST_BT') == '1'}\n"
+    key += f"host_wifi {os.environ.get('OPT_HOST_WIFI') == '1'}\n"
     st = GEN / "stamp"
     outs = [out for _, out in GENERATORS] + ["felucca_config.h", "felucca_config_profile.h", "opt_dim.h"]
     if st.exists() and st.read_text() == key and all((GEN / out).exists() for out in outs):
@@ -306,6 +325,13 @@ def conf():
         print("ble_central = 3" if flags["FELUCCA_BLE_CENTRAL"] == 3 else "ble_central = true")
     if flags.get("FELUCCA_BLE", 0) and flags.get("FELUCCA_BLE_BOND", 0):
         print("ble_pairing = true")                      # (BLE_BOND: a computer's pairing kept, ui/opt_bt.h opt_ble_save)
+    if flags.get("FELUCCA_WIFI", 0):
+        # Wi-Fi + Link (WIFI_LINK): fm1-base's own Wi-Fi stack, which is Optimist's moved, on the radio
+        # its own Bluetooth stack starts (the builder refuses WIFI_LINK without BLE), and Ableton Link on it (link/:
+        # GPL-3.0-only, as this app: fm1.toml licence); ui/opt_wifi.h
+        print("wifi = true", 'wifi_stack = "own"', "link = true", sep="\n")
+        if flags.get("FELUCCA_WIFI_AP", 0):
+            raise SystemExit("gen_optimist: WIFI_AP (MODE AP) is not on fm1-base's own Wi-Fi stack: off in the configuration")
     if ble and flags.get("FELUCCA_BLE_DIAG", 0):
         print("ble_diag = true")                         # (BLE_DIAG: the link layer's diagnostics, fm1-base's log: btlog)
     if audio and flags.get("FELUCCA_BT_DIAG", 0):

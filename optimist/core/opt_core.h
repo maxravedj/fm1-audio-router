@@ -31,6 +31,9 @@ void opt_ui_frame(void);                                     /* the panel, the L
  * loop pass (the mirror, DX7 SysEx, a restore's restart), every SysEx byte from USB (the USB interrupt: DX7 SysEx) */
 int opt_ed_frame(const uint8_t *p, uint32_t n);
 void opt_ed_poll(void);
+void opt_wifi_loop(void);                /* (ui/opt_wifi.h: the Wi-Fi page's mirrors, Link's clock; each main loop pass) */
+uint8_t *opt_wifi_store(void);           /* (ui/opt_wifi.h: the settings record's Wi-Fi field, fm1-base's record) */
+void opt_wifi_dirty(void);
 void opt_sysex_byte(uint8_t b);
 void opt_ui_input(void);                                     /* the panel only (and the meters) */
 /* Bluetooth (ui/opt_bt.h): what fm1-base keeps (app.c app_ble_load / app_ble_save, APP_BLE_STORE: Optimist's settings
