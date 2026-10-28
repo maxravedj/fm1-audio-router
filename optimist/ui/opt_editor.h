@@ -211,12 +211,20 @@ static void opt_ed_master(void)
 #if FELUCCA_ED_MIRROR
     uint32_t pot = plat_master() / 4u, v;       /* (fm1-base's MASTER 0..4096; Optimist's pot 0..1023: main.c master_pot) */
     pot = pot > 1023u ? 1023u : pot;
+#if FELUCCA_USB_AUDIO || FELUCCA_BT_AUDIO
+    {
+        int held = 0;                           /* (main.c master_pot's knob: the pot x16) */
+#if FELUCCA_USB_AUDIO
+        held |= ut_vol_hold((int32_t)pot * 16); /* SHIFT + the knob: the USB input's VOLUME (op_mixer.c) */
+#endif
 #if FELUCCA_BT_AUDIO
-    if (bt_vol_hold((int32_t)pot * 16)) {       /* SHIFT + the knob: the output switch, the volume held (op_bt.c; main.c
-                                                 * master_pot's knob: the pot x16) */
-        if (!opt_master_q12)
-            opt_master_q12 = song.master_q12 + 1u;
-        return;
+        held |= bt_vol_hold((int32_t)pot * 16); /* SHIFT2 + the knob: the output switch (op_bt.c) */
+#endif
+        if (held) {                             /* the volume held */
+            if (!opt_master_q12)
+                opt_master_q12 = song.master_q12 + 1u;
+            return;
+        }
     }
 #endif
     v = mir_master(pot);
