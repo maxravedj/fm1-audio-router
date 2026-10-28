@@ -42,6 +42,9 @@ APP_DIR holds the app (app.h, app.c, its sources) and its fm1.toml:
   ble_central = true         and the FM-1 connects to Bluetooth MIDI devices too (FM1B_BLE_CENTRAL), beside a computer
   usb_audio_in = true        the FM-1 recordable over USB (FM1B_UAC; the default: true)
   usb_audio_out = true       a computer plays through the FM-1 over USB (FM1B_UAC_OUT; the default: true)
+  usb_audio_first = true     the USB audio streaming interfaces listed first in the audio control collection
+                             (felucca-bsp FELUCCA_UAC_AS_FIRST, from Felucca 1.5.1): macOS then shows the FM-1 as an audio
+                             device beside its MIDI; bcdDevice +0.08 (a changed device to the computer)
   usb_audio_in_channels = 4  the USB audio input's channels, 1..8 (FM1B_UAC_CH; default 2, the master): the app gives
                              them (app.h APP_USB_CAPTURE, plat.h)
   usb_audio_in_24bit = true  the USB audio input in 24-bit too (FM1B_UAC_24: a second alt setting, 16-bit stays)
@@ -60,9 +63,6 @@ APP_DIR holds the app (app.h, app.c, its sources) and its fm1.toml:
   usb_audio_in_name = "..."  (FELUCCA_UAC_IN_NAME, default the usb_product + " In"), usb_audio_out_name (" Out"), and
   usb_audio_in_channel_names = ["CH1", ...]   the input's channels', one a channel (FELUCCA_UAC_CH_NAMES); ASCII, 31
                              characters at most each
-  usb_audio_first = true     the USB audio streaming interfaces listed first in the audio control collection
-                             (felucca-bsp FELUCCA_UAC_AS_FIRST, from Felucca 1.5.1): macOS then shows the FM-1 as an audio
-                             device beside its MIDI; bcdDevice +0.08 (a changed device to the computer)
   usb_host = true            the USB port as a MIDI host when the app asks (FM1B_USB_HOST: felucca-bsp's
                              FELUCCA_USB_HOST, docs/USB_HOST.md; plat_usb_host in plat.h): a USB-MIDI controller or
                              synth, directly or behind one powered hub (the FM-1 gives no power). Boot is a device
@@ -70,6 +70,8 @@ APP_DIR holds the app (app.h, app.c, its sources) and its fm1.toml:
                              fm1_sd_hw.h; plat_sd_* in plat.h, felucca-bsp docs/SD.md): the screen idles selected,
                              the card's chip select being its own inverted; the host simulator reads a card image
                              (FM1B_SD=FILE)
+  conf_gen = "x.py args"     a script of the app (cwd APP_DIR) whose output, fm1.toml lines (ble = false), replaces the
+                             file's own before the build: a setting the app's configuration chooses
   app_end = 0xCE000          a bigger app slot (FM1B_APP_END; FM1B_APP_END=0x... in the environment for one build): the
                              app area [0x4000, app_end) instead of [0x4000, 0x93000), on a 4 KiB boundary up to 0xE0000;
                              the code may then reach past the old end, plat.h's data window starts at app_end
@@ -157,6 +159,7 @@ macOS (or with JIELI_DOCKER=1) each tool runs in a linux/amd64 container.
 """
 import argparse
 import hashlib
+import json
 import os
 import platform
 import re
@@ -206,11 +209,15 @@ BT_SYMS = ("btstack_init", "bt_ble_init", "bt_max_pwr_set", "le_controller_set_m
 
 
 def read_conf(path):
+    return parse_conf(path.read_text(), path)
+
+
+def parse_conf(text, path):
     """fm1.toml: key = "string" | number | true | false | ["string", ...] (a list may go on over several lines),
     # comments (the little TOML a firmware needs)"""
     conf = {}
     pending, start = "", 0
-    for no, line in enumerate(path.read_text().splitlines(), 1):
+    for no, line in enumerate(text.splitlines(), 1):
         line = re.sub(r"\s+#.*$", "", line).strip()
         if not line or line.startswith("#"):
             continue
@@ -634,15 +641,6 @@ def usb_audio_flags():
     return flags + usb_audio_names()
 
 
-def cpu2_stack_flags():
-    """fm1.toml cpu2_stack: the second core's job stack, for its entry's unit and the platform's (none: felucca-bsp's
-    2816 B, the build as before)"""
-    n = CONF.get("cpu2_stack")
-    if n is None:
-        return []
-    if not isinstance(n, int) or isinstance(n, bool) or n % 8 or not 1024 <= n <= 16384:
-        raise SystemExit(f"fm1.toml cpu2_stack {n!r}: bytes, a multiple of 8, 1024..16384")
-    return [f"-DFM1_CPU1_USTACK_BYTES={n}"]
 def usb_audio_names():
     """fm1.toml usb_audio_split and the names it gives the two audio functions and the input's channels -> flags"""
     keys = ("usb_audio_in_name", "usb_audio_out_name", "usb_audio_in_channel_names")
@@ -666,6 +664,28 @@ def usb_audio_names():
             raise SystemExit(f"build: usb_audio_in_channel_names: {ch} names, one a channel (usb_audio_in_channels)")
         flags.append("-DFELUCCA_UAC_CH_NAMES=" + ",".join(f'"{name(n, "usb_audio_in_channel_names")}"' for n in names))
     return flags
+
+
+def cpu2_stack_flags():
+    """fm1.toml cpu2_stack: the second core's job stack, for its entry's unit and the platform's (none: felucca-bsp's
+    2816 B, the build as before)"""
+    n = CONF.get("cpu2_stack")
+    if n is None:
+        return []
+    if not isinstance(n, int) or isinstance(n, bool) or n % 8 or not 1024 <= n <= 16384:
+        raise SystemExit(f"fm1.toml cpu2_stack {n!r}: bytes, a multiple of 8, 1024..16384")
+    return [f"-DFM1_CPU1_USTACK_BYTES={n}"]
+
+
+def write_sizes(img, syms):
+    """OUT/sizes.json: this build's budgets, whether or not it fits (a caller that sizes configurations reads it, as
+    Optimist's builder does): flash = the app image against the app slot, ram = .data+.bss, pool, ramtext = the RAM code"""
+    def sym(name):
+        mm = re.search(r"^([0-9a-f]+) .*\s" + name + r"$", syms, re.M)
+        return int(mm.group(1), 16) if mm else 0
+    sizes = {"flash": len(img), "ram": sym("_bss_end") - sym("_data_start"), "pool": sym("_pool_end") - sym("_pool_start"),
+             "ramtext": sym("_rt_end") - sym("_rt_start"), "app_slot": APP_SLOT}
+    (OUT / "sizes.json").write_text(json.dumps(sizes, indent=1) + "\n")
 
 
 def build_app():
@@ -696,23 +716,6 @@ def build_app():
     if WIFI:
         flags += ["-DFM1B_WIFI=1", "-DSHIM_WIFI=1", *inc(SRC / "ble" / "shim")]
     flags += opt_flags()
-    for key, flag in (("usb_audio_in", "FM1B_UAC"), ("usb_audio_out", "FM1B_UAC_OUT")):
-        if key in CONF and flag not in os.environ:
-            flags.append(f"-D{flag}={int(bool(CONF[key]))}")
-    if "usb_audio_in_channels" in CONF:
-        ch = CONF["usb_audio_in_channels"]
-        if isinstance(ch, bool) or not isinstance(ch, int) or not 1 <= ch <= 8:
-            raise SystemExit(f"build: usb_audio_in_channels is 1..8, not {ch!r}")
-        flags.append(f"-DFM1B_UAC_CH={ch}")
-    if "usb_audio_in_24bit" in CONF:
-        flags.append(f"-DFM1B_UAC_24={int(bool(CONF['usb_audio_in_24bit']))}")
-    if "usb_audio_in_host_clock" in CONF:
-        flags.append(f"-DFM1B_UAC_HOST_CLOCK={int(bool(CONF['usb_audio_in_host_clock']))}")
-    if "usb_audio_out_feedback" in CONF:
-        flags.append(f"-DFM1B_UAC_OUT_FEEDBACK={int(bool(CONF['usb_audio_out_feedback']))}")
-    if "usb_audio_out_24bit" in CONF:
-        flags.append(f"-DFM1B_UAC_OUT_24={int(bool(CONF['usb_audio_out_24bit']))}")
-    flags += usb_audio_names()
     flags += usb_audio_flags()
     if CONF.get("usb_audio_first"):
         flags.append("-DFELUCCA_UAC_AS_FIRST=1")
@@ -779,13 +782,9 @@ def build_app():
     # mono reference paths for the host tests that the firmware no longer calls. The BT libraries are LTO
     # bitcode: the linker needs the toolchain's LLVM plugin
     lto = ["--plugin", "/opt/jieli/pi32v2/bin/LLVMgold.so" if use_docker() else str(toolchain() / "pi32v2/bin/LLVMgold.so"),
-           f"--plugin-opt=mcpu={CPU}", "--plugin-opt=-pi32v2-large-program=true"] if BLE or WIFI else []
-    global LAYOUT
            f"--plugin-opt=mcpu={CPU}", "--plugin-opt=-pi32v2-large-program=true"] if jieli else []
+    global LAYOUT
     ld = SRC / "device" / ("app_wifi.ld" if WIFI else "app.ld")
-    LAYOUT = memory_regions(ld.read_text())
-    if CONF.get("boot_pack"):                     # the RAM copies' load addresses out of the image: the stream is there
-        ld = pack_script(ld)
     if app_slot() != APP_SLOT:    # a bigger slot (app_end): the script with XIP that long
         text, n = re.subn(r"(XIP\s*\(rx\)\s*:\s*ORIGIN = 0x02000120, LENGTH = )0x8DFBC", rf"\g<1>{app_slot():#X}".replace("0X", "0x"),
                           ld.read_text())
@@ -793,6 +792,9 @@ def build_app():
             raise SystemExit(f"build: {ld.name}: no XIP line to give the slot")
         ld = OUT / ld.name
         ld.write_text(text)
+    LAYOUT = memory_regions(ld.read_text())
+    if CONF.get("boot_pack"):                     # the RAM copies' load addresses out of the image: the stream is there
+        ld = pack_script(ld)
     tc("pi32v2/bin/ld", *lto, "--gc-sections", "-e", "_start", "-T", ld, *objs, *b_objs,
        *b_libs, "-o", elf)
     for sect in ("text.bin", "data.bin", "ramtext.bin"):
@@ -928,8 +930,6 @@ def check(img, syms, dis, rt):
     in_ar = (lambda ln: (mm2 := LINE.match(ln)) is not None and ar[0] <= int(mm2.group(1), 16) < ar[1]) \
         if len(ar) == 2 else (lambda ln: False)   # (the app's RAM code: checked apart, tools/ramcode.py)
     rt_calls = [ln for ln in rt.splitlines() if re.search(r"\bcall\b", ln) and not in_c1(ln) and not in_ar(ln)]
-    if rt_calls and (BLE or WIFI):  # JieLi's .volatile_ram_code calls out; it runs with the flash on
-    rt_calls = [ln for ln in rt.splitlines() if re.search(r"\bcall\b", ln) and not in_c1(ln)]
     jieli = (BLE and not OWN) or WIFI
     if rt_calls and jieli:          # JieLi's .volatile_ram_code calls out; it runs with the flash on
         notes.append(f"the radio: .ram_text contains calls (JieLi's .volatile_ram_code): {rt_calls[:3]}")
@@ -1132,20 +1132,15 @@ def slot_flags():
 
 def opt_flags():
     """the optional parts an fm1.toml turns on that need no SDK: the same on the device, the host and the web"""
-    flags = [f"-D{flag}=1" for key, flag in (("mirror", "FM1B_MIRROR"), ("backup", "FM1B_BACKUP"), ("cpu2", "FM1B_CPU2"), ("usb_host", "FM1B_USB_HOST"), ("companion", "FM1B_COMPANION"))
+    flags = [f"-D{flag}=1" for key, flag in (("mirror", "FM1B_MIRROR"), ("backup", "FM1B_BACKUP"), ("cpu2", "FM1B_CPU2"), ("usb_host", "FM1B_USB_HOST"), ("companion", "FM1B_COMPANION"),
+                                                       ("xdata2", "FM1B_XDATA2"), ("sd", "FM1B_SD"))
              if (CONF.get(key) and os.environ.get(flag) != "0") or os.environ.get(flag) == "1"]   # (FM1B_MIRROR=1: a build with it, fm1.toml as it is; FM1B_BACKUP=0: without)
     if "-DFM1B_COMPANION=1" in flags and PRODUCT:
         flags.append(f'-DFELUCCA_ID="{PRODUCT}"')   # (the capability query's identity in the simulator and the browser too:
                                                  # the device's build passes it anyway: the same define twice)
     if "-DFM1B_COMPANION=1" in flags and "-DFM1B_BACKUP=1" in flags:
         flags.append(f'-DFM1B_BACKUP_EXT="{CONF.get("backup_ext", "bak")}"')   # (the capability query tells the backup's extension)
-    return flags
-                                                        ("xdata2", "FM1B_XDATA2"))
-    return [f"-D{flag}=1" for key, flag in (("mirror", "FM1B_MIRROR"), ("backup", "FM1B_BACKUP"), ("cpu2", "FM1B_CPU2"), ("usb_host", "FM1B_USB_HOST"),
-                                            ("sd", "FM1B_SD"))
-            if (CONF.get(key) and os.environ.get(flag) != "0") or os.environ.get(flag) == "1"]   # (FM1B_MIRROR=1: a build with it, fm1.toml as it is; FM1B_BACKUP=0: without)
-    return [f"-D{flag}=1" for key, flag in (("mirror", "FM1B_MIRROR"), ("backup", "FM1B_BACKUP"), ("cpu2", "FM1B_CPU2"), ("usb_host", "FM1B_USB_HOST"))
-            if (CONF.get(key) and os.environ.get(flag) != "0") or os.environ.get(flag) == "1"] + slot_flags()   # (FM1B_MIRROR=1: a build with it, fm1.toml as it is; FM1B_BACKUP=0: without)
+    return flags + slot_flags()
 
 
 def build_host():
@@ -1159,8 +1154,7 @@ def build_host():
                          out / "o2")
     uac = [*usb_audio_flags(), *(f"-D{f}={os.environ[f]}" for f in ("FM1B_UAC", "FM1B_UAC_OUT") if os.environ.get(f) in ("0", "1"))]
     cmd = [os.environ.get("CC", "cc"), "-O2", "-ffp-contract=off", "-std=c99", "-Wall", "-Wextra",
-           "-Wno-unused-function", "-Wno-unused-parameter", "-DPLAT_HOST", *opt_flags(), *uac, *["-DFM1B_BLE=1"] * BLE, *["-DFM1B_BLE_CENTRAL=1"] * (BLE and bool(CONF.get("ble_central"))), *["-DFM1B_WIFI=1"] * WIFI,
-           "-Wno-unused-function", "-Wno-unused-parameter", "-DPLAT_HOST", *opt_flags(), *["-DFM1B_BLE=1"] * BLE, *["-DFM1B_BLE_CENTRAL=1"] * (BLE and bool(CONF.get("ble_central"))), *["-DFM1B_BT_AUDIO=1"] * (BLE and OWN and bool(CONF.get("bt_audio"))), *["-DFM1B_WIFI=1"] * WIFI,
+           "-Wno-unused-function", "-Wno-unused-parameter", "-DPLAT_HOST", *opt_flags(), *uac, *["-DFM1B_BLE=1"] * BLE, *["-DFM1B_BLE_CENTRAL=1"] * (BLE and bool(CONF.get("ble_central"))), *["-DFM1B_BT_AUDIO=1"] * (BLE and OWN and bool(CONF.get("bt_audio"))), *["-DFM1B_WIFI=1"] * WIFI,
            *(f"-I{d}" for d in (SRC / "device", SRC / "include", SRC / "lib", APP, GEN, *(APP / d for d in CONF.get("include", [])))),
            "-o", str(exe), str(SRC / "host" / "plat_host.c"), *o2_objs, "-lm"]
     r = subprocess.run(cmd, capture_output=True, text=True)
@@ -1260,8 +1254,7 @@ def build_web():
                          emu / "o2")
     parts = emu_parts()
     cmd = ["emcc", "-O2", "-ffp-contract=off", "-std=gnu99", "-Wall", "-Wno-unused-function", "-Wno-unused-parameter",
-           "-Wno-unused-variable", "-DPLAT_HOST", "-DPLAT_WEB", *opt_flags(), *(f"-DFM1B_EMU_{p.upper()}=1" for p in parts), *["-DFM1B_BLE=1"] * BLE, *["-DFM1B_BLE_CENTRAL=1"] * (BLE and bool(CONF.get("ble_central"))), *["-DFM1B_WIFI=1"] * WIFI, *(f'-DAPP_VERSION="{VERSION}"',) * bool(VERSION),
-           "-Wno-unused-variable", "-DPLAT_HOST", "-DPLAT_WEB", *opt_flags(), *["-DFM1B_BLE=1"] * BLE, *["-DFM1B_BLE_CENTRAL=1"] * (BLE and bool(CONF.get("ble_central"))), *["-DFM1B_BT_AUDIO=1"] * (BLE and OWN and bool(CONF.get("bt_audio"))), *["-DFM1B_WIFI=1"] * WIFI, *(f'-DAPP_VERSION="{VERSION}"',) * bool(VERSION),
+           "-Wno-unused-variable", "-DPLAT_HOST", "-DPLAT_WEB", *opt_flags(), *(f"-DFM1B_EMU_{p.upper()}=1" for p in parts), *["-DFM1B_BLE=1"] * BLE, *["-DFM1B_BLE_CENTRAL=1"] * (BLE and bool(CONF.get("ble_central"))), *["-DFM1B_BT_AUDIO=1"] * (BLE and OWN and bool(CONF.get("bt_audio"))), *["-DFM1B_WIFI=1"] * WIFI, *(f'-DAPP_VERSION="{VERSION}"',) * bool(VERSION),
            *(f"-I{d}" for d in (SRC / "host", SRC / "device", SRC / "include", SRC / "lib", APP, GEN, *(APP / d for d in CONF.get("include", [])))),
            "--no-entry", "-sSTANDALONE_WASM", "-sSTACK_SIZE=1048576", "-sINITIAL_MEMORY=33554432", "-sFILESYSTEM=0",
            "-o", str(emu / "app.wasm"), str(SRC / "web" / "emu" / "emu_web.c"), *o2_objs]
@@ -1307,6 +1300,13 @@ def main():
     a = ap.parse_args()
     APP = a.app.resolve()
     CONF = read_conf(APP / "fm1.toml")
+    if CONF.get("conf_gen"):                      # the app's script (cwd APP_DIR) prints fm1.toml lines over the file's own
+        c = CONF["conf_gen"].split()
+        r = subprocess.run([sys.executable, str(APP / c[0]), *c[1:]], cwd=APP, capture_output=True, text=True)
+        if r.returncode:
+            sys.stderr.write(r.stderr)
+            raise SystemExit(f"build: conf_gen {c[0]} failed")
+        CONF.update(parse_conf(r.stdout, c[0]))
     NAME = CONF.get("name", APP.name).lower()
     BLE = bool(CONF.get("ble")) and not a.no_ble
     OWN = BLE and CONF.get("ble_stack", "jieli") == "own"
@@ -1347,6 +1347,7 @@ def main():
         gen.result()
         ota = ldr.result()
     img, syms, dis, rt = build_app()
+    write_sizes(img, syms)
     errors, notes = check(img, syms, dis, rt)
     hal_err = mmio_check()
     errors += hal_err
