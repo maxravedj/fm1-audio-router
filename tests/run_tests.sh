@@ -71,5 +71,8 @@ else
 fi
 run mirror-png "$PY" tools/fm1_mirror.py $OUT/mirror.png --from $OUT/mirror/stream.syx
 run template template/build/host/template_host template/tests/basic.txt template/build/host
+# the dim lights at any brightness (APP_DIM_LEVELS, plat_dim_ns) in the host simulator: tests/dim_app
+run dim-app sh -c "$PY tools/build.py tests/dim_app --host && \
+    tests/dim_app/build/host/dimtest_host tests/dim_app/tests/dim.txt tests/dim_app/build/host"
 [ $FAIL -eq 0 ] && echo "all tests passed" || echo "TESTS FAILED"
 exit $FAIL
