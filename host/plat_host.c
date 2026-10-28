@@ -351,6 +351,12 @@ static void usbh_step(void)                     /* the mode and the connection, 
         }
     }
 }
+static void usbh_reboot(void)                   /* the script's reboot: the port a device again, what is plugged in stays */
+{
+    uhs.want = uhs.on = uhs.conn = uhs.lost = uhs.said = 0;
+    uhs.msg = USBH_MSG_NONE;
+    uhs.t_plug = now_ms;
+}
 static int usbh_port(void)                      /* the port is a host */
 {
     usbh_step();
@@ -2746,6 +2752,7 @@ int main(int argc, char **argv)
 #ifdef APP_HOST_REBOOT
             app_host_reboot();                  /* the app forgets what RAM would (app.h) */
 #endif
+            usbh_reboot();                      /* (every boot is a device: plat_usb_host) */
             boot();
         } else if (!strcmp(cmd, "listen")) {
             static const uint8_t HELLO[] = {ANN_H0, ANN_H1, ANN_H2, ANN_HELLO, ANN_VER};
