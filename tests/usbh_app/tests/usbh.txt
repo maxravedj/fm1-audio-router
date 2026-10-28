@@ -65,3 +65,10 @@ midi 90 3E 64
 wait 20
 expect app_in 3
 expect_out USB 90 4A 64
+# a restart while a host: every boot is a device
+tap SEL
+wait 50
+expect usbh 1
+reboot
+wait 300
+expect usbh 0
