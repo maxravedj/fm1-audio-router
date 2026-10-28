@@ -48,9 +48,10 @@ run usb-audio sh -c "$CC -std=c11 -O1 -Wall -Wextra -Werror -Wno-unused-function
     $CC -std=c11 -O1 -Wall -Wextra -Werror -Wno-unused-function -Wno-unused-variable -Wno-missing-field-initializers \
     -Ibsp/chip -DTEST_SPLIT=1 -DTEST_NAMES=1 -DTEST_FB=1 -DTEST_O24=1 -DTEST_HC=1 -DTEST_CH=4 -DTEST_24=1 \
     -o $OUT/uac_test_split bsp/tests/uac_test.c -lm && $OUT/uac_test_split"
-# the MIDI-in stamps (device/midi_stamp.h): the TIMER5 schedule over messages landing at random times, each stamp
-# against its landing (within +-0.25 ms; the read time's was up to 1 ms)
-run midi-stamp sh -c "$CC -O2 -w -Ibsp/chip -Ibsp/boards/fm1 -Idevice -o $OUT/midi_stamp_test tests/midi_stamp_test.c && $OUT/midi_stamp_test"
+run trs-stamp sh -c "$CC -O2 -w -DFELUCCA_MIDI_STAMP=1 -Ibsp/chip -Ibsp/boards/fm1 -Idevice -o $OUT/trs_test_stamp tests/trs_test.c && $OUT/trs_test_stamp"
+# the MIDI-in stamps (FELUCCA_MIDI_STAMP): USB and the jack against a model of their registers on the TIMER5 schedule,
+# each stamp against its message's landing (within +-0.05 ms; the poll's and the read's stamps beside it)
+run midi-stamp sh -c "$CC -std=c11 -O2 -Wall -Wextra -Werror -Wno-unused-function -Ibsp/chip -Ibsp/boards/fm1 -Idevice -o $OUT/midi_stamp_test tests/midi_stamp_test.c && $OUT/midi_stamp_test"
 run storage sh -c "$CC -O2 -w -o $OUT/storage_test tests/storage_test.c && $OUT/storage_test"
 # the same with app.h APP_STORE_BOUNCE (one page of RAM for the store): the same results, the same flash byte for byte
 run storage-bounce sh -c "$CC -O2 -w -DAPP_STORE_BOUNCE=1 -o $OUT/storage_bounce_test tests/storage_test.c && \

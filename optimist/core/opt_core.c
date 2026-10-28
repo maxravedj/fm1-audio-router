@@ -356,7 +356,7 @@ static uint32_t opt_rx_bad;
 #ifdef PLAT_HOST
 #define OPT_MIDI_T24() fm1_ticks()                   /* (the host's ticks follow its simulated ms: fm1_compat.h) */
 #else
-#define OPT_MIDI_T24() plat_midi_in_t24()            /* when it came in (device/midi_stamp.h) */
+#define OPT_MIDI_T24() plat_midi_in_t24()            /* when it came in (plat.h) */
 #endif
 void opt_core_midi(uint32_t pkt, int port)
 {
@@ -372,13 +372,13 @@ void opt_core_midi(uint32_t pkt, int port)
         return;
     }
     if (midi_rx_wanted(pkt))
-        (void)midi_in_enqueue(pkt, src, OPT_MIDI_T24());   /* (when it came in: device/midi_stamp.h) */
+        (void)midi_in_enqueue(pkt, src, OPT_MIDI_T24());   /* (when it came in: plat_midi_in_t24) */
 }
 
 /* fm1-base's 1 kHz tick (app.c app_tick, APP_TICK: the timer interrupt), Optimist's TIMER5 work (system/main.c
- * fm1_timer5_irq) that the trial has: the MIDI in from fm1-base's queue into Optimist's, stamped within a millisecond of
- * its arrival: the platform's stamp (plat_midi_in_t24: the poll that took it, within 0.25 ms; Optimist's own
- * usb_rx_peek / uart_midi_peek look at the endpoint and the ring at 10 kHz, within 0.1 ms; the render's 5.8 ms half
+ * fm1_timer5_irq) that the trial has: the MIDI in from fm1-base's queue into Optimist's, stamped where it
+ * arrived: the platform's stamp (plat_midi_in_t24: a 10 kHz look at the endpoint and the jack's ring, within 0.05 ms, as
+ * Optimist's own usb_rx_peek / uart_midi_peek; the stamp taken here instead was late by up to the render's 5.8 ms half
  * before this, which threw the clock follower's tempo filter off); and CLOCK OUT's packets (io/midi/clock_out.c, rt_out_*: each due when its audio
  * leaves) sent at the tick nearest their time, ahead of the notes as usb.c ep1_tx sends them (within half a
  * millisecond: a USB frame is one) */

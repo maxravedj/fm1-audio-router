@@ -177,6 +177,10 @@ static volatile uint32_t fm1_ms;  /* milliseconds since boot (TIMER4-based, TIME
 #define FM1B_USB_HOST 0
 #endif
 #define FELUCCA_USB_HOST FM1B_USB_HOST /* the USB MIDI host (plat_usb_host) */
+#ifndef FM1B_MIDI_STAMP
+#define FM1B_MIDI_STAMP 1         /* MIDI in stamped where it lands, USB and the jack (plat_midi_in_t24; 0: when read) */
+#endif
+#define FELUCCA_MIDI_STAMP FM1B_MIDI_STAMP
 #define SXQ 128u                  /* the SysEx send ring, in packets: a whole screen-reader SAY (ANN_MAX + 9 bytes) */
 #ifdef APP_SYSEX_BYTE
 #define FELUCCA_SYSEX_BYTE(b) app_sysex_byte(b)   /* the app's, every SysEx byte from USB (plat.h APP_SYSEX_BYTE) */
@@ -189,7 +193,6 @@ static volatile uint32_t fm1_ms;  /* milliseconds since boot (TIMER4-based, TIME
 #if FM1B_TRS
 #include "midi_uart.c"
 #endif
-#include "midi_stamp.h"           /* when each MIDI message in came in (plat_midi_in_t24) */
 
 static uint8_t flash_ok;          /* JEDEC id matched at boot */
 #if FM1B_WIFI || FM1B_BLE
