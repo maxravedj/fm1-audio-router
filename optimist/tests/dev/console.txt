@@ -2,7 +2,7 @@
 # The USB serial console (optimist/run.sh: profiles/dev-console.config with the host's Bluetooth stand-ins, USB_CONSOLE on fm1-base's plat_console_*; ui/
 # opt_console.h): SYSTEM > GENERAL's SERIAL on, a restart (it is presented from the next start), then Optimist's command
 # line: run control, status, params, and the commands that read the hardware, on what fm1-base's platform gives (dbg, cpu1,
-# keys, keylog, memr, flr, tabbench). The host types the line ("console LINE") and keeps the reply for expect_console
+# keys, keylog, flr, tabbench). The host types the line ("console LINE") and keeps the reply for expect_console
 wait 800
 # the console is not presented until SERIAL says so: nothing answers
 console help
@@ -72,14 +72,9 @@ expect_console keys 0x00000000
 console keylog
 expect_console P 21
 expect_console R 21
-# memr and flr read the same flash: the data window's first sector (its header "SLG2") by its flash offset and by its XIP
-# address; RAM and addresses outside what an FM-1 maps are refused (the host has the XIP window alone)
+# flr reads the flash as plat_data has it: the data window's first sector (its header "SLG2"); outside the windows is refused
 console flr 0xA0000 16
 expect_console 0A0000: 53 4C 47 32
-console memr 0x20A0000 16
-expect_console 020A0000: 53 4C 47 32
-console memr 0x100 16
-expect_console only RAM
 console flr 0x7FFFFF 16
 expect_console outside the data windows
 console flr

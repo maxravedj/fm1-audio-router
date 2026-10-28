@@ -21,12 +21,11 @@
  *                UI sees
  *   keylog       the last 32 key and button edges the UI's scan saw, oldest first: id (0..13 buttons, 14..40 keys), P down /
  *                R up, the time since the one before in microseconds (the main loop's scan, not Optimist's 10 kHz one)
- *   memr ADDR [LEN<=256]   memory: RAM 01C00000.., the flash's XIP window 02000000..
  *   flr OFFSET [LEN<=256]  the flash as plat_data reads it (the data windows; the app's own code is not there)
  *   tabbench     the tables' read speed: SINE, main RAM, the pool (TAB_IN_POOL)
  *   sd [ls [DIR] | cat FILE | raw SECTOR]   the card: its state, a folder, a file's first bytes, a sector (SDCARD builds)
  *   ovl          the overlays' slots (OVERLAY builds)
- * What stays with fm1-base, which owns that hardware (its own tools read it: tools/fm1_debug.py, fm1_remote.py): the crash
+ * What stays with fm1-base, which owns that hardware (its own tools read it: tools/fm1_debug.py, fm1_remote.py): memory reads (memr: raw addresses, the platform's alone to read), the crash
  * and boot records (crash, boot), the second core's set-up and rails (dualcfg), the radio's calibration, link layer and
  * Bluetooth Classic diagnostics (blevm, bletrim, blell, btclk, btinq, btscan, btrx, btpage, bttrace), the SD bus modes
  * and benchmarks, the far probe, membench and the update loader's entry (uboot). Main loop only (ui/opt_ui.c
@@ -224,27 +223,7 @@ static void con_keylog(void)
         prev = fm1_klog_t[k];
     }
 }
-/* one byte of memory: RAM and the flash's XIP window as the FM-1 has them; the host has the XIP window only, as the
- * flash plat_data reads (no RAM of an FM-1 to read) */
-#define CON_RAM_LO 0x01C00000u
-#define CON_RAM_HI 0x01C80000u
-#define CON_XIP_LO 0x02000000u
-#define CON_XIP_HI 0x02100000u
-static int con_peek(uint32_t a, uint8_t *v)
-{
-#ifdef PLAT_HOST
-    const uint8_t *p = a >= CON_XIP_LO && a < CON_XIP_HI ? plat_data(a - CON_XIP_LO) : 0;
-    if (!p)
-        return -1;
-    *v = *p;
-    return 0;
-#else
-    if (!((a >= CON_RAM_LO && a < CON_RAM_HI) || (a >= CON_XIP_LO && a < CON_XIP_HI)))
-        return -1;
-    *v = *(const volatile uint8_t *)(uintptr_t)a;
-    return 0;
-#endif
-}
+static int con_flash_peek(uint32_t a, uint8_t *v);
 static void con_dump(uint32_t a, uint32_t n, uint32_t digits, int (*peek)(uint32_t, uint8_t *))
 {
     uint32_t i;
@@ -264,25 +243,6 @@ static void con_dump(uint32_t a, uint32_t n, uint32_t digits, int (*peek)(uint32
         if (i % 16u == 15u || i + 1u == n)
             con_puts("\r\n");
     }
-}
-static void con_memr(const char *p)
-{
-    int ok, ok2;
-    uint32_t a = con_num(&p, &ok), n = con_num(&p, &ok2);
-    uint8_t v;
-    if (!ok) {
-        con_puts("usage: memr ADDR [LEN<=256]\r\n");
-        return;
-    }
-    if (!ok2 || !n)
-        n = 64;
-    if (n > 256u)
-        n = 256;
-    if (con_peek(a, &v) || con_peek(a + n - 1u, &v)) {
-        con_puts("only RAM 01C00000-01C80000 and XIP 02000000-02100000 (readable)\r\n");
-        return;
-    }
-    con_dump(a, n, 8, con_peek);
 }
 static int con_flash_peek(uint32_t a, uint8_t *v)
 {
@@ -436,7 +396,7 @@ static void con_exec(const char *p)
         return;
     if (con_word(&p, "help") || con_word(&p, "?"))
         con_puts("play  pause  stop  rec on|off  proj load N  heavy [NOTES]  status  params  dbg  cpu1  keys  keylog"
-                 "  memr ADDR [LEN]  flr OFFSET [LEN]  tabbench"
+                 "  flr OFFSET [LEN]  tabbench"
 #if FELUCCA_SDCARD
                  "  sd [ls [DIR] | cat FILE | raw SECTOR]"
 #endif
@@ -459,8 +419,6 @@ static void con_exec(const char *p)
         con_keys();
     else if (con_word(&p, "keylog"))
         con_keylog();
-    else if (con_word(&p, "memr"))
-        con_memr(p);
     else if (con_word(&p, "flr"))
         con_flr(p);
     else if (con_word(&p, "tabbench"))

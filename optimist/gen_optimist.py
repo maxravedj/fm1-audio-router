@@ -315,6 +315,9 @@ def conf():
         # is the output's feedback; the split functions have no room for it)
         print("usb_console = true", "usb_audio_in = false", "usb_audio_out = false", "usb_audio_out_feedback = false",
               "usb_audio_split = false", sep="\n")
+        import json, tomllib                            # (ut_mix, the USB input track's mix, is not built without USB audio)
+        allow = tomllib.loads((APP / "fm1.toml").read_text())["ram_code_allow"]
+        print("ram_code_allow =", json.dumps([f for f in allow if f != "ut_mix"]))
     else:
         # USB audio as Optimist's own presents it (fm1.toml): two devices, named, the output on the FM-1's clock
         print("usb_audio_out_feedback = true", "usb_audio_split = true", 'usb_audio_in_name = "Optimist In"',
