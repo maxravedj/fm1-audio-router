@@ -135,7 +135,6 @@ static uint32_t audio_commit(uint32_t half)        /* 1 copied, 0 late (nothing 
     if (fm1_audio_free_half() == half && !(fm1_audio_pending() & FM1_AUDIO_HALF)) {
         for (i = 0; i < HALF_WORDS; i++)
             dst[i] = aside[i];
-        __asm__ volatile("csync" ::: "memory");     /* the copy done before the DMA reads it */
         ok = fm1_audio_free_half() == half && !(fm1_audio_pending() & FM1_AUDIO_HALF);
     }
     if (ie)
