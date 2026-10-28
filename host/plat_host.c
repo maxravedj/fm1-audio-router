@@ -1256,11 +1256,11 @@ static uint32_t usb_rec_frames, usb_play_frames;
 static int32_t *usb_play_buf;                       /* the computer's audio (usb_play): stereo, 24-bit as the render's */
 static uint32_t usb_play_n, usb_play_at;
 static uint8_t usb_rec_now;                         /* this render's: the computer records (plat_usb_audio_rec) */
-int plat_usb_audio_rec(void) { return FM1B_UAC && usb_rec_now; }
+int plat_usb_audio_rec(void) { return FM1B_UAC && usb_rec_now && !usbh_port(); }   /* (a USB host: no computer) */
 /* the computer's next n frames at unity (24-bit), silence past its end; 1 while there are some */
 static int usb_play_take(int32_t *lr, uint32_t n)
 {
-    uint32_t i, got = FM1B_UAC_OUT && usb_play_buf && usb_play_at < usb_play_n;
+    uint32_t i, got = FM1B_UAC_OUT && usb_play_buf && usb_play_at < usb_play_n && !usbh_port();
     for (i = 0; i < n; i++) {
         int ok = got && usb_play_at < usb_play_n;
         lr[2u * i] = ok ? usb_play_buf[2u * usb_play_at] : 0;
@@ -2029,7 +2029,7 @@ static void run_ms(uint32_t ms)
                         blk[k] += (int32_t)((float)pl[k] * g);
             }
 #endif
-            if (FM1B_UAC && usb_rec_f) {            /* the USB audio input: the app's channels, or the master */
+            if (FM1B_UAC && usb_rec_f && !usbh_port()) {   /* the USB audio input: the app's channels, or the master */
 #ifdef APP_USB_CAPTURE
                 usb_rec_put(app_usb_capture(blk, APP_BLOCK), APP_BLOCK);
 #else
@@ -2888,7 +2888,10 @@ int main(int argc, char **argv)
             }
 #endif
         } else if (!strcmp(cmd, "sysex")) {
-            fails += hsx_in(strstr(line, "sysex") + 5);
+            if (usbh_port())                    /* (a USB host: no computer to send it) */
+                printf("  sysex: the port is a USB host, no computer: dropped\n");
+            else
+                fails += hsx_in(strstr(line, "sysex") + 5);
             run_ms(1);
         } else if (!strcmp(cmd, "sysex_out"))
             hsx_print();
