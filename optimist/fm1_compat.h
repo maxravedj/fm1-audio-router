@@ -73,10 +73,11 @@ uint32_t opt_irq_enabled(void);
 static inline uint32_t fm1_icfg(void) { return opt_irq_enabled() ? 0x200u : 0u; }   /* (core.h IRQ_IE_NOW: bit 9) */
 #endif
 static uint8_t opt_irq_held;                       /* this unit holds plat_lock (0 / 1) */
+static uint32_t opt_irq_was;                       /* what that plat_lock returned (1: they were on), for its unlock */
 static inline void fm1_irq_off(void)
 {
     if (!opt_irq_held && opt_irq_enabled()) {
-        (void)plat_lock();
+        opt_irq_was = plat_lock();
         opt_irq_held = 1;
     }
 }
@@ -84,7 +85,8 @@ static inline void fm1_irq_on(void)
 {
     if (opt_irq_held) {
         opt_irq_held = 0;
-        plat_unlock(0);
+        plat_unlock(opt_irq_was);                  /* (plat_unlock(0) left them off: the main loop then ran whole frames,
+                                                    * the LCD writes in them, with the audio, TIMER5 and USB held off) */
     }
 }
 
