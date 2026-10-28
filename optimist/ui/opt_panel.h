@@ -7,6 +7,19 @@
 
 static const uint8_t OIN_PANEL_ID[14] = {2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 1};   /* (ui/panel.c PANEL_DEFAULT) */
 
+#if FELUCCA_CDC
+/* the console's keylog (ui/opt_console.h): the last 32 button and key edges this scan saw, id (0..13 buttons by matrix id,
+ * 14..40 keys + 14) with bit 7 set for a release, and the time (plat_ticks24) */
+#define FM1_KLOG_N 32u
+static uint8_t fm1_klog_id[FM1_KLOG_N];
+static uint32_t fm1_klog_t[FM1_KLOG_N], fm1_klog_n;
+static void opt_klog(uint32_t id, uint32_t down, uint32_t now)
+{
+    fm1_klog_id[fm1_klog_n % FM1_KLOG_N] = (uint8_t)(id | (down ? 0u : 0x80u));
+    fm1_klog_t[fm1_klog_n % FM1_KLOG_N] = now;
+    fm1_klog_n++;
+}
+#endif
 /* the panel now: fm1-base's labels to Optimist's matrix ids (panel.btn: the default map, or a calibration's) */
 static void opt_in_scan(void)
 {
@@ -18,6 +31,14 @@ static void opt_in_scan(void)
     for (l = 0; l < 14u; l++)
         if ((ch >> l) & 1u)
             fm1_btn_t[(m >> l) & 1u ? 0u : 1u][l] = now;
+#if FELUCCA_CDC
+    for (l = 0; l < 14u; l++)
+        if ((ch >> l) & 1u)
+            opt_klog(l, (m >> l) & 1u, now);
+    for (l = 0; l < 27u; l++)
+        if (((k ^ oin_keys) >> l) & 1u)
+            opt_klog(14u + l, (k >> l) & 1u, now);
+#endif
     oin_pressed |= m & ch;
     fm1_in.buttons = m;
     oin_notes_pressed |= k & ~oin_keys;

@@ -189,6 +189,7 @@ static volatile uint32_t fm1_ms;  /* milliseconds since boot (TIMER4-based, TIME
 #if FM1B_TRS
 #include "midi_uart.c"
 #endif
+#include "midi_stamp.h"           /* when each MIDI message in came in (plat_midi_in_t24) */
 
 static uint8_t flash_ok;          /* JEDEC id matched at boot */
 #if FM1B_WIFI || FM1B_BLE

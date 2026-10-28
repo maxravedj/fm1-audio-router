@@ -294,6 +294,45 @@ const char *opt_ui_msg(void) { return ui.msg; }   /* the header's last message *
 /* the parity checks (tests/dev/parity.txt): a track's insert slots and their instances, the transport's beat, CLOCK OUT,
  * the guard's level, the late halves */
 void opt_ui_ins(uint32_t track, uint32_t slot, uint32_t type) { ins_load(track, slot, type); }   /* (the mixer's INSERT) */
+/* the items run's checks (tests/dev/items.txt): an insert type loaded into a slot with its amount, -1 when this build lacks the
+ * type (fx_slots.c ins_amt: no amount); an engine put on a synth track by its name (the first built one that starts with
+ * it, any case), its slot, -1 when this build lacks it */
+int opt_ui_insert(uint32_t track, uint32_t slot, uint32_t type, int32_t amount)
+{
+    uint32_t a;
+    if (track >= NTRK)
+        return -1;
+    ins_load(track, slot, type);
+    a = ins_amt(track, slot);
+    if (a == 0xFFu || ins_slot[track][slot & 1u] != type)
+        return -1;
+    trk[track].p[a] = (int16_t)amount;
+    return (int)a;
+}
+int opt_ui_engine(uint32_t track, const char *name)
+{
+    uint32_t e, n;
+    for (n = 0; name[n]; n++)
+        ;
+    for (e = 0; e < NENGINES && n; e++) {
+        uint32_t i;
+        for (i = 0; i < n; i++) {
+            char c = ENGINES[e]->name[i], d = name[i];
+            if (c >= 'a' && c <= 'z')
+                c = (char)(c - 32);
+            if (d >= 'a' && d <= 'z')
+                d = (char)(d - 32);
+            if (!c || c != d)
+                break;
+        }
+        if (i == n && track < NTRK - 1u) {
+            set_engine_of(&trk[track], e);
+            return trk[track].eng_req == e ? (int)e : -1;   /* (the arena may refuse it: part_mem_reserve) */
+        }
+    }
+    return -1;
+}
+const char *opt_ui_engine_name(uint32_t track) { return track < NTRK ? ENGINES[trk[track].eng_req % NENGINES]->name : ""; }
 int32_t opt_ui_fxi(uint32_t track, uint32_t slot) { return (int32_t)fxi_state(track, slot); }   /* fxi.c FXI_*: 1 OK */
 int32_t opt_ui_beat(void) { return (int32_t)clk_beat; }
 void opt_ui_clock_out(uint32_t on)

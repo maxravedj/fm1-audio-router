@@ -205,6 +205,7 @@ void fm1_timer5_irq(void)
 #if FM1B_TRS
         uart_midi_poll();                           /* the TRS jack: same context, same queue */
 #endif
+        midi_stamp_poll(fm1_ticks());               /* what these polls queued came in within the last 0.5 ms (midi_stamp.h) */
     }
 #ifdef APP_TICK
     if (sub == 0u) {                                /* 1 kHz: the app's tick (a clock, a sequencer) */

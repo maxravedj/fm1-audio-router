@@ -389,6 +389,23 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
         }
         return 1;
     }
+    if (!strcmp(cmd, "insert")) {                /* insert T S TYPE [V]: an insert type into track T's slot S with its amount V (default
+                                                 * 64): a failure when this build lacks the type (its builder item off) */
+        int rc = !a || !b || !c || !a[0] || !b[0] || !c[0] ? -2 : opt_ui_insert((uint32_t)atoi(a), (uint32_t)atoi(b),
+                                                                                 (uint32_t)atoi(c), d && d[0] ? atoi(d) : 64);
+        printf("%s insert %s %s %s: %s\n", rc < 0 ? "FAIL" : "  ok", a ? a : "", b ? b : "", c ? c : "",
+               rc == -2 ? "usage: insert T S TYPE [V]" : rc < 0 ? "not built" : "loaded");
+        app_fails += rc < 0;
+        return 1;
+    }
+    if (!strcmp(cmd, "engine")) {                /* engine T NAME: synth track T's engine (the first built one that starts with NAME):
+                                                 * a failure when this build lacks it */
+        int e = !a || !b || !a[0] || !b[0] ? -2 : opt_ui_engine((uint32_t)atoi(a), b);
+        printf("%s engine %s %s: %s%s\n", e < 0 ? "FAIL" : "  ok", a ? a : "", b ? b : "",
+               e < 0 ? "not built" : "slot ", e < 0 ? "" : opt_ui_engine_name((uint32_t)atoi(a)));
+        app_fails += e < 0;
+        return 1;
+    }
     if (!strcmp(cmd, "param")) {                 /* param T ID V: track T's value ID (Optimist's P_*) set to V, as is */
         if (!a || !b || !c || !a[0] || !b[0] || !c[0]) {
             printf("FAIL param T ID V\n");
