@@ -307,6 +307,15 @@ int32_t opt_ui_guard(void)
 }
 uint32_t opt_ui_drops(void) { return ovl.drops; }
 int32_t opt_ui_batt(void) { return song.batt_raw; }      /* (SYSTEM > BATTERY's reading) */
+#ifdef PLAT_HOST
+#if FELUCCA_LIGHTS
+int32_t opt_ui_lights(void) { return lights_lvl; }                /* SYSTEM > LIGHTS' level (0 OFF .. 3 HIGH) */
+void opt_ui_lights_set(uint32_t v) { lights_lvl = (uint8_t)(v % LIGHTS_N); }   /* (as the menu's step does) */
+#else
+int32_t opt_ui_lights(void) { return -1; }                        /* (not built) */
+void opt_ui_lights_set(uint32_t v) { (void)v; }
+#endif
+#endif
 #if FELUCCA_USB_AUDIO
 int32_t opt_ui_uad(uint32_t s) { return s < UAS_N ? ua_dst[s] : -1; }   /* SYSTEM > USB AUDIO: source s's channels (UAD_*) */
 #else

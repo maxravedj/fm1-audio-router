@@ -6,6 +6,7 @@
 #pragma once
 #include <stdint.h>
 #include "plat.h"
+#include "opt_dim.h"                     /* (build/optgen, gen_optimist.py dim_header: OPT_DIM_LEVELS 1 with LIGHTS) */
 
 #define APP_NAME "OPTIMIST"
 #define APP_SPLASH_RGB RGB(255, 214, 10)
@@ -66,6 +67,9 @@ struct plat_ble_keys;
 void opt_ble_device_keys(const struct plat_ble_keys *k);
 #endif
 void app_tick(void);
+#if OPT_DIM_LEVELS
+#define APP_DIM_LEVELS                   /* plat_dim_ns: LIGHTS's LOW / MID / HIGH as the dim layer's brightness (ui/opt_panel.h) */
+#endif
 #define APP_BATTERY_RAW                  /* plat_battery_raw: SYSTEM > BATTERY's volts and charge (ui/opt_ui.c) */
 #define APP_CPU_KHZ                      /* plat_cpu_khz: SYSTEM > INFO's CPU MHz, the CPU guard's clock (core/opt_core.c) */
 #define APP_SPLASH                       /* the boot screen: Optimist's (ui/splash.c: the dinghy, the version) */
@@ -110,7 +114,7 @@ int32_t app_param_set(uint32_t i, int32_t v);
 /* the host simulator's checks (host/plat_host.c "expect"): voices (sounding), blocks (rendered), keys (held, as the
  * render saw them); the UI's: scr (Optimist's SCR_*: 0 the mixer, 1 SOUND, 2 FX, 5 STEP, 7 TEMPO, 9 GLOBAL), row (its
  * cursor row), track (selected, 3 the drums), bpm, playing, gv1..gv4 (the cursor row's cards: their values), pT.ID
- * (track T's value P_* ID) */
+ * (track T's value P_* ID), lights (SYSTEM > LIGHTS' level; the command "lights N" sets it) */
 #define APP_HOST_EXPECT
 int app_expect(const char *what, int *got);
 /* the stores' (milestone 3): up.K (user preset UK holds a sound), proj.S (project slot S holds a project), w.ADDR (the

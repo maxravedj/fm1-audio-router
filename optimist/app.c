@@ -233,6 +233,8 @@ int app_expect(const char *what, int *got)
         *got = (int)opt_ui_drops();
     else if (!strcmp(what, "batt"))            /* SYSTEM > BATTERY's reading (song.batt_raw) */
         *got = (int)opt_ui_batt();
+    else if (!strcmp(what, "lights"))          /* SYSTEM > LIGHTS' level (0 OFF .. 3 HIGH; -1 not built) */
+        *got = (int)opt_ui_lights();
     else if (!strcmp(what, "panel_hits"))      /* Optimist's object sectors on OBJ_PANEL's 0xD8000..0xD9FFF */
         *got = (int)opt_st_panel_hits();
     else if (!strcmp(what, "bta_out"))         /* Bluetooth audio: the sound to the device (1) or the FM-1's own (0) */
@@ -330,6 +332,10 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
                 pkt |= (uint32_t)f[i + j] << (8u * (j + 1u));
             opt_core_midi(pkt, PORT_BLE);
         }
+        return 1;
+    }
+    if (!strcmp(cmd, "lights")) {                /* lights N: SYSTEM > LIGHTS set to level N (0 OFF .. 3 HIGH) */
+        opt_ui_lights_set((uint32_t)atoi(a ? a : "0"));
         return 1;
     }
     if (!strcmp(cmd, "msg")) {                   /* msg [TEXT]: the header's last message (has TEXT, else a failure) */

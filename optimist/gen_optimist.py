@@ -104,6 +104,7 @@ def config(tree, prof):
     if prof is None:
         for h in ("felucca_config.h", "felucca_config_profile.h"):
             (GEN / h).write_text("/* empty: Optimist's source defaults (core/registry.h), OPT_PROFILE=none */\n#pragma once\n")
+        dim_header({}, GEN / "opt_dim.h")
         return dict(HOST_ENV)
     sys.dont_write_bytecode = True             # (no __pycache__ in Optimist's tree)
     sys.path.insert(0, str(tree / "tools" / "builder"))
@@ -130,9 +131,19 @@ def config(tree, prof):
             slot_check(configure.flags(cfg)[0].get("FELUCCA_LAYOUT", 0), prof)
             host_bt(configure.flags(cfg)[0], GEN / out)
             ble_peers_define(configure.flags(cfg)[0], GEN / out)
+            dim_header(configure.flags(cfg)[0], GEN / "opt_dim.h")
         if env is None:
             env = configure.flags(cfg)[1]       # (the trial's: its sample sets, SLICE)
     return env
+
+
+def dim_header(flags, path):
+    """build/optgen/opt_dim.h: OPT_DIM_LEVELS 1 when the build has LIGHTS (the backlight's LOW / MID / HIGH): app.h then
+    defines APP_DIM_LEVELS, fm1-base's plat_dim_ns, for the platform's units too (they see none of felucca_config.h)"""
+    text = ("/* the trial (gen_optimist.py dim_header): LIGHTS's levels on fm1-base's dim pulse */\n#pragma once\n"
+            f"#define OPT_DIM_LEVELS {1 if flags.get('FELUCCA_LIGHTS', 0) else 0}\n")
+    if not path.exists() or path.read_text() != text:
+        path.write_text(text)
 
 
 SD_APP_END = 0xCE000                           # the SD card mode's slot (LAYOUT 1): fm1-base's app_end, OBJ_PANEL above it
@@ -245,7 +256,7 @@ def generate(tree):
     key += f"companion {companion()}\n"
     key += f"host_bt {os.environ.get('OPT_HOST_BT') == '1'}\n"
     st = GEN / "stamp"
-    outs = [out for _, out in GENERATORS] + ["felucca_config.h", "felucca_config_profile.h"]
+    outs = [out for _, out in GENERATORS] + ["felucca_config.h", "felucca_config_profile.h", "opt_dim.h"]
     if st.exists() and st.read_text() == key and all((GEN / out).exists() for out in outs):
         return
     st.unlink(missing_ok=True)

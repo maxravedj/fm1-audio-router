@@ -64,6 +64,10 @@ int32_t opt_ui_beat(void);                                   /* the transport's 
 void opt_ui_clock_out(uint32_t on);                          /* the HOME menu's CLOCK OUT */
 int32_t opt_ui_guard(void);                                  /* the CPU guard's level (cpuguard.h CG_L_*; -1 not built) */
 uint32_t opt_ui_drops(void);                                 /* late halves since power-on (overload.h ovl.drops) */
+#ifdef PLAT_HOST
+int32_t opt_ui_lights(void);                                 /* SYSTEM > LIGHTS' level (0 OFF .. 3 HIGH; -1 not built) */
+void opt_ui_lights_set(uint32_t v);                          /* the host: that level set, as the menu's step does */
+#endif
 int32_t opt_ui_batt(void);                                   /* the battery's reading as SYSTEM > BATTERY has it */
 int32_t opt_ui_uad(uint32_t s);                              /* USB AUDIO's source s (0 MASTER): its channels (3: 1+2); -1 none */
 uint32_t opt_supply_read(uint32_t *regs);                    /* the rails as fm1-base's start left them (app.c) */

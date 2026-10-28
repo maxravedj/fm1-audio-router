@@ -1,0 +1,19 @@
+# LIGHTS (the backlight: OFF / LOW / MID / HIGH) on fm1-base's dim layer: every level its own pulse (plat_dim_ns), run.sh's lights run
+wait 500
+expect lights 0
+# OFF: the glow's own strength (plat_lights' glow 2: 3,200 ns)
+expect dim_ns 3200
+lights 1
+wait 200
+expect lights 1
+expect dim_ns 500
+lights 2
+wait 200
+expect dim_ns 1000
+lights 3
+wait 200
+expect dim_ns 2000
+leds
+lights 0
+wait 200
+expect dim_ns 3200

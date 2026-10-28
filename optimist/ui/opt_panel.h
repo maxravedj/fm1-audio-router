@@ -47,24 +47,42 @@ static void oin_side(const uint8_t *cols, uint32_t *btn, uint32_t *keys)
     if ((cols[8] >> 1) & 1u)
         *btn |= LED_PLAY_GREEN;
 }
+#ifdef APP_DIM_LEVELS
+static uint32_t oin_shown[7] = {~0u};
+#else
 static uint32_t oin_shown[6] = {~0u};
+#endif
 static void opt_leds_out(void)
 {
     uint32_t fb, fk, db, dk, hb, hk;
     oin_side(fm1_led, &fb, &fk);
     oin_side(fm1_led_dim, &db, &dk);
     oin_side(fm1_led_half, &hb, &hk);
+#ifdef APP_DIM_LEVELS
+    uint32_t ns = 0;
+#endif
 #if FELUCCA_LIGHTS
     if (fm1_led_bg_ns) {                               /* (the backlight: fm1-base's dim layer, opt_in.h) */
         uint32_t gb, gk;
         oin_side(fm1_led_bg, &gb, &gk);
         db |= gb & ~LED_PLAY_GREEN, dk |= gk;
+#ifdef APP_DIM_LEVELS
+        ns = fm1_led_bg_ns;                            /* (its level, LOW 500 / MID 1000 / HIGH 2000 ns: the layer's pulse) */
+#endif
     }
 #endif
     if (fb == oin_shown[0] && fk == oin_shown[1] && db == oin_shown[2] && dk == oin_shown[3] && hb == oin_shown[4] &&
-        hk == oin_shown[5])
+        hk == oin_shown[5]
+#ifdef APP_DIM_LEVELS
+        && ns == oin_shown[6]
+#endif
+        )
         return;                                        /* (on a change only, as Optimist writes its columns) */
     plat_lights(fb, fk, db, dk, 2);
+#ifdef APP_DIM_LEVELS
+    plat_dim_ns(ns);                                   /* (0: the glow's own, as without LIGHTS) */
+    oin_shown[6] = ns;
+#endif
     plat_lights_mid(hb, hk);
     oin_shown[0] = fb, oin_shown[1] = fk, oin_shown[2] = db, oin_shown[3] = dk, oin_shown[4] = hb, oin_shown[5] = hk;
 }
