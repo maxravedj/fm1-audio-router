@@ -222,7 +222,7 @@ def host_bt(flags, path):
         path.write_text(text + extra)
 
 
-WIFI_ITEMS = ("FELUCCA_WIFI", "FELUCCA_LINK")
+WIFI_ITEMS = ("FELUCCA_WIFI", "FELUCCA_LINK", "FELUCCA_WIFI_AP")
 
 
 def host_wifi(flags, path):
@@ -331,7 +331,7 @@ def conf():
         # GPL-3.0-only, as this app: fm1.toml licence); ui/opt_wifi.h
         print("wifi = true", 'wifi_stack = "own"', "link = true", sep="\n")
         if flags.get("FELUCCA_WIFI_AP", 0):
-            raise SystemExit("gen_optimist: WIFI_AP (MODE AP) is not on fm1-base's own Wi-Fi stack: off in the configuration")
+            print("wifi_ap = true")                     # MODE AP: fm1-base's (device/wifi_own_ap.c, Optimist's wifi_apd.c moved)
     if ble and flags.get("FELUCCA_BLE_DIAG", 0):
         print("ble_diag = true")                         # (BLE_DIAG: the link layer's diagnostics, fm1-base's log: btlog)
     if audio and flags.get("FELUCCA_BT_DIAG", 0):

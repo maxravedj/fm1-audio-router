@@ -22,7 +22,7 @@
 # the trial's own switches (optsim.py build-trial), every reply byte for byte; backup, restore, the mirror, DX7.
 # The screens and the flashes in optimist/build/host. PYTHON: a python with Pillow (fm1-base's font generator), default
 # the first python3 on PATH. OPTSIM=0: without Optimist's simulator (no emcc / node). PROFILES: the runs (default
-# "none sd bt lights wifi console items dev"; wifi: the dev profile with Wi-Fi + Link, tests/wifi/wifi.txt (run_wifi); console: the dev profile with the USB serial console, run_console; items: the builder items and
+# "none sd bt lights wifi wifi-ap console items dev"; wifi: the dev profile with Wi-Fi + Link, tests/wifi/wifi.txt (run_wifi); wifi-ap: the same with MODE AP, tests/wifi/ap.txt (run_wifi_ap); console: the dev profile with the USB serial console, run_console; items: the builder items and
 # options no other run switches on, run_items; lights: the dev profile with LIGHTS on the dim levels, tests/dev/lights.txt; sd: the SD card mode, run_sd below; bt: the dev profile with its Bluetooth on the host too,
 # OPT_HOST_BT=1, tests/dev/bt.txt and ui.txt).
 set -e
@@ -108,13 +108,26 @@ run_items() {                       # the builder items and options that nothing
     unset OPT_PROFILE
 }
 
-run_profile() {                     # $1: dev (the trial's profile copy), none (Optimist's source defaults), sd, bt, lights, console or items
+run_wifi_ap() {                     # MODE AP: the same profile (dev-wifi.config, WIFI_AP on), the FM-1 as the access
+                                    # point (fm1-base's device/wifi_own_ap.c) and the simulator's client of it (a phone:
+                                    # host/wifi_air_client.c): SYSTEM > WI-FI's AP AUTO, the password, the client's join,
+                                    # its address, a Link peer over the access point, the channel, a restart, AP MAN,
+                                    # CLEAR KEY; tests/wifi/ap.txt
+    echo "optimist/run.sh: profile dev-wifi, MODE AP on the host (tests/wifi/ap.txt)"
+    export OPT_PROFILE=profiles/dev-wifi.config
+    OPT_HOST_BT=1 OPT_HOST_WIFI=1 X0X_FONTSET=terminus "$PY" tools/build.py optimist --host
+    $H/optimist_host optimist/tests/wifi/ap.txt $H
+    unset OPT_PROFILE
+}
+
+run_profile() {                     # $1: dev (the trial's profile copy), none (Optimist's source defaults), sd, bt, lights, wifi, wifi-ap, console or items
     if [ "$1" = sd ]; then run_sd; return; fi
     if [ "$1" = console ]; then run_console; return; fi
     if [ "$1" = items ]; then run_items; return; fi
     if [ "$1" = bt ]; then run_bt; return; fi
     if [ "$1" = lights ]; then run_lights; return; fi
     if [ "$1" = wifi ]; then run_wifi; return; fi
+    if [ "$1" = wifi-ap ]; then run_wifi_ap; return; fi
     if [ "$1" = none ]; then T=optimist/tests; export OPT_PROFILE=none; else T=optimist/tests/dev; unset OPT_PROFILE; fi
     echo "optimist/run.sh: profile $1"
     X0X_FONTSET=terminus "$PY" tools/build.py optimist --host
@@ -148,8 +161,8 @@ run_profile() {                     # $1: dev (the trial's profile copy), none (
     fi
 }
 
-for p in ${PROFILES:-none sd bt lights wifi console items dev}; do
+for p in ${PROFILES:-none sd bt lights wifi wifi-ap console items dev}; do
     run_profile "$p"
 done
 unset OPT_PROFILE
-echo "optimist/run.sh: every check passed (${PROFILES:-none sd bt lights wifi console items dev})"
+echo "optimist/run.sh: every check passed (${PROFILES:-none sd bt lights wifi wifi-ap console items dev})"

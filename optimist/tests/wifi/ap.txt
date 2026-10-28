@@ -1,0 +1,115 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Optimist's MODE AP in the trial on fm1-base's own Wi-Fi stack (device/wifi_own_ap.c), in the host simulator with
+# the simulator's client of the FM-1's access point as a phone (host/wifi_air_client.c; OPT_HOST_BT=1 OPT_HOST_WIFI=1
+# with profiles/dev-wifi.config: optimist/run.sh's wifi-ap run; ui/opt_wifi.h). SYSTEM > WI-FI: MODE AP AUTO, no key
+# (STATE says so), the password (as the page's entry or the web editor's op 5 give it: plat_wifi_ap_set), the access
+# point up under its automatic name; the phone joins, gets 192.168.4.2 and is a Link peer: STATE alternates the clients
+# and the Link peers; the session's start followed as the clock; CHANNEL turned on the page (the access point moves,
+# the phone joins again); a restart (AP AUTO kept: up again); AP MAN (off, SAVE starts it); CLEAR KEY
+wait 1500
+master 2048
+wait 100
+tap GLO
+wait 100
+tap GLO
+wait 100
+spin SELECT 1
+wait 100
+spin SELECT 1
+wait 100
+spin SELECT 1
+wait 100
+spin SELECT 1
+wait 100
+# MODE AP AUTO (OFF, MAN, AUTO, AP MAN, AP AUTO): no key yet
+spin K1 1
+wait 100
+spin K1 1
+wait 100
+spin K1 1
+wait 100
+spin K1 1
+wait 3500
+cells
+expect wifi_mode 3
+expect ap_state 1
+expect wifi_step 0
+wifi ap auto password1
+wait 2500
+cells
+expect ap_state 3
+expect ap_key 1
+expect ap_channel 6
+client_peer 120
+wifi_client auto password1
+wait 3000
+expect ap_clients 1
+expect client_ip_last 2
+wait 4000
+cells
+wait 2000
+cells
+expect link_peers 1
+expect client_peers 1
+client_peer play 1
+wait 4000
+expect playing 1
+client_peer play 0
+wait 2000
+expect playing 0
+# CHANNEL on the page (K3): kept, the access point moves once it rests, the phone joins it again there
+spin K3 5
+wait 300
+cells
+expect ap_channel 11
+wait 3500
+expect ap_state 3
+expect client_deauths 1
+expect ap_clients 1
+expect client_ip_last 2
+# a restart: AP AUTO and the key kept in the settings record, the access point up again, the phone back
+wait 3000
+reboot
+wait 9000
+expect wifi_mode 3
+expect ap_state 3
+expect ap_channel 11
+expect ap_clients 1
+expect link_peers 1
+# AP MAN (K1 one back; the page as left before the restart): stopped; SAVE starts it, SAVE again stops it
+tap GLO
+wait 100
+tap GLO
+wait 100
+cells
+spin K1 -1
+wait 500
+cells
+expect wifi_mode 4
+expect ap_state 5
+expect ap_clients 0
+tap SAVE
+wait 3000
+cells
+expect ap_state 3
+expect ap_clients 1
+tap SAVE
+wait 300
+expect ap_state 5
+# SAVE held: CLEAR KEY, YES (SAVE): no password, the access point cannot start
+press SAVE
+wait 1500
+release SAVE
+wait 200
+cells
+tap SAVE
+wait 300
+cells
+expect ap_key 0
+expect ap_state 1
+# MODE AUTO again: the access point gone, the station manager back
+spin K1 -1
+wait 500
+expect wifi_mode 1
+expect ap_state 0
+wifi_client off

@@ -1,5 +1,4 @@
 /* SPDX-License-Identifier: GPL-3.0-only OR MPL-2.0 */
-/* Copyright (C) 2026 Henri David (hdavid), Optimist (github.com/w0ts/optimist) */
 /* MODE AP (IEEE 802.11-2020 §12.7.6): the WPA2-PSK authenticator for one client, the 4-way handshake (EAPOL-Key M1-M4)
  * as the other side of wifi_sta.c. Its PTK derivation is the station's (wifi_sta_derive_ptk); the group key is wrapped
  * (RFC 3394, wc_aes_wrap) in M3. Also here: the beacon and the probe, authentication, association and deauthentication

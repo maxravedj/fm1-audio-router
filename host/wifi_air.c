@@ -9,6 +9,10 @@
  *   - with Link (FM1B_LINK) a Link peer on the access point's address, 192.168.50.1 (link/link.c, the port that
  *     matches Ableton's library to 0.001 ms of phase: Optimist's tools/link/interop.sh): "link_peer BPM", "link_peer
  *     tempo BPM", "link_peer play 0|1", "link_peer off".
+ * With MODE AP (FM1B_WIFI_AP) a client of the FM-1's own access point too, as a phone would be ("wifi_client NAME
+ * PASS"): it waits for the FM-1's beacon, authenticates, associates, does the 4-way handshake as the station
+ * (wifi/wifi_sta.c), asks for an address (DHCP, wifi_ip.c as a station) and, with Link, is a Link peer on that address
+ * ("client_peer BPM"); deauthenticated (an access point restarted), it joins again at the next beacon.
  * The FM-1 hears the network only on its channel. Nothing is encrypted (the MAC's CCMP is the hardware's): a frame with
  * the Protected bit goes by in the clear. Part of host/plat_host.c, after device/wifi_own.c. */
 #define AIR_Q 32u
@@ -131,11 +135,17 @@ static void air_net(const char *name, const char *pass, uint32_t ch)   /* the ac
 #endif
     air.on = 1;
 }
+#if FM1B_WIFI_AP
+#include "wifi_air_client.c"                     /* MODE AP: a client of the FM-1's access point */
+#endif
 static int air_tx(const uint8_t *f, uint32_t len, uint32_t wcid, uint32_t ack)   /* a frame the FM-1 sent */
 {
     uint32_t tl = 0, el;
     const uint8_t *e;
     (void)wcid, (void)ack;
+#if FM1B_WIFI_AP
+    cli_hear(f, len);
+#endif
     if (!air.on || fm1_fake_ch != air.ch || len < 24u)
         return 0;                                 /* (sent, nobody heard it) */
     air.frames_in++;
@@ -194,6 +204,9 @@ static void air_tick(void)                        /* every simulated millisecond
     if (air_lk_on)
         lk_poll(&air_lk, own_us());
 #endif
+#if FM1B_WIFI_AP
+    cli_tick();
+#endif
 }
 
 /* a reboot (the script's): the stack as RAM would be after a restart (the radio off; what is kept is in the store) */
@@ -206,6 +219,9 @@ static void wifi_own_forget(void)
     wn_scan_clear(&wc_tab);
     own_group = 0;
     own_started = own_store_ok = own_store_dirty = 0;
+#if FM1B_WIFI_AP
+    memset(&wa, 0, sizeof wa);
+#endif
     wn_stp = &own_store;
     fm1_fake_up = 0;
 #if FM1B_LINK
@@ -226,10 +242,10 @@ static int air_cmd(const char *cmd, const char *a, const char *b, const char *c)
         return 1;
     }
     if (!strcmp(cmd, "wifi")) {                   /* wifi mode OFF|AUTO|MAN | wifi join NAME [PASS] | wifi leave | wifi scan */
-        static const char *const M[] = {"OFF", "AUTO", "MAN"};
+        static const char *const M[] = {"OFF", "AUTO", "MAN", "AP", "AP_MAN"};
         int i;
         if (!strcmp(a, "mode")) {
-            for (i = 0; i < 3; i++)
+            for (i = 0; i < (FM1B_WIFI_AP ? 5 : 3); i++)
                 if (!strcmp(b, M[i]))
                     plat_wifi_mode(i);
         } else if (!strcmp(a, "join")) {
@@ -239,8 +255,16 @@ static int air_cmd(const char *cmd, const char *a, const char *b, const char *c)
         } else if (!strcmp(a, "scan")) {
             plat_wifi_scan();
         }
+#if FM1B_WIFI_AP
+        else
+            cli_wifi_cmd(a, b, c);
+#endif
         return 1;
     }
+#if FM1B_WIFI_AP
+    if (cli_cmd(cmd, a, b, c))
+        return 1;
+#endif
 #if FM1B_LINK
     if (!strcmp(cmd, "link")) {                   /* link on | link off | link tempo BPM | link play 0|1 (the FM-1's) */
         if (!strcmp(a, "on") || !strcmp(a, "off"))
@@ -294,6 +318,10 @@ static int air_expect(const char *what, int *got)
         *got = (int)air.frames_out;
     else if (!strcmp(what, "air_keyed"))
         *got = air.keyed;
+#if FM1B_WIFI_AP
+    else if (cli_expect(what, got))
+        ;
+#endif
 #if FM1B_LINK
     else if (!strcmp(what, "link_peers"))
         *got = (int)plat_link_peers();

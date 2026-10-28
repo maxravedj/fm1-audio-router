@@ -4,7 +4,7 @@
 # The own Wi-Fi stack's host tests (wifi/, device/wifi_own.c: wifi_stack = "own"; Optimist's), and Ableton Link's
 # (link/: GPL-3.0-only, link = true), built with UBSan (and ASan where its runtime runs). Then the Link example in the
 # host simulator over its simulated network (host/wifi_air.c: an access point, DHCP, a Link peer; nothing of this
-# computer's network). Run from tests/run_tests.sh, or alone:  sh tests/wifi/run.sh
+# computer's network), and MODE AP on it (tests/wifi/link_ap: a client of the FM-1's own access point). Run from tests/run_tests.sh, or alone:  sh tests/wifi/run.sh
 set -u
 cd "$(dirname "$0")/../.."
 CC="${CC:-cc}"
@@ -42,6 +42,7 @@ t wifi_ap wifi_ap_test.c              # the authenticator (the host's simulated 
 t wifi_apip wifi_apip_test.c          # the IP layer as an access point (the simulated one's): FromDS, ARP, DHCP, ping
 t wifi_nets wifi_nets_test.c          # the networks kept, the scan's table, the beacons' security
 t wifi_wlc wifi_wlc_test.c            # felucca-bsp's coexistence table, word for word
+t wifi_apd wifi_apd_test.c -DPLAT_HOST -DFM1B_WIFI=1 -DFM1B_WIFI_OWN=1 -DFM1B_WIFI_AP=1 -DFM1B_BLE=1   # MODE AP (device/wifi_own_ap.c)
 t link link_test.c                    # Ableton Link (link/, GPL-3.0-only): wire format, join, tempo, phase, start / stop
 # the Link example on its simulated network: join, DHCP, the session's tempo and phase, both ways, start / stop, the
 # network lost and back, a reboot
@@ -51,6 +52,16 @@ if "$PY" tools/build.py examples/link --host > "$OUT/link_host_build.log" 2>&1 &
 else
     echo "  FAIL wifi/link_host (see $OUT/link_host_build.log, $OUT/link_host.log)"
     grep FAIL "$OUT/link_host.log" | head -15 | sed 's/^/       /'
+    FAIL=1
+fi
+# MODE AP on the simulated network: the Link example with wifi_ap = true (tests/wifi/link_ap), the simulator's client
+# (host/wifi_air_client.c) joins the FM-1's access point, gets an address and is a Link peer over it
+if "$PY" tools/build.py tests/wifi/link_ap --host > "$OUT/link_ap_build.log" 2>&1 &&
+    tests/wifi/link_ap/build/host/linkap_host tests/wifi/link_ap/tests/ap.txt tests/wifi/link_ap/build/host > "$OUT/link_ap.log" 2>&1; then
+    echo "  ok   wifi/link_ap (tests/wifi/link_ap/tests/ap.txt)"
+else
+    echo "  FAIL wifi/link_ap (see $OUT/link_ap_build.log, $OUT/link_ap.log)"
+    grep FAIL "$OUT/link_ap.log" | head -15 | sed 's/^/       /'
     FAIL=1
 fi
 exit $FAIL

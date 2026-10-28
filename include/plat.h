@@ -300,10 +300,11 @@ int plat_net_task(void (*fn)(void *), void *arg, const char *name);   /* a task 
 #define FM1B_WIFI_OWN 0
 #endif
 #define PLAT_WIFI_STORE_SIZE 336u
-enum { WIFI_MODE_OFF, WIFI_MODE_AUTO, WIFI_MODE_MAN };
+enum { WIFI_MODE_OFF, WIFI_MODE_AUTO, WIFI_MODE_MAN, WIFI_MODE_AP, WIFI_MODE_AP_MAN };
 void plat_wifi_mode(int mode);         /* OFF: nothing runs (the radio, once started, stays up); MAN: joins when asked;
                                         * AUTO: and the best saved network heard, at the start and whenever none is
-                                        * joined. Kept */
+                                        * joined; AP, AP_MAN: the FM-1 is the access point (wifi_ap = true, below).
+                                        * Kept */
 int plat_wifi_get_mode(void);
 /* the manager's step (finer than plat_wifi_state), and why the last join failed */
 enum { WIFI_STEP_OFF, WIFI_STEP_RADIO, WIFI_STEP_IDLE, WIFI_STEP_SCAN, WIFI_STEP_KEY, WIFI_STEP_AUTH, WIFI_STEP_ASSOC,
@@ -342,6 +343,39 @@ void plat_net_udp_close(uint16_t port);
 int plat_net_udp_send(uint16_t src_port, uint32_t ip, uint16_t port, const void *p, uint32_t n);   /* ip host order;
                                         * 512 B at most; 0 sent, -1 no address yet / no way there */
 void plat_net_join(uint32_t group);    /* the multicast group (host order, 0 none) whose datagrams the ports get */
+
+/* MODE AP (fm1.toml wifi_ap = true, with wifi_stack = "own": FM1B_WIFI_AP 1; device/wifi_own_ap.c): the FM-1 is a
+ * WPA2-PSK access point (CCMP) for up to 4 clients (a phone, a laptop), on channel 1..13 (6 by default), at 192.168.4.1,
+ * its clients 192.168.4.2.. by DHCP; a ping to it is answered; the app's UDP ports and Link run on it as on a network
+ * joined (plat_wifi_addr is 192.168.4.1). Its network is kept in the record with the networks: the name (none: FM1- and
+ * the last four digits of the radio's address), the channel and the WPA2 key made from the password (never the
+ * password). WIFI_MODE_AP runs it whenever a key is kept, from power-on; WIFI_MODE_AP_MAN only once started
+ * (plat_wifi_ap_run, or a password set), off again at power-on. The station's manager rests meanwhile. No web server,
+ * no internet behind it. (Declared in every build; defined only with wifi_ap = true.) */
+#ifndef FM1B_WIFI_AP
+#define FM1B_WIFI_AP 0
+#endif
+enum { WIFI_AP_OFF, WIFI_AP_NOKEY, WIFI_AP_STARTING, WIFI_AP_UP, WIFI_AP_FAILED, WIFI_AP_STOPPED };   /* OFF: not an AP
+                                        * mode; NOKEY: no key kept (no access point runs without one); STARTING: the
+                                        * key being made, the radio starting; FAILED: the radio did not start;
+                                        * STOPPED: AP_MAN, not started */
+int plat_wifi_ap_state(void);
+int plat_wifi_ap_set(const uint8_t *ssid, uint32_t len, const char *pass);   /* the network's name (len 0: the
+                                        * automatic one) and password (8..63 printable characters): the key made (a
+                                        * slice a pass) and kept, the access point started again on it (AP_MAN: started).
+                                        * 0, -1 a bad name or password */
+int plat_wifi_ap_set_channel(int ch);  /* 1..13, kept; a running access point moves once it has rested 1.2 s. 0 / -1 */
+int plat_wifi_ap_channel(void);        /* the channel (kept, or the one plat_wifi_ap_start runs) */
+int plat_wifi_ap_name(char *name);     /* the network's name (33 bytes, may be 0): its length */
+int plat_wifi_ap_has_key(void);        /* a key is kept */
+void plat_wifi_ap_forget(void);        /* the key goes (the name and channel stay): the access point stops */
+int plat_wifi_ap_run(int on);          /* AP_MAN: start / stop. 0, -1 not AP_MAN, -2 no key kept */
+int plat_wifi_ap_start(const uint8_t *ssid, uint32_t len, const char *pass, int ch);   /* one not kept, with MODE OFF
+                                        * (until a mode is chosen): 0, -1 not MODE OFF or a bad name / password / channel */
+void plat_wifi_ap_stop(void);          /* .. stopped (the clients told) */
+uint32_t plat_wifi_ap_clients(void);   /* the clients joined (their keys in) */
+int plat_wifi_ap_client(int i, uint8_t mac[6], uint32_t *ip);   /* client slot i (0..3): 1 joined, its address (host
+                                        * order, 0 none yet); 0 none */
 
 /* Ableton Link (fm1.toml link = true, with wifi_stack = "own": FM1B_LINK 1; link/, GPL-3.0-only: a firmware with it is
  * GPL-3.0-only as a whole): a peer of the tempo / beat / start-stop session on the network joined,
