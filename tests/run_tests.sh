@@ -49,6 +49,10 @@ run usb-audio sh -c "$CC -std=c11 -O1 -Wall -Wextra -Werror -Wno-unused-function
     -Ibsp/chip -DTEST_SPLIT=1 -DTEST_NAMES=1 -DTEST_FB=1 -DTEST_O24=1 -DTEST_HC=1 -DTEST_CH=4 -DTEST_24=1 \
     -o $OUT/uac_test_split bsp/tests/uac_test.c -lm && $OUT/uac_test_split"
 run storage sh -c "$CC -O2 -w -o $OUT/storage_test tests/storage_test.c && $OUT/storage_test"
+# the same with app.h APP_STORE_BOUNCE (one page of RAM for the store): the same results, the same flash byte for byte
+run storage-bounce sh -c "$CC -O2 -w -DAPP_STORE_BOUNCE=1 -o $OUT/storage_bounce_test tests/storage_test.c && \
+    $OUT/storage_bounce_test > $OUT/storage_bounce.txt && $OUT/storage_test > $OUT/storage_plain.txt && \
+    cmp $OUT/storage_plain.txt $OUT/storage_bounce.txt"
 run fastmath sh -c "$CC -O2 -w -o $OUT/fastmath_test tests/fastmath_test.c -lm && $OUT/fastmath_test"
 run installer "$PY" tests/install_test.py
 # the check on an app's RAM code (tools/ramcode.py, plat.h PLAT_RAM_CODE): RAM -> RAM passes, into XIP fails
@@ -118,6 +122,13 @@ run font-trim sh -c "mkdir -p $OUT/font/full $OUT/font/trim && \
     $CC -std=c99 -Wall -Wextra -Werror -Wno-unused-function -O2 -I$OUT/font/full -o $OUT/font/full_test tests/font_trim_test.c && \
     $CC -std=c99 -Wall -Wextra -Werror -Wno-unused-function -O2 -I$OUT/font/trim -o $OUT/font/trim_test tests/font_trim_test.c && \
     $OUT/font/full_test $OUT/font/full.bin && $OUT/font/trim_test $OUT/font/trim.bin && cmp $OUT/font/full.bin $OUT/font/trim.bin"
+# the packed fonts (fm1.toml font_pack: the trimmed glyphs' alphas Huffman-coded) too, pixel for pixel
+run font-pack sh -c "mkdir -p $OUT/font/full $OUT/font/pack && \
+    FM1_FONT_FULL='T XS S B M L' $PY tools/gen_font.py $OUT/font/full/felucca_font.h && \
+    FM1_FONT_FULL='T XS S B M L' FM1_FONT_TRIM=1 FM1_FONT_PACK=1 $PY tools/gen_font.py $OUT/font/pack/felucca_font.h && \
+    $CC -std=c99 -Wall -Wextra -Werror -Wno-unused-function -O2 -I$OUT/font/full -o $OUT/font/full_test tests/font_trim_test.c && \
+    $CC -std=c99 -Wall -Wextra -Werror -Wno-unused-function -O2 -I$OUT/font/pack -o $OUT/font/pack_test tests/font_trim_test.c && \
+    $OUT/font/full_test $OUT/font/full.bin && $OUT/font/pack_test $OUT/font/pack.bin && cmp $OUT/font/full.bin $OUT/font/pack.bin"
 run template template/build/host/template_host template/tests/basic.txt template/build/host
 # SysEx between the computer and an app (APP_SYSEX, plat_sysex_send) in the host simulator: tests/sysex_app
 run sysex-app sh -c "$PY tools/build.py tests/sysex_app --host && \

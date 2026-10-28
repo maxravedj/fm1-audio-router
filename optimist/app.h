@@ -32,6 +32,9 @@ enum { OBJ_PANEL, OBJ_NOBJ };
 #else
 #define APP_STORE_MAP {0xD8000u}
 #endif
+/* its one object is 32 bytes (device/panel.c panel_t): the store's RAM one 256-byte page, not a whole payload (feat/
+ * slim-store-bounce: 3,584 B of the SRAM; the same flash, the same records) */
+#define APP_STORE_BOUNCE 1
 
 void app_init(void);
 void app_render(int32_t *lr, uint32_t n, uint32_t master_q12);
