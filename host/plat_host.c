@@ -285,6 +285,7 @@ void plat_usb_host(int on) { (void)on; }
 int plat_usb_host_state(void) { return USBH_OFF; }
 int plat_usb_host_msg(void) { return USBH_MSG_NONE; }
 int plat_usb_lost(void) { return 0; }
+const char *plat_usb_host_name(void) { return ""; }
 
 /* Bluetooth (FM1B_BLE): a stand-in for the stack, ready a second after the start, and its log */
 static uint32_t ble_t0;
