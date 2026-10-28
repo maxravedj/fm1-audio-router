@@ -233,12 +233,15 @@ static void opt_dual_start(void)
 }
 
 /* every main loop pass (app_loop, app_yield): its time, for the starvation check; a CPU1 put down by the render, held */
+static void dual_log_down(void);
 static void opt_dual_loop(void)
 {
     dual_loop_ms = plat_ms();
     fm1_dual_mb.count = dual.jobs;
     if (!dual.up && plat_cpu2_on())
         plat_cpu2_set(0);                          /* (OVERLOAD, CANARY: no job outstanding from the main loop) */
+    if (!dual.up)
+        dual_log_down();                           /* (crk-J: once, with the reason) */
 }
 
 /* CPU0, once an audio half: CPU1's load (dual_load.h), from the ticks of its jobs since the last half */
@@ -247,7 +250,50 @@ static void dual_load_half(void)
     static uint32_t last;
     uint32_t b = dual_c1_ticks;
     dual_load_take((b - last) / FM1_TICKS_PER_US, dual.up);
+    if (dual.up)                                   /* (its maxima: INFO's CPU1 MAX 5S / MAX, as dual.c dual_load_half) */
+        ovl_ring_put(&ovl.r[OVL_CPU1], (b - last) / FM1_TICKS_PER_US, fm1_ms);
     last = b;
+}
+
+/* crk-J (crackle hunt, a measurement build): the second core's state for fm1-base's log (device/main_fm1.c log_frame,
+ * "crk cpu1"): up, why it is down (DUAL_*), the stop record's in-job and wait, the jobs posted and joined */
+void crk_cpu1_read(uint32_t v[4]);
+void crk_cpu1_read(uint32_t v[4])
+{
+    v[0] = (uint32_t)dual.up | (uint32_t)dual.why << 8 | (uint32_t)dual.stop.in_job << 16 | (uint32_t)dual.stop.stopped << 24;
+    v[1] = dual.posts;
+    v[2] = dual.jobs;
+    v[3] = dual.stop.wait_us;
+}
+
+/* crk-J: CPU1 not started or put down: said once in fm1-base's log (plat_log, the main loop: "cpu1 off WHY ..."),
+ * instead of staying off silently. Two hex digits each: why (DUAL_*), fm1-base's reason (plat_cpu2_gave_up), in a
+ * job, then the jobs joined and the wait (us) */
+static void dual_log_down(void)
+{
+    static uint8_t said;
+    static const char H[] = "0123456789ABCDEF";
+    char b[40], *q = b;
+    const char *t = "cpu1 off ";
+    uint32_t v[5], i, k;
+    if (said || dual.up || dual.why == DUAL_SETOFF)
+        return;
+    said = 1;
+    v[0] = dual.why;
+    v[1] = (uint32_t)plat_cpu2_gave_up();
+    v[2] = dual.stop.in_job;
+    v[3] = dual.jobs;
+    v[4] = dual.stop.wait_us;
+    while (*t)
+        *q++ = *t++;
+    for (i = 0; i < 5u; i++) {
+        uint32_t d = i < 3u ? 2u : 6u;
+        for (k = d; k--;)
+            *q++ = H[(v[i] >> (4u * k)) & 15u];
+        *q++ = ' ';
+    }
+    q[-1] = 0;
+    plat_log(b);
 }
 
 /* mix_block (fx.c) with the jobs dual_split gives CPU1 (dual.c mix_block_dual) */

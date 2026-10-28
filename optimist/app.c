@@ -68,6 +68,7 @@ const felucca_font_t *const opt_font_l = &FONT_L, *const opt_font_s = &FONT_S;
 /* crk-I (crackle hunt, a measurement build): the LCD writes started with the interrupts off (the global enable, icfg
  * bit 9): how many, and the last one's caller; fm1-base's log reads them (device/main_fm1.c log_frame, "crk lcd") */
 uint32_t crk_lcd_off, crk_lcd_from;
+uint32_t crk_lcd_boot;                           /* (crk-J: the boot's, the splash before the interrupts are on: main_fm1.c) */
 static void crk_lcd_note(uint32_t ra)
 {
 #ifdef PLAT_HOST
