@@ -187,5 +187,9 @@ run dim-app sh -c "$PY tools/build.py tests/dim_app --host && \
 # emulator's part "backup" has its own test, emu_backup_test.mjs, on the same app)
 run backup-app sh -c "$PY tools/build.py tests/backup_app --host && mkdir -p tests/backup_app/build/out && \
     tests/backup_app/build/host/bktest_host tests/backup_app/tests/backup.txt tests/backup_app/build/out"
+# the own Wi-Fi stack (wifi/, device/wifi_own.c: wifi_stack = "own", Optimist's) and Ableton Link (link/, GPL-3.0-only,
+# link = true): the station, the crypto, the IP layer, the simulator's access point, Link; the Link example on a simulated
+# network in the host simulator
+if sh tests/wifi/run.sh; then :; else FAIL=1; fi
 [ $FAIL -eq 0 ] && echo "all tests passed" || echo "TESTS FAILED"
 exit $FAIL
