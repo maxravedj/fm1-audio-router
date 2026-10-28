@@ -361,6 +361,13 @@ void opt_ui_lights_set(uint32_t v) { lights_lvl = (uint8_t)(v % LIGHTS_N); }   /
 int32_t opt_ui_lights(void) { return -1; }                        /* (not built) */
 void opt_ui_lights_set(uint32_t v) { (void)v; }
 #endif
+#ifdef OPT_HAS_USBH
+int32_t opt_ui_usbh(void) { return (int32_t)usbh_mode(); }       /* SYSTEM > USB's MODE: 0 DEVICE, 1 HOST */
+void opt_ui_usbh_reboot(void) { usbh_want = 0; usbh_said = 0; }   /* (a restart: RAM cleared, MODE DEVICE) */
+#else
+int32_t opt_ui_usbh(void) { return -1; }                         /* (not built) */
+void opt_ui_usbh_reboot(void) {}
+#endif
 #endif
 #if FELUCCA_USB_AUDIO
 int32_t opt_ui_uad(uint32_t s) { return s < UAS_N ? ua_dst[s] : -1; }   /* SYSTEM > USB AUDIO: source s's channels (UAD_*) */

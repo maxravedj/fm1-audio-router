@@ -66,6 +66,11 @@ void app_loop(void);
 uint8_t *app_wifi_store(void);
 void app_wifi_store_dirty(void);
 #endif
+/* the USB MIDI host (fm1.toml usb_host = true, from the configuration's USB_HOST: gen_optimist.py --conf): SYSTEM > USB's
+ * DEVICE line names the device by its product string (plat_usb_host_name; ui/opt_usbh.h) */
+#if defined(FM1B_USB_HOST) && FM1B_USB_HOST
+#define APP_USB_HOST_NAME
+#endif
 #define APP_BLE_AT_BOOT (opt_ble_at_boot() != 0)
 int opt_ble_at_boot(void);
 #define BLE_DEVICE_NAME "Optimist"
@@ -140,3 +145,6 @@ int app_expect(const char *what, int *got);
 int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, const char *d);
 #define APP_HOST_FAILS
 int app_host_fails(void);
+/* what a "reboot" forgets that RAM would: SYSTEM > USB's MODE (ui/opt_usbh.h: never kept, every boot is DEVICE) */
+#define APP_HOST_REBOOT
+void app_host_reboot(void);

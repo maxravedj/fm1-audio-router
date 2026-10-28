@@ -308,7 +308,7 @@ def generate(tree):
 def conf():
     """--conf (fm1.toml conf_gen, run by tools/build.py before the build): fm1.toml's ble and bt_audio from the chosen
     configuration's BLE and BT_AUDIO (a profile with neither builds without the stack; OPT_PROFILE=none: neither), and
-    ble_central from its BLE_CENTRAL"""
+    ble_central from its BLE_CENTRAL, usb_host from its USB_HOST"""
     prof = profile()
     flags = {}
     if prof is not None:
@@ -332,6 +332,9 @@ def conf():
         print("wifi = true", 'wifi_stack = "own"', "link = true", sep="\n")
         if flags.get("FELUCCA_WIFI_AP", 0):
             print("wifi_ap = true")                     # MODE AP: fm1-base's (device/wifi_own_ap.c, Optimist's wifi_apd.c moved)
+    if flags.get("FELUCCA_USB_HOST", 0):
+        # the USB MIDI host (USB_HOST): fm1-base's (felucca-bsp's chip/usb_host.c), SYSTEM > USB's MODE HOST (ui/opt_usbh.h)
+        print("usb_host = true")
     if ble and flags.get("FELUCCA_BLE_DIAG", 0):
         print("ble_diag = true")                         # (BLE_DIAG: the link layer's diagnostics, fm1-base's log: btlog)
     if audio and flags.get("FELUCCA_BT_DIAG", 0):
