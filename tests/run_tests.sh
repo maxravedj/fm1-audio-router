@@ -99,5 +99,7 @@ run template template/build/host/template_host template/tests/basic.txt template
 # SysEx between the computer and an app (APP_SYSEX, plat_sysex_send) in the host simulator: tests/sysex_app
 run sysex-app sh -c "$PY tools/build.py tests/sysex_app --host && \
     tests/sysex_app/build/host/sxtest_host tests/sysex_app/tests/sysex.txt tests/sysex_app/build/host"
+# the simulator's USB audio (usb_play, usb_rec): a computer's signal through the template's MASTER, recorded back
+run host-usb-audio "$PY" tests/host_usb_audio_test.py template/build/host/template_host template/build/tests/usb_audio
 [ $FAIL -eq 0 ] && echo "all tests passed" || echo "TESTS FAILED"
 exit $FAIL
