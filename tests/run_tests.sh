@@ -180,5 +180,8 @@ run sd sh -c "$CC -std=c99 -Wall -Wextra -Werror -Wno-unused-function -O2 -Idevi
 run sd-app sh -c "$PY tools/build.py tests/sd_app --host && \
     head -c 4194304 /dev/zero > $OUT/sd_card.img && printf '\125\252' | dd of=$OUT/sd_card.img bs=1 seek=510 conv=notrunc 2>/dev/null && \
     FM1B_SD=$OUT/sd_card.img tests/sd_app/build/host/sdtest_host tests/sd_app/tests/sd.txt tests/sd_app/build/host"
+# the dim lights at any brightness (APP_DIM_LEVELS, plat_dim_ns) in the host simulator: tests/dim_app
+run dim-app sh -c "$PY tools/build.py tests/dim_app --host && \
+    tests/dim_app/build/host/dimtest_host tests/dim_app/tests/dim.txt tests/dim_app/build/host"
 [ $FAIL -eq 0 ] && echo "all tests passed" || echo "TESTS FAILED"
 exit $FAIL
