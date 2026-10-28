@@ -201,6 +201,7 @@ static int data_erase(uint32_t off)
 }
 
 /* ------------------------------------------------------------ timer --- */
+static uint32_t crk_pass_max, crk_pass_stage;            /* (crk-I: the longest main-loop pass, log_frame) */
 static uint8_t usb_due;
 static uint32_t t5_gap_max, t5_late, t5_run_max;                /* the longest gap between ticks (us), and gaps over 300 us:
                                                      * the key and light scan held up (the log reads and clears) */
@@ -485,6 +486,32 @@ static int log_frame(const uint8_t *p, uint32_t n)
         *q = 0;
         log_line_send(b);
         t5_gap_max = t5_late = t5_run_max = lock_max = 0;
+    }
+    {   /* crk-I (crackle hunt, a measurement build): the audio's late halves, the longest render (us), TIMER5 ticks nested
+         * in a render, halves; the longest main-loop pass (us, interrupts in it) and the stage it ended in (5 a frame, 6
+         * input only); the app's LCD writes with the interrupts off and the last one's caller. Maxima cleared here */
+        extern uint32_t crk_lcd_off, crk_lcd_from;
+        static const char *const L[8] = {"crk late ", " max ", "crk nest ", " halves ", "crk pass ", " stage ",
+                                         "crk lcdoff ", " from "};
+        const uint32_t v[8] = {fm1b_dbg.late, fm1b_dbg.max_us, fm1b_dbg.nested, fm1b_dbg.halves, crk_pass_max,
+                               crk_pass_stage, crk_lcd_off, crk_lcd_from};
+        uint32_t i;
+        for (i = 0; i < 8u; i += 2u) {
+            const char *l;
+            q = b;
+            for (l = L[i]; *l;)
+                *q++ = *l++;
+            hexs(q, v[i]);
+            q += 8;
+            for (l = L[i + 1u]; *l;)
+                *q++ = *l++;
+            hexs(q, v[i + 1u]);
+            q += 8;
+            *q = 0;
+            log_line_send(b);
+        }
+        fm1b_dbg.max_us = 0;
+        crk_pass_max = 0;
     }
 #if FM1B_BLE
     {
@@ -1044,6 +1071,15 @@ static void fm1_main(void)
     app_ui_init();
 
     for (;;) {
+        {   /* crk-I: this pass's length (the last one's end to now) */
+            static uint32_t t_pass;
+            uint32_t now = fm1_ticks(), us = (now - t_pass) / FM1_TICKS_PER_US;
+            if (t_pass && us > crk_pass_max) {
+                crk_pass_max = us;
+                crk_pass_stage = fm1b_dbg.stage;
+            }
+            t_pass = now;
+        }
         fm1_wdt_feed();
 #if FELUCCA_USB_HOST
         usb_host_task(fm1_ms);                      /* the host's mode change and connecting (plat_usb_host) */

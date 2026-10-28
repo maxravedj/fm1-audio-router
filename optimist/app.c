@@ -65,8 +65,30 @@ void app_init(void)
 uint16_t *opt_canvas(uint32_t n) { return n <= CV_MAX ? cv_px : 0; }
 /* the two faces Optimist's unit draws with: this unit's (build/gen/felucca_font.h), one copy in the image */
 const felucca_font_t *const opt_font_l = &FONT_L, *const opt_font_s = &FONT_S;
-void opt_lcd_fill(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint16_t c) { lcd_fill(x, y, w, h, c); }
-void opt_lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint16_t *px) { lcd_blit(x, y, w, h, px); }
+/* crk-I (crackle hunt, a measurement build): the LCD writes started with the interrupts off (the global enable, icfg
+ * bit 9): how many, and the last one's caller; fm1-base's log reads them (device/main_fm1.c log_frame, "crk lcd") */
+uint32_t crk_lcd_off, crk_lcd_from;
+static void crk_lcd_note(uint32_t ra)
+{
+#ifdef PLAT_HOST
+    (void)ra;                                    /* (the host: no interrupts) */
+#else
+    if (!(fm1_icfg() & 0x200u)) {
+        crk_lcd_off++;
+        crk_lcd_from = ra;
+    }
+#endif
+}
+void opt_lcd_fill(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint16_t c)
+{
+    crk_lcd_note((uint32_t)(uintptr_t)__builtin_return_address(0));
+    lcd_fill(x, y, w, h, c);
+}
+void opt_lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint16_t *px)
+{
+    crk_lcd_note((uint32_t)(uintptr_t)__builtin_return_address(0));
+    lcd_blit(x, y, w, h, px);
+}
 void opt_lcd_sync(void) { lcd_sync(); }
 
 #if FM1B_BOOT_PACK
