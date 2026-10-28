@@ -30,6 +30,8 @@ run lock sh -c "$CC -std=c99 -Wall -Wextra -Werror -O2 -Idevice -o $OUT/lock_tes
 # shim_irq_save / shim_irq_restore (the radio's) over a simulated interrupt enable: inside an interrupt they leave
 # interrupts off
 run shim_lock sh -c "$CC -std=c99 -Wall -Wextra -Werror -O2 -Idevice -o $OUT/shim_lock_test tests/shim_lock_test.c && $OUT/shim_lock_test"
+# the packed SRAM (device/app.ld) as tools/build.py reads it: one region, RAM code first, then data, bss, the pool
+run layout "$PY" tests/layout_test.py
 run storage sh -c "$CC -O2 -w -o $OUT/storage_test tests/storage_test.c && $OUT/storage_test"
 run fastmath sh -c "$CC -O2 -w -o $OUT/fastmath_test tests/fastmath_test.c -lm && $OUT/fastmath_test"
 run installer "$PY" tests/install_test.py
