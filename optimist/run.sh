@@ -22,7 +22,8 @@
 # the trial's own switches (optsim.py build-trial), every reply byte for byte; backup, restore, the mirror, DX7.
 # The screens and the flashes in optimist/build/host. PYTHON: a python with Pillow (fm1-base's font generator), default
 # the first python3 on PATH. OPTSIM=0: without Optimist's simulator (no emcc / node). PROFILES: the runs (default
-# "none sd bt lights dev"; lights: the dev profile with LIGHTS on the dim levels, tests/dev/lights.txt; sd: the SD card mode, run_sd below; bt: the dev profile with its Bluetooth on the host too,
+# "none sd bt lights console items dev"; console: the dev profile with the USB serial console, run_console; items: the builder items and
+# options no other run switches on, run_items; lights: the dev profile with LIGHTS on the dim levels, tests/dev/lights.txt; sd: the SD card mode, run_sd below; bt: the dev profile with its Bluetooth on the host too,
 # OPT_HOST_BT=1, tests/dev/bt.txt and ui.txt).
 set -e
 cd "$(dirname "$0")/.."
@@ -43,6 +44,14 @@ run_sd() {
         cp $H/sd/card0.img $H/sd/card.img
         FM1B_SD=$H/sd/card.img $H/optimist_host optimist/tests/sd/card.txt $H
         "$PY" optimist/sdcard.py check $H/sd/card.img
+        # the same layout with the serial console on (profiles/sd-console.config; OVERLAY too, which only the FM-1's code defines):
+        # the parts switch engines (tests/sd/engines.txt), the console reads the card (tests/sd/console.txt, a fresh card image)
+        echo "optimist/run.sh: profile sd-console (tests/sd/engines.txt, console.txt)"
+        export OPT_PROFILE=profiles/sd-console.config
+        X0X_FONTSET=terminus "$PY" tools/build.py optimist --host
+        $H/optimist_host optimist/tests/sd/engines.txt $H
+        cp $H/sd/card0.img $H/sd/card-console.img
+        FM1B_SD=$H/sd/card-console.img $H/optimist_host optimist/tests/sd/console.txt $H
     else
         echo "optimist/run.sh: the card's checks NOT run (no card image)"
     fi
@@ -67,8 +76,30 @@ run_lights() {                      # the dev profile with LIGHTS (profiles/dev-
     unset OPT_PROFILE
 }
 
-run_profile() {                     # $1: dev (the trial's profile copy), none (Optimist's source defaults), sd or bt
+run_console() {                     # the dev profile with the USB serial console (profiles/dev-console.config, no USB audio beside it) and
+                                    # the host's Bluetooth stand-ins: SYSTEM > SERIAL on, a restart, Optimist's command line
+                                    # (tests/dev/console.txt: run control, status, dbg, cpu1, keys, keylog, memr, flr, tabbench, btlog)
+    echo "optimist/run.sh: profile dev, the serial console (tests/dev/console.txt)"
+    export OPT_PROFILE=profiles/dev-console.config
+    OPT_HOST_BT=1 X0X_FONTSET=terminus "$PY" tools/build.py optimist --host
+    $H/optimist_host optimist/tests/dev/console.txt $H
+    unset OPT_PROFILE
+}
+
+run_items() {                       # the builder items and options that nothing else switches on (profiles/dev-items.config, the host's
+                                    # Bluetooth stand-ins for BT_PROJ): engines, inserts, pages, the editor's SLOOP commands
+                                    # (tests/dev/items.txt)
+    echo "optimist/run.sh: profile dev, the items nothing else runs (tests/dev/items.txt)"
+    export OPT_PROFILE=profiles/dev-items.config
+    OPT_HOST_BT=1 X0X_FONTSET=terminus "$PY" tools/build.py optimist --host
+    $H/optimist_host optimist/tests/dev/items.txt $H
+    unset OPT_PROFILE
+}
+
+run_profile() {                     # $1: dev (the trial's profile copy), none (Optimist's source defaults), sd, bt, lights, console or items
     if [ "$1" = sd ]; then run_sd; return; fi
+    if [ "$1" = console ]; then run_console; return; fi
+    if [ "$1" = items ]; then run_items; return; fi
     if [ "$1" = bt ]; then run_bt; return; fi
     if [ "$1" = lights ]; then run_lights; return; fi
     if [ "$1" = none ]; then T=optimist/tests; export OPT_PROFILE=none; else T=optimist/tests/dev; unset OPT_PROFILE; fi
@@ -104,8 +135,8 @@ run_profile() {                     # $1: dev (the trial's profile copy), none (
     fi
 }
 
-for p in ${PROFILES:-none sd bt lights dev}; do
+for p in ${PROFILES:-none sd bt lights console items dev}; do
     run_profile "$p"
 done
 unset OPT_PROFILE
-echo "optimist/run.sh: every check passed (${PROFILES:-none sd bt lights dev})"
+echo "optimist/run.sh: every check passed (${PROFILES:-none sd bt lights console items dev})"

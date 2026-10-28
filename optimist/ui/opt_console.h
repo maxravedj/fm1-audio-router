@@ -11,8 +11,26 @@
  *   btlog [N]    fm1-base's Bluetooth log, the newest N lines (plat_ble_log_line: its stack's own lines, what
  *                Optimist's blell / btinq / bttrace print from its own stack on its console; BLE or BT_AUDIO builds)
  *   reboot       a restart (plat_restart)
- * The rest of Optimist's console reads its own HAL (registers, the second core's setup, its radio, SD bus and flash
- * driver), which fm1-base keeps to itself: not here. Main loop only (ui/opt_ui.c opt_ui_frame). */
+ * and Optimist's console commands that read its HAL, on what fm1-base's platform gives (plat.h):
+ *   dbg          the platform's counters: late renders (plat_xruns), erases that held the sound (plat_flash_held), the
+ *                messages and their age on each MIDI port (plat_midi_count, plat_midi_ago), the USB session, the battery's
+ *                reading, the radios' states
+ *   cpu1         the second core: it takes jobs, why not, the jobs it misread, its stack's depth, which core this is
+ *                (plat_cpu2_*; Optimist's dualcfg and cpu1park wrote its set-up and parked it, fm1-base does that)
+ *   keys         the buttons and keys held (plat_buttons, plat_keys), MASTER, the battery's reading, and the matrix Optimist's
+ *                UI sees
+ *   keylog       the last 32 key and button edges the UI's scan saw, oldest first: id (0..13 buttons, 14..40 keys), P down /
+ *                R up, the time since the one before in microseconds (the main loop's scan, not Optimist's 10 kHz one)
+ *   memr ADDR [LEN<=256]   memory: RAM 01C00000.., the flash's XIP window 02000000..
+ *   flr OFFSET [LEN<=256]  the flash as plat_data reads it (the data windows; the app's own code is not there)
+ *   tabbench     the tables' read speed: SINE, main RAM, the pool (TAB_IN_POOL)
+ *   sd [ls [DIR] | cat FILE | raw SECTOR]   the card: its state, a folder, a file's first bytes, a sector (SDCARD builds)
+ *   ovl          the overlays' slots (OVERLAY builds)
+ * What stays with fm1-base, which owns that hardware (its own tools read it: tools/fm1_debug.py, fm1_remote.py): the crash
+ * and boot records (crash, boot), the second core's set-up and rails (dualcfg), the radio's calibration, link layer and
+ * Bluetooth Classic diagnostics (blevm, bletrim, blell, btclk, btinq, btscan, btrx, btpage, bttrace), the SD bus modes
+ * and benchmarks, the far probe, membench and the update loader's entry (uboot). Main loop only (ui/opt_ui.c
+ * opt_ui_frame). */
 #pragma once
 
 #if FELUCCA_CDC
@@ -60,6 +78,32 @@ static void con_kv(const char *k, int32_t v)    /* "key value\r\n" */
     con_puts(k);
     con_putc(' ');
     con_dec(v);
+    con_puts("\r\n");
+}
+static void con_hex(uint32_t v, uint32_t digits)
+{
+    while (digits--)
+        con_putc("0123456789ABCDEF"[(v >> (4u * digits)) & 15u]);
+}
+static void con_kx(const char *k, uint32_t v)   /* "key 0xXXXXXXXX\r\n" */
+{
+    con_puts(k);
+    con_puts(" 0x");
+    con_hex(v, 8);
+    con_puts("\r\n");
+}
+static void con_bytes(const char *k, const uint8_t *d, uint32_t n)   /* "key: XX XX ..", 16 a line */
+{
+    uint32_t i;
+    con_puts(k);
+    con_putc(':');
+    for (i = 0; i < n; i++) {
+        if (i % 16u == 0 && i)
+            con_puts("\r\n ");
+        else
+            con_putc(' ');
+        con_hex(d[i], 2);
+    }
     con_puts("\r\n");
 }
 #include "io/console_run.c"                     /* play, pause, stop, rec, proj load, heavy (Optimist's run control) */
@@ -115,12 +159,290 @@ static void con_btlog(const char *p)            /* the newest N lines (default 1
 }
 #endif
 
+/* ---- Optimist's HAL commands, on fm1-base's platform */
+static void con_dbg(void)
+{
+    static const char *const PORT[3] = {"usb", "trs", "ble"};
+    static const uint8_t ID[3] = {PORT_USB, PORT_TRS, PORT_BLE};
+    uint32_t k, n;
+    con_kv("late_renders", (int32_t)plat_xruns());
+    con_kv("flash_erases_held", (int32_t)plat_flash_held());
+    for (k = 0; k < 3u; k++) {
+        con_puts("midi_");
+        con_puts(PORT[k]);
+        con_puts(" in ");
+        con_dec((int32_t)plat_midi_count(ID[k], 0));
+        con_puts(" out ");
+        con_dec((int32_t)plat_midi_count(ID[k], 1));
+        con_puts(" ago_ms ");
+        n = plat_midi_ago(ID[k], 0);
+        con_dec(n == 0xFFFFFFFFu ? -1 : (int32_t)n);
+        con_puts("\r\n");
+    }
+    con_kv("usb_session", (int32_t)plat_usb_session());
+    con_kv("battery_raw", plat_battery_raw());
+    con_kv("ticks24", (int32_t)plat_ticks24());
+#if FELUCCA_BLE
+    con_kv("ble_state", plat_ble_state());
+    con_kv("ble_connected", plat_ble_connected());
+#endif
+#if FELUCCA_BT_AUDIO
+    con_kv("bta_state", plat_bta_state());
+#endif
+}
+static void con_cpu1(void)
+{
+    con_kv("cpu1_on", plat_cpu2_on());
+    con_kv("cpu1_gave_up", plat_cpu2_gave_up());          /* (0 no, 1 it misread a job, 2 one was late, 3 barred, 4 ...: plat.h) */
+    con_kv("cpu1_barred", plat_cpu2_barred());
+    con_kv("cpu1_bad", (int32_t)plat_cpu2_bad());
+    con_kv("cpu1_stack_used", (int32_t)plat_cpu2_stack());
+    con_kv("core", (int32_t)plat_core());
+#if FELUCCA_DUAL >= 2
+    con_kv("cpu1_up", opt_core_dual_stat(0));
+    con_kv("cpu1_why", opt_core_dual_stat(1));
+    con_kv("cpu1_jobs", opt_core_dual_stat(2));
+    con_kv("cpu1_posts", opt_core_dual_stat(3));
+#endif
+}
+static void con_keys(void)
+{
+    con_kx("buttons", plat_buttons());
+    con_kx("keys", plat_keys());
+    con_kv("master", (int32_t)plat_master());
+    con_kv("battery_raw", plat_battery_raw());
+    con_kx("matrix_buttons", fm1_in.buttons);               /* (the ids Optimist's UI sees: opt_panel.h) */
+    con_kx("matrix_keys", oin_keys);
+}
+static void con_keylog(void)
+{
+    uint32_t n = fm1_klog_n, i, from = n > FM1_KLOG_N ? n - FM1_KLOG_N : 0u, prev = 0;
+    for (i = from; i < n; i++) {
+        uint32_t k = i % FM1_KLOG_N;
+        con_kv(fm1_klog_id[k] & 0x80u ? "R" : "P", (int32_t)(fm1_klog_id[k] & 0x7Fu));
+        con_kv("  dt_us", i == from ? 0 : (int32_t)((fm1_klog_t[k] - prev) / FM1_TICKS_PER_US));
+        prev = fm1_klog_t[k];
+    }
+}
+/* one byte of memory: RAM and the flash's XIP window as the FM-1 has them; the host has the XIP window only, as the
+ * flash plat_data reads (no RAM of an FM-1 to read) */
+#define CON_RAM_LO 0x01C00000u
+#define CON_RAM_HI 0x01C80000u
+#define CON_XIP_LO 0x02000000u
+#define CON_XIP_HI 0x02100000u
+static int con_peek(uint32_t a, uint8_t *v)
+{
+#ifdef PLAT_HOST
+    const uint8_t *p = a >= CON_XIP_LO && a < CON_XIP_HI ? plat_data(a - CON_XIP_LO) : 0;
+    if (!p)
+        return -1;
+    *v = *p;
+    return 0;
+#else
+    if (!((a >= CON_RAM_LO && a < CON_RAM_HI) || (a >= CON_XIP_LO && a < CON_XIP_HI)))
+        return -1;
+    *v = *(const volatile uint8_t *)(uintptr_t)a;
+    return 0;
+#endif
+}
+static void con_dump(uint32_t a, uint32_t n, uint32_t digits, int (*peek)(uint32_t, uint8_t *))
+{
+    uint32_t i;
+    for (i = 0; i < n; i++) {
+        uint8_t v;
+        if (i % 16u == 0) {
+            con_hex(a + i, digits);
+            con_putc(':');
+        }
+        con_putc(' ');
+        if (peek(a + i, &v)) {
+            con_puts("??");
+            con_puts("\r\n");
+            return;
+        }
+        con_hex(v, 2);
+        if (i % 16u == 15u || i + 1u == n)
+            con_puts("\r\n");
+    }
+}
+static void con_memr(const char *p)
+{
+    int ok, ok2;
+    uint32_t a = con_num(&p, &ok), n = con_num(&p, &ok2);
+    uint8_t v;
+    if (!ok) {
+        con_puts("usage: memr ADDR [LEN<=256]\r\n");
+        return;
+    }
+    if (!ok2 || !n)
+        n = 64;
+    if (n > 256u)
+        n = 256;
+    if (con_peek(a, &v) || con_peek(a + n - 1u, &v)) {
+        con_puts("only RAM 01C00000-01C80000 and XIP 02000000-02100000 (readable)\r\n");
+        return;
+    }
+    con_dump(a, n, 8, con_peek);
+}
+static int con_flash_peek(uint32_t a, uint8_t *v)
+{
+    const uint8_t *p = plat_data(a);
+    if (!p)
+        return -1;
+    *v = *p;
+    return 0;
+}
+static void con_flr(const char *p)
+{
+    int ok, ok2;
+    uint32_t a = con_num(&p, &ok), n = con_num(&p, &ok2);
+    uint8_t v;
+    if (!ok) {
+        con_puts("usage: flr OFFSET [LEN<=256]   (the data windows plat_data reads)\r\n");
+        return;
+    }
+    if (!ok2 || !n)
+        n = 64;
+    if (n > 256u)
+        n = 256;
+    if (con_flash_peek(a, &v) || con_flash_peek(a + n - 1u, &v)) {
+        con_puts("outside the data windows\r\n");
+        return;
+    }
+    con_dump(a, n, 6, con_flash_peek);
+}
+static uint32_t con_tab_run(const int16_t *t, uint32_t mask, int32_t *sum)   /* (the sum is printed: every read kept) */
+{
+    uint32_t r, i, k, t0, d, best = 0xFFFFFFFFu;
+    for (r = 0; r < 8u; r++) {
+        int32_t a = 0;
+        t0 = plat_ticks24();
+        for (i = 0, k = 0; i < 4096u; i++, k = (k + 37u) & mask)
+            a += t[k];
+        d = plat_ticks24() - t0;
+        *sum += a;
+        if (d < best)
+            best = d;
+    }
+    return best * 10000u / (PLAT_TICKS_PER_US * 4096u);
+}
+static void con_tab_line(const char *name, const void *at, int32_t *sum)
+{
+    con_puts(name);
+    con_puts("  ");
+    con_dec((int32_t)con_tab_run((const int16_t *)at, 1023u, sum));
+    con_puts(" (0.1 ns a read)\r\n");
+}
+static void con_tabbench(void)
+{
+    int32_t sum = 0;
+    con_tab_line("SINE      ", SINE, &sum);
+    con_tab_line("main RAM  ", &trk[0], &sum);
+#if FELUCCA_FLASH && FELUCCA_TAB_IN_POOL
+    con_tab_line("pool      ", st_buf, &sum);
+#endif
+    con_puts("(checksum ");
+    con_dec(sum);
+    con_puts(")\r\n");
+}
+#if FELUCCA_SDCARD
+static void con_sd_cmd(const char *p)
+{
+    static const char *const ST[] = {"unmounted", "no card", "no FAT16 / FAT32 filesystem", "ready"};
+    int ok;
+    if (con_word(&p, "raw")) {                           /* a sector, through plat_sd_read */
+        static uint8_t blk[512];
+        uint32_t s = con_num(&p, &ok);
+        if (!ok || plat_sd_read(s, blk, 1u)) {
+            con_puts("sd raw SECTOR: no card, or the read failed\r\n");
+            return;
+        }
+        con_bytes("sector", blk, 64u);
+        return;
+    }
+    {
+        uint32_t st = sd_mount();
+        int sub = *p != 0;                                   /* (a folder or a file: the state only when it is not ready) */
+        if (!sub || st != SD_READY) {
+            con_puts("sd ");
+            con_puts(st < 4u ? ST[st] : "?");
+            con_puts("\r\n");
+        }
+        if (!sub && sd_card_type()) {
+            con_kv("MB", (int32_t)sd_card_mb());
+            con_kv("blocks", (int32_t)plat_sd_blocks());
+        }
+        if (st != SD_READY)
+            return;
+        if (!sub) {
+            con_kv("fat", (int32_t)sd_fat_bits());
+            con_kv("cluster B", (int32_t)sd_cluster_bytes());
+        }
+    }
+    if (con_word(&p, "ls")) {
+        DIR d;
+        FILINFO fi;
+        while (*p == ' ')
+            p++;
+        if (sd_opendir(&d, *p ? p : "/") != FR_OK) {
+            con_puts("sd: no such directory\r\n");
+            return;
+        }
+        while (sd_readdir(&d, &fi) == FR_OK && fi.fname[0]) {
+            con_puts(fi.fattrib & AM_DIR ? "  <dir> " : "        ");
+            con_puts(fi.fname);
+            if (!(fi.fattrib & AM_DIR))
+                con_kv("", (int32_t)fi.fsize);
+            else
+                con_puts("\r\n");
+        }
+    } else if (con_word(&p, "cat")) {
+        static uint8_t b[64];
+        uint32_t got = 0;
+        while (*p == ' ')
+            p++;
+        if (!*p || sd_open(p) != FR_OK) {
+            con_puts("sd: no such file\r\n");
+            return;
+        }
+        (void)sd_read(b, sizeof b, &got);
+        con_bytes(p, b, got);
+    }
+}
+#endif
+#if FELUCCA_OVERLAY
+static void con_ovl(void)                       /* the overlays (core/overlay.c): the slots, the copies */
+{
+    uint32_t k;
+    con_kv("ovl_bad", rto_st.bad);
+    con_kv("slot_bytes", (int32_t)rto_slot_len);
+    for (k = 0; k < NPART; k++) {
+        con_puts("slot ");
+        con_dec((int32_t)k + 1);
+        con_puts(" ");
+        con_puts(rto_eng[k] && rto_eng[k] <= NENGINES ? ENGINES[rto_eng[k] - 1u]->name : "-");
+        con_puts("\r\n");
+    }
+    con_kv("loads", (int32_t)rto_st.loads);
+    con_kv("copy_us_last", (int32_t)rto_st.us_last);
+    con_kv("copy_us_max", (int32_t)rto_st.us_max);
+    con_kv("copy_bytes_max", (int32_t)rto_st.bytes_max);
+}
+#endif
+
 static void con_exec(const char *p)
 {
     if (con_run(p))
         return;
     if (con_word(&p, "help") || con_word(&p, "?"))
-        con_puts("play  pause  stop  rec on|off  proj load N  heavy [NOTES]  status  params"
+        con_puts("play  pause  stop  rec on|off  proj load N  heavy [NOTES]  status  params  dbg  cpu1  keys  keylog"
+                 "  memr ADDR [LEN]  flr OFFSET [LEN]  tabbench"
+#if FELUCCA_SDCARD
+                 "  sd [ls [DIR] | cat FILE | raw SECTOR]"
+#endif
+#if FELUCCA_OVERLAY
+                 "  ovl"
+#endif
 #if FELUCCA_BLE || FELUCCA_BT_AUDIO
                  "  btlog [N]"
 #endif
@@ -129,6 +451,28 @@ static void con_exec(const char *p)
         con_status();
     else if (con_word(&p, "params"))
         con_params();
+    else if (con_word(&p, "dbg"))
+        con_dbg();
+    else if (con_word(&p, "cpu1"))
+        con_cpu1();
+    else if (con_word(&p, "keys"))
+        con_keys();
+    else if (con_word(&p, "keylog"))
+        con_keylog();
+    else if (con_word(&p, "memr"))
+        con_memr(p);
+    else if (con_word(&p, "flr"))
+        con_flr(p);
+    else if (con_word(&p, "tabbench"))
+        con_tabbench();
+#if FELUCCA_SDCARD
+    else if (con_word(&p, "sd"))
+        con_sd_cmd(p);
+#endif
+#if FELUCCA_OVERLAY
+    else if (con_word(&p, "ovl"))
+        con_ovl();
+#endif
 #if FELUCCA_BLE || FELUCCA_BT_AUDIO
     else if (con_word(&p, "btlog"))
         con_btlog(p);

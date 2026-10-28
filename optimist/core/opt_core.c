@@ -352,6 +352,11 @@ void opt_core_render(int32_t *lr, uint32_t n, uint32_t master_q12, uint32_t keys
 /* a USB-MIDI packet from fm1-base (plat_midi_in, from port PORT_*): Optimist's checks (usb.c usb_midi_rx_packet's, the
  * rings' midi_rx_bad / midi_rx_wanted) into its queue, with its source (SYNC USB / TRS / BLE) and arrival time */
 static uint32_t opt_rx_bad;
+#ifdef PLAT_HOST
+#define OPT_MIDI_T24() fm1_ticks()                   /* (the host's ticks follow its simulated ms: fm1_compat.h) */
+#else
+#define OPT_MIDI_T24() plat_midi_in_t24()            /* when it came in (device/midi_stamp.h) */
+#endif
 void opt_core_midi(uint32_t pkt, int port)
 {
     uint32_t src = port == PORT_TRS ? MSRC_TRS : port == PORT_BLE ? MSRC_BLE : MSRC_USB;
@@ -366,7 +371,7 @@ void opt_core_midi(uint32_t pkt, int port)
         return;
     }
     if (midi_rx_wanted(pkt))
-        (void)midi_in_enqueue(pkt, src, plat_midi_in_t24());   /* (when it came in: device/midi_stamp.h) */
+        (void)midi_in_enqueue(pkt, src, OPT_MIDI_T24());   /* (when it came in: device/midi_stamp.h) */
 }
 
 /* fm1-base's 1 kHz tick (app.c app_tick, APP_TICK: the timer interrupt), Optimist's TIMER5 work (system/main.c

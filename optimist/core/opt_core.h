@@ -58,6 +58,9 @@ int opt_st_proj_used(uint32_t s);                            /* project slot s (
 uint32_t opt_st_panel_hits(void);                            /* storage.c's object sectors inside 0xD8000..0xD9FFF (0) */
 int opt_st_word(uint32_t off, uint32_t *w);                  /* the flash word at off through st_read; 0 = read */
 const char *opt_ui_msg(void);                                /* the header's last message */
+int opt_ui_insert(uint32_t track, uint32_t slot, uint32_t type, int32_t amount);   /* the items run: -1 = not built */
+int opt_ui_engine(uint32_t track, const char *name);   /* the items run: the engine's slot by its name, -1 = not built */
+const char *opt_ui_engine_name(uint32_t track);
 void opt_ui_ins(uint32_t track, uint32_t slot, uint32_t type);   /* insert type (fx_slots.c FXT_*) into a track's slot */
 int32_t opt_ui_fxi(uint32_t track, uint32_t slot);           /* its instance (fxi.c FXI_*: 0 none, 1 OK, 2 WAIT, 3 FULL) */
 int32_t opt_ui_beat(void);                                   /* the transport's beat (core.h clk_beat) */
