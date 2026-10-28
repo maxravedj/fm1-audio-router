@@ -115,7 +115,44 @@ uint32_t opt_supply_read(uint32_t *regs)
 #endif
 }
 
-void app_splash(void) { opt_splash(); }
+/* the panel's setup as M-VAVE's own firmware sets it and Optimist's display/lcd.c sends it (FM1 Open V13, app/board/
+ * lcd.inc display_setup, GPL-3.0-only): the porch, the gate voltages, VCOM, the supplies, 60 Hz and both gammas.
+ * fm1-base's lcd_init leaves them at the ST7789V's reset values (VCOMS 0x20 for this panel's 0x18, GCTRL 0x35 for 0x56,
+ * VRHS 0x0B for 0x1F, its own gamma): a VCOM off the panel's flickers. Sent once, before the first frame (the splash) */
+#ifndef PLAT_HOST
+static const uint8_t OPT_LCD_PANEL[] = {
+    0xB2, 5, 0x0C, 0x0C, 0x0C, 0x00, 0x33,   /* PORCTRL */
+    0xB7, 1, 0x56,                           /* GCTRL: VGH / VGL */
+    0xBB, 1, 0x18,                           /* VCOMS */
+    0xC0, 1, 0x2C,                           /* LCMCTRL */
+    0xC2, 1, 0x01,                           /* VDVVRHEN */
+    0xC3, 1, 0x1F,                           /* VRHS */
+    0xC4, 1, 0x20,                           /* VDVS */
+    0xC6, 1, 0x0F,                           /* FRCTRL2: 60 Hz */
+    0xD0, 2, 0xA6, 0xA1,                     /* PWCTRL1 */
+    0xE0, 14, 0xD0, 0x0D, 0x14, 0x0B, 0x0B, 0x07, 0x3A, 0x44, 0x50, 0x08, 0x13, 0x13, 0x2D, 0x32,   /* PVGAMCTRL */
+    0xE1, 14, 0xD0, 0x0D, 0x14, 0x0B, 0x0B, 0x07, 0x3A, 0x44, 0x50, 0x08, 0x13, 0x13, 0x2D, 0x32,   /* NVGAMCTRL */
+};
+static void opt_lcd_panel(void)
+{
+    uint32_t r, x;
+    for (r = 0; r < sizeof OPT_LCD_PANEL; r += 2u + OPT_LCD_PANEL[r + 1u]) {
+        lcd_cmd(OPT_LCD_PANEL[r]);
+        lcd_sync();                              /* (lcd_small free: the last data byte sent) */
+        for (x = 0; x < OPT_LCD_PANEL[r + 1u]; x++)
+            lcd_small[x] = OPT_LCD_PANEL[r + 2u + x];   /* (the DMA reads RAM only) */
+        lcd_data(lcd_small, OPT_LCD_PANEL[r + 1u]);
+    }
+    lcd_sync();
+}
+#endif
+void app_splash(void)
+{
+#ifndef PLAT_HOST
+    opt_lcd_panel();
+#endif
+    opt_splash();
+}
 void app_ui_init(void) { opt_ui_init(); }
 int app_sysex(const uint8_t *p, uint32_t n) { return opt_ed_frame(p, n); }
 void app_sysex_byte(uint8_t b) { opt_sysex_byte(b); }
