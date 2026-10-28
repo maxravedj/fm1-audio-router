@@ -33,4 +33,37 @@ check(!buttons.FX.g.classList.has("dim") && buttons.SEL.g.classList.has("dim") &
   && !keys[1].g.classList.has("dim"), "the page marks the dim button and key");
 page.message({ buttons: 0, keys: 0 });
 check(!buttons.SEL.g.classList.has("dim") && !keys[0].g.classList.has("dim"), "and unmarks them");
+// the dim layer's brightness (APP_DIM_LEVELS, plat_dim_ns): tests/dim_app built with the part; its pulse reaches the page
+// with the masks, again when it changes, and an app without plat_dim_ns sends none
+check(dims.every((d) => d.ns === undefined), "the template's messages carry no ns");
+const lv = await startEmu(buildEmu("tests/dim_app", "dim"));
+lv.run(500);
+let m = lv.take("dim").at(-1);
+check(m && m.ns === 3200, `the glow's own pulse before the app sets one (${m && m.ns})`);
+for (const [bit, ns] of [[0, 500], [1, 1000], [2, 2000], [3, 4000], [4, 500]]) {
+  lv.send({ type: "buttons", mask: 1 << bit });
+  lv.run(200);
+  lv.send({ type: "buttons", mask: 0 });
+  lv.run(200);
+  m = lv.take("dim").at(-1);
+  check(m && m.ns === ns, `button ${bit}: ${ns} ns reaches the page (${m && m.ns})`);
+}
+lv.run(500);
+check(lv.take("dim").length === 0, "nothing more while the pulse stays");
+lv.send({ type: "buttons", mask: 1 << 5 });
+lv.run(200);
+m = lv.take("dim").at(-1);
+check(m && m.ns === 3200, `handed back: the glow's pulse again (${m && m.ns})`);
+
+// the page side: the opacity follows the pulse, faintest at 500 ns, full at 4,000, clamped
+const props = {};
+globalThis.document.documentElement = { style: { setProperty: (k, v) => { props[k] = v; } } };
+check(page.opacity(500) === 0.25 && page.opacity(4000) === 1 && page.opacity(100) === 0.25 && page.opacity(9000) === 1,
+  "opacity: 0.25 at 500 ns, 1 at 4,000, clamped");
+check(page.opacity(1000) < page.opacity(2000) && page.opacity(2000) < page.opacity(3200), "and rises with the pulse");
+page.message({ buttons: 0, keys: 0, ns: 500 });
+check(props["--dimop"] === "0.250", "the page sets --dimop from ns");
+props["--dimop"] = "x";
+page.message({ buttons: 0, keys: 0 });
+check(props["--dimop"] === "x", "a message without ns leaves it alone");
 done();
