@@ -91,6 +91,9 @@ APP_DIR holds the app (app.h, app.c, its sources) and its fm1.toml:
                              builds it in whatever fm1.toml says (an app's demo build), FM1B_POOL_SPARE=N the
                              spare the build insists on (8192 B of the SRAM, device/app.ld; of the pool with WiFi;
                              a demo build may spend it)
+  crk_diag = true            the crackle hunt's counters (FM1B_CRK_DIAG; default off, none of their code or RAM in a build
+                             without): "crk ..." lines in the log (late halves, longest render, TIMER5 nesting, longest
+                             main-loop pass, LCD writes with the interrupts off, the second core's state)
   backup = true              backup and restore of the app's saved objects over USB (FM1B_BACKUP: device/backup.c;
                              tools/fm1_backup.py); app.h gives APP_BACKUP_OBJS, _MAGIC, _VERSION and the app_backup_* hooks
   companion = true           the companion services over USB (FM1B_COMPANION: device/companion.c, docs/COMPANION.md;
@@ -1189,7 +1192,7 @@ def slot_flags():
 def opt_flags():
     """the optional parts an fm1.toml turns on that need no SDK: the same on the device, the host and the web"""
     flags = [f"-D{flag}=1" for key, flag in (("mirror", "FM1B_MIRROR"), ("backup", "FM1B_BACKUP"), ("cpu2", "FM1B_CPU2"), ("usb_host", "FM1B_USB_HOST"), ("companion", "FM1B_COMPANION"),
-                                                       ("xdata2", "FM1B_XDATA2"), ("sd", "FM1B_SD"))
+                                                       ("xdata2", "FM1B_XDATA2"), ("sd", "FM1B_SD"), ("crk_diag", "FM1B_CRK_DIAG"))
              if (CONF.get(key) and os.environ.get(flag) != "0") or os.environ.get(flag) == "1"]   # (FM1B_MIRROR=1: a build with it, fm1.toml as it is; FM1B_BACKUP=0: without)
     if "-DFM1B_COMPANION=1" in flags and PRODUCT:
         flags.append(f'-DFELUCCA_ID="{PRODUCT}"')   # (the capability query's identity in the simulator and the browser too:

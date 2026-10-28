@@ -201,8 +201,10 @@ static int data_erase(uint32_t off)
 }
 
 /* ------------------------------------------------------------ timer --- */
+#if FM1B_CRK_DIAG
 static uint32_t crk_pass_max, crk_pass_stage;            /* (crk-I: the longest main-loop pass, log_frame) */
 static uint32_t crk_boot_clear_ms;                       /* (crk-J: when the boot's maxima were cleared, fm1_main) */
+#endif
 static uint8_t usb_due;
 static uint32_t t5_gap_max, t5_late, t5_run_max;                /* the longest gap between ticks (us), and gaps over 300 us:
                                                      * the key and light scan held up (the log reads and clears) */
@@ -488,6 +490,7 @@ static int log_frame(const uint8_t *p, uint32_t n)
         log_line_send(b);
         t5_gap_max = t5_late = t5_run_max = lock_max = 0;
     }
+#if FM1B_CRK_DIAG
     {   /* crk-I (crackle hunt, a measurement build): the audio's late halves, the longest render (us), TIMER5 ticks nested
          * in a render, halves; the longest main-loop pass (us, interrupts in it) and the stage it ended in (5 a frame, 6
          * input only); the app's LCD writes with the interrupts off and the last one's caller. Maxima cleared here */
@@ -571,6 +574,7 @@ static int log_frame(const uint8_t *p, uint32_t n)
         hexs(q, plat_cpu2_bad());
         log_line_send(b);
     }
+#endif
 #endif
 #if FM1B_BLE
     {
@@ -1130,6 +1134,7 @@ static void fm1_main(void)
     app_ui_init();
 
     for (;;) {
+#if FM1B_CRK_DIAG
         {   /* crk-I: this pass's length (the last one's end to now) */
             static uint32_t t_pass;
             uint32_t now = fm1_ticks(), us = (now - t_pass) / FM1_TICKS_PER_US;
@@ -1151,6 +1156,7 @@ static void fm1_main(void)
             crk_lcd_boot += crk_lcd_off;
             crk_lcd_off = 0;
         }
+#endif
         fm1_wdt_feed();
 #if FELUCCA_USB_HOST
         usb_host_task(fm1_ms);                      /* the host's mode change and connecting (plat_usb_host) */

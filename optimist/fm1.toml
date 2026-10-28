@@ -105,3 +105,4 @@ tagline = "a modular firmware for the M-VAVE FM-1"
 repo = "https://github.com/w0ts/optimist"
 licence = "GPL-3.0-only"
 credits = "Optimist (GPL-3.0-only), from SLOOP and Felucca, on fm1-base (MPL-2.0)"
+# crk_diag = true             the crackle hunt's counters (FM1B_CRK_DIAG=1 in the environment too): crk lines in the log; off in the release
