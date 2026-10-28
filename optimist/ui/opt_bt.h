@@ -11,8 +11,9 @@
  *             sent (plat_midi_in_t24: fm1.toml ble_midi_time, the sender's BLE-MIDI timestamps, Optimist's
  *             ble_in_time), the mirror's SysEx to ed_mirror.c (mir_ble_rx); a link gone ends the notes it left on
  *   MIDI out  midi_rings.c's events (ble_midi_out) and CLOCK OUT's F8s at their time (ble_rt_*) to the computer's link
- *             (TO_BLE_HOST) from the tick; the mirror's frames (mir_ble_peek / pop) from the main loop, whole: while
- *             one is under way the channel messages and the clock wait, as Optimist's own radio never splits a frame
+ *             (TO_BLE_HOST) from the tick; the mirror's frames (mir_ble_peek / pop) read by the radio's interrupts
+ *             straight from the mirror's ring (plat_ble_stream, the own stack), whole: while one is under way the
+ *             channel messages and the clock wait, as Optimist's own radio never splits a frame
  *   audio     bta and bta_* (bt/bt_audio.h, as op_bt.c reads them) on plat_bta_*: the remembered devices as fm1-base
  *             lists them (plat_bta_known: the last one first), the found ones (plat_bta_found) less those; AUTO's round
  *             pages the oldest remembered one (plat_bta_reconnect makes it the last: each in turn)
@@ -171,12 +172,18 @@ static int ble_clock_msg(uint32_t pkt)          /* F8 FA FB FC (CIN F), F2 (CIN 
 }
 #if MIR_BLE_BUILT
 static void mir_ble_rx(uint32_t pkt);
-/* the link's figures the mirror reports to its client (ed_mirror.c mir_poll, op 3 LINK: the app logs them): fm1-base's
- * stack keeps them to itself; 0, unknown */
-static uint8_t ble_ll_tx_octets(void) { return 0; }   /* (the types: ble/ble_ll.h's, ble_host.h's) */
-static uint16_t ble_att_mtu(void) { return 0; }
-static uint16_t ble_ll_interval(void) { return 0; }
-static uint16_t ble_ll_peer_len(uint32_t i) { (void)i; return 0; }
+/* the link's figures the mirror reports to its client (ed_mirror.c mir_poll, op 3 LINK: the app logs them), as fm1-base's
+ * stack agreed them (plat_ble_link_info: 0 each with another stack) */
+static uint32_t opt_ble_link(uint32_t i)
+{
+    uint32_t v[7];
+    plat_ble_link_info(v);
+    return v[i];
+}
+static uint8_t ble_ll_tx_octets(void) { return (uint8_t)opt_ble_link(0); }   /* (the types: ble/ble_ll.h's, ble_host.h's) */
+static uint16_t ble_att_mtu(void) { return (uint16_t)opt_ble_link(1); }
+static uint16_t ble_ll_interval(void) { return (uint16_t)opt_ble_link(2); }
+static uint16_t ble_ll_peer_len(uint32_t i) { return (uint16_t)opt_ble_link(3u + (i & 3u)); }
 #endif
 static void opt_ble_in(uint32_t pkt)
 {
@@ -418,6 +425,11 @@ static int mir_ble_peek(uint32_t *pkt);
 static void mir_ble_pop(void);
 static int mir_ble_mid(void);
 static void mir_ble_flush(void);
+/* the mirror's ring read by the radio itself (plat_ble_stream: fm1-base's own stack), as Optimist's own radio does
+ * (io/midi/midi_ble.c ble_app_midi_peek): full notifications, the link's rate. mir_ble_peek / pop / mid run in the
+ * radio's interrupts then, as there; 0 (another stack): packet by packet below */
+static const struct plat_ble_stream OPT_MIR_STREAM = {mir_ble_peek, mir_ble_pop, mir_ble_mid};
+static uint8_t opt_mir_stream;
 #endif
 static void opt_bt_poll(void)
 {
@@ -431,10 +443,14 @@ static void opt_bt_poll(void)
     ble_devices_poll();
 #if MIR_BLE_BUILT
     if (!ble_out_on) {
-        mir_ble_flush();                        /* (nothing waits for a computer that does not listen) */
+        mir_ble_flush();                        /* (nothing waits for a computer that does not listen: the radio
+                                                 * reads the ring only while one does) */
         opt_mir_mid = 0;
         return;
     }
+    if (opt_mir_stream)
+        return;                                 /* (the radio takes the frames, and holds the channel messages while
+                                                 * one is under way) */
     for (;;) {                                  /* the mirror's frames, packet by packet, while the link has room */
         uint32_t pkt;
         if (!mir_ble_mid() && boq_r != boq_w)
@@ -457,6 +473,9 @@ static void opt_bt_boot(void)
 {
 #if FELUCCA_BLE
     ble_devices_boot();                         /* (the devices list's store: the record's ble_dev) */
+#endif
+#if MIR_BLE_BUILT
+    opt_mir_stream = (uint8_t)plat_ble_stream(&OPT_MIR_STREAM);
 #endif
 #if FELUCCA_BLE || FELUCCA_BT_AUDIO
     opt_btr_from_kept();
