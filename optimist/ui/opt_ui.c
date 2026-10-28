@@ -56,6 +56,12 @@ static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint1
  * by other names that nothing reads (static: the compiler leaves them out), like the faces neither unit uses */
 #define FONT_L opt_font_L_unused
 #define FONT_S opt_font_S_unused
+#ifndef APP_FONT_CACHE                       /* the glyphs drawn lately kept decoded (device/gfx.c font_cached; 6 KB and 256
+                                              * slots: a STEP or a page change's frame about half the instructions, host-measured):
+                                              * this unit's, which draws the screens (the app's unit, the splash and messages: none) */
+#define APP_FONT_CACHE 6144u
+#define APP_FONT_CACHE_BITS 8
+#endif
 #include "gfx.c"                           /* fm1-base's (device/gfx.c): its fonts from build/gen/felucca_font.h */
 #undef FONT_L
 #undef FONT_S
