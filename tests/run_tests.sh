@@ -71,5 +71,8 @@ else
 fi
 run mirror-png "$PY" tools/fm1_mirror.py $OUT/mirror.png --from $OUT/mirror/stream.syx
 run template template/build/host/template_host template/tests/basic.txt template/build/host
+# the USB port as a MIDI host (usb_host, plat_usb_host, plat_usb_host_name) in the host simulator's model of it: tests/usbh_app
+run usbh-app sh -c "$PY tools/build.py tests/usbh_app --host && \
+    tests/usbh_app/build/host/usbhtest_host tests/usbh_app/tests/usbh.txt tests/usbh_app/build/host"
 [ $FAIL -eq 0 ] && echo "all tests passed" || echo "TESTS FAILED"
 exit $FAIL
