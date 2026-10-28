@@ -53,6 +53,8 @@ run fastmath sh -c "$CC -O2 -w -o $OUT/fastmath_test tests/fastmath_test.c -lm &
 run installer "$PY" tests/install_test.py
 # the check on an app's RAM code (tools/ramcode.py, plat.h PLAT_RAM_CODE): RAM -> RAM passes, into XIP fails
 run ramcode "$PY" tests/ramcode_test.py
+# the build's check that a function is in the RAM code run, _rt_start.._rt_end wherever app.ld puts it (tools/ram_run.py)
+run ram-run "$PY" tests/ram_run_test.py
 # the web installer's m-bootloader step (web/fm1ota.js installBoot) against a simulated FM-1, and finding the FM-1 by
 # its port (unusual names, the loader under a new name, M-VAVE's Open firmware, resume's check, package checksums)
 if command -v node >/dev/null 2>&1; then
@@ -157,5 +159,8 @@ run flash-image sh -c "$CC -std=c99 -Wall -Wextra -Werror -Wno-unused-function -
 run host-flash-load sh -c "$H/template_host tests/flash_load.txt $H && \
     FM1B_FLASH=$H/flash2.bin $H/template_host tests/flash_boot.txt $H && \
     cmp $H/flash.bin $H/flash3.bin"
+# the own Bluetooth stack (bt/, Optimist's: ble_stack = "own"): its link layer, host, pairing, BLE-MIDI, central, the
+# radio driver against a fake engine, FM-1 to FM-1, and BR/EDR (A2DP) pieces; UBSan, and ASan where its runtime runs
+if sh tests/bt/run.sh; then :; else FAIL=1; fi
 [ $FAIL -eq 0 ] && echo "all tests passed" || echo "TESTS FAILED"
 exit $FAIL

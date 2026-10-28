@@ -34,6 +34,13 @@ static uint32_t wdt_stage __attribute__((section(".noinit")));   /* the main loo
                                                                   * 2 Bluetooth, 3 the app's loop, 4 USB, 5 a frame,
                                                                   * 6 input (fm1b_dbg.stage) */
 
+#if FM1B_BT_AUDIO
+static int own_bta_feed(const int32_t *o, uint32_t n);   /* bt_own_audio.c */
+static int bta_frame(const uint8_t *p, uint32_t n);
+#endif
+#if FM1B_BLE_OWN && FM1B_BLE_CENTRAL
+static int dev_frame(const uint8_t *p, uint32_t n);   /* bt_own_central.c */
+#endif
 static void render_block(int32_t *o)                /* ALNK0: one half, measured */
 {
     uint32_t t0 = fm1_ticks(), us, budget = HALF_FRAMES * 1000000u / FS;
@@ -84,6 +91,13 @@ static void render_block(int32_t *o)                /* ALNK0: one half, measured
                 for (i = 0; i < 2u * REND_FRAMES; i++)
                     o[2u * k + i] = (int32_t)((float)o[2u * k + i] * g);
             }
+#if FM1B_BT_AUDIO
+            if (own_bta_feed(o + 2u * k, REND_FRAMES)) {   /* Bluetooth audio streams: the FM-1's own output muted */
+                uint32_t i;
+                for (i = 0; i < 2u * REND_FRAMES; i++)
+                    o[2u * k + i] = 0;
+            }
+#endif
         }
     }
     us = (fm1_ticks() - t0) / FM1_TICKS_PER_US;
@@ -450,6 +464,31 @@ static int log_frame(const uint8_t *p, uint32_t n)
         log_line_send(b);
         shim_off_max = 0;
     }
+#if FM1B_BLE_OWN
+    {   /* the own stack's link layer: advertising events, connections taken / refused, packets good / CRC bad,
+         * links closed : the last reason, the longest BLE interrupt (us) */
+        q = b;
+        for (const char *l = "BT ll "; *l;)
+            *q++ = *l++;
+        q = log_dec(q, ble_dg.adv_events);
+        *q++ = ' ';
+        q = log_dec(q, ble_dg.cind_ok);
+        *q++ = '/';
+        q = log_dec(q, ble_dg.cind_rej);
+        *q++ = ' ';
+        q = log_dec(q, ble_dg.rx_good);
+        *q++ = '/';
+        q = log_dec(q, ble_dg.rx_crc_bad);
+        *q++ = ' ';
+        q = log_dec(q, ble_dg.closes);
+        *q++ = ':';
+        q = log_dec(q, ble_dg.close_reason);
+        *q++ = ' ';
+        q = log_dec(q, ble_dg.isr_max_us);
+        *q = 0;
+        log_line_send(b);
+    }
+#else
     {   /* the radio's tasks' deepest stacks and its heap's most, now (the "stacks" lines may have scrolled away) */
         extern int shim_stack_depth(int task);
         extern uint32_t shim_heap_peak;
@@ -471,6 +510,7 @@ static int log_frame(const uint8_t *p, uint32_t n)
         *q = 0;
         log_line_send(b);
     }
+#endif
     {   /* the clock by Bluetooth since the last read: ticks, the sender's gaps between them (ms), how many of
          * those 0 (a packet's one time for all), the most late one, and the lateness allowed now */
         extern uint32_t bj_gap_min, bj_gap_max, bj_gap_zero, bj_ticks, bj_rel_max;
@@ -1002,6 +1042,12 @@ static void fm1_main(void)
             if (ota_frame_get(&p, &n) && (ann_frame(p, n, fm1_ms) || log_frame(p, n) || remote_frame(p, n)
 #if FM1B_WIFI
                                           || wifi_frame(p, n)
+#endif
+#if FM1B_BT_AUDIO
+                                          || bta_frame(p, n)
+#endif
+#if FM1B_BLE_OWN && FM1B_BLE_CENTRAL
+                                          || dev_frame(p, n)
 #endif
 #ifdef APP_SYSEX
                                           || app_sysex(p, n)
