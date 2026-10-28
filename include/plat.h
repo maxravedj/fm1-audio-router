@@ -216,7 +216,9 @@ int plat_store_save(uint32_t obj, const void *src, uint32_t len);   /* 0 = ok */
 /* The objects are the app's (app.h): an enum that includes OBJ_PANEL (the panel calibration, the platform's) and
  * ends with OBJ_NOBJ, and APP_STORE_MAP, each object's flash offset: two 4 KiB sectors (A/B) from there, inside the
  * data area (0x97000..0xDFFFF) or Felucca's settings sector pair at 0xFC000. An object's number is written in its
- * record, so an app keeps its numbering from one release to the next. */
+ * record, so an app keeps its numbering from one release to the next. app.h `#define APP_STORE_BOUNCE 1`: the store
+ * takes 256 bytes of RAM instead of PLAT_STORE_MAX (a load and a save go page by page; the same flash, the same
+ * results, a load reads its object twice: the CRC first). Not with fm1.toml backup = true. */
 
 /* audio load in % of the render budget, and xruns since boot (device: from the ISR) */
 uint32_t plat_cpu_pct(void);
