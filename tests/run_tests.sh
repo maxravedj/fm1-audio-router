@@ -176,6 +176,8 @@ run flash-image sh -c "$CC -std=c99 -Wall -Wextra -Werror -Wno-unused-function -
 run host-flash-load sh -c "$H/template_host tests/flash_load.txt $H && \
     FM1B_FLASH=$H/flash2.bin $H/template_host tests/flash_boot.txt $H && \
     cmp $H/flash.bin $H/flash3.bin"
+# Bluetooth audio's calls (plat_bta_*) on the host simulator's stand-in, from a test app's buttons
+run bta sh -c "$PY tools/build.py tests/bta_app --host && tests/bta_app/build/host/bta_test_host tests/bta_app/tests/bta.txt tests/bta_app/build/host"
 # the own Bluetooth stack (bt/, Optimist's: ble_stack = "own"): its link layer, host, pairing, BLE-MIDI, central, the
 # radio driver against a fake engine, FM-1 to FM-1, and BR/EDR (A2DP) pieces; UBSan, and ASan where its runtime runs
 if sh tests/bt/run.sh; then :; else FAIL=1; fi
