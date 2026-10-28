@@ -119,7 +119,16 @@ void app_splash(void) { opt_splash(); }
 void app_ui_init(void) { opt_ui_init(); }
 int app_sysex(const uint8_t *p, uint32_t n) { return opt_ed_frame(p, n); }
 void app_sysex_byte(uint8_t b) { opt_sysex_byte(b); }
-void app_loop(void) { opt_ed_poll(); }
+void app_loop(void)
+{
+    opt_ed_poll();
+    opt_wifi_loop();                             /* Wi-Fi: the page's mirrors of fm1-base's manager, Link's MIDI clock */
+}
+#ifdef APP_WIFI_STORE
+/* the Wi-Fi networks kept and the mode (fm1-base's own Wi-Fi): Optimist's settings record's field (ui/opt_wifi.h) */
+uint8_t *app_wifi_store(void) { return opt_wifi_store(); }
+void app_wifi_store_dirty(void) { opt_wifi_dirty(); }
+#endif
 /* what Bluetooth keeps (APP_BLE_STORE): Optimist's settings record's fields (ui/opt_bt.h) */
 int app_ble_load(struct plat_ble_rec *r) { return opt_ble_load(r); }
 int app_ble_save(const struct plat_ble_rec *r) { return opt_ble_save(r); }

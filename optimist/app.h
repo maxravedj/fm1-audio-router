@@ -58,6 +58,14 @@ void app_loop(void);
  * starts at power-on when SYSTEM > BT MIDI was left on (Optimist's: off by default); it advertises as Optimist does,
  * "Optimist XXXX" (XXXX from its address: the same name on Optimist's firmware) */
 #define APP_BLE_STORE
+/* Wi-Fi (fm1.toml wifi_stack = "own", from the configuration's WIFI_LINK: gen_optimist.py --conf): the networks kept and
+ * the mode live in Optimist's settings record as Optimist keeps them (persist_rec.c wifi_nets: app.c app_wifi_store,
+ * ui/opt_wifi.h), so no OBJ_WIFI */
+#if defined(FM1B_WIFI_OWN) && FM1B_WIFI_OWN
+#define APP_WIFI_STORE
+uint8_t *app_wifi_store(void);
+void app_wifi_store_dirty(void);
+#endif
 #define APP_BLE_AT_BOOT (opt_ble_at_boot() != 0)
 int opt_ble_at_boot(void);
 #define BLE_DEVICE_NAME "Optimist"

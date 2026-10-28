@@ -87,6 +87,7 @@ static void cv_mirror(uint32_t x, uint32_t y) { mir_blit(x, y, cv_w, cv_h, cv_px
 #include "opt_stubs.h"                           /* the parts of Optimist not in the trial yet, as the UI sees them */
 #include "opt_supply.h"                          /* SYSTEM > INTERNALS' SUPPLY line: the rails fm1-base raised */
 #include "opt_bt.h"                              /* Optimist's Bluetooth on fm1-base's plat_ble_* / plat_bta_* (before its screens) */
+#include "opt_wifi.h"                            /* its Wi-Fi on fm1-base's own stack, plat_wifi_* / plat_link_* (before its screens) */
 /* font_big (op_graph.c): FONT_L with FONT_S's range, made once, "made" read from .scale (Optimist's font has one,
  * fm1-base's has none): its height instead, as nonzero once copied (fm1-base's FONT_L has lower case with fm1.toml
  * font_full = ["L"], so the range it is given is its own) */
@@ -97,6 +98,12 @@ static void cv_mirror(uint32_t x, uint32_t y) { mir_blit(x, y, cv_w, cv_h, cv_px
 #include "opt_storage.h"                         /* Optimist's storage on fm1-base's flash access (after the UI: felucca.c's order) */
 #include "opt_sd.h"                              /* its SD card on fm1-base's (after the storage: felucca.c's order) */
 #include "opt_editor.h"                          /* Optimist's web editor on fm1-base's SysEx (after the storage: felucca.c's) */
+#ifdef ED_HAS_WIFI
+#include "io/editor/ed_wifi.c"                    /* cmd 112: the Wi-Fi networks for the web editor (felucca.c's place: after the editor) */
+#endif
+#if WIFI_UI
+#include "ui/optimist/op_wifi.c"                  /* SYSTEM > WI-FI: the page and the password entry (on ui/opt_wifi.h's mirrors) */
+#endif
 #include "opt_console.h"                         /* its USB serial console on fm1-base's (USB_CONSOLE: after the editor) */
 
 /* ---- the boot screen (fm1-base's APP_SPLASH, app.c app_splash: before app_init): Optimist's own, the dinghy logo,
