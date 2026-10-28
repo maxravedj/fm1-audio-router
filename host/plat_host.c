@@ -38,10 +38,15 @@
  *   out                          print the MIDI sent since the last "out" (and forget it; clocks not shown)
  *   expect_out PORT B0 B1 B2     check that this message went out to PORT since the last "out" (USB, BLE, BLE-DEV)
  *   expect_no_out PORT B0 B1 B2  check that it did not
- *   expect WHAT VALUE            check state: exit 1 on mismatch; VALUE "<N" / ">N" is a bound
+ *   expect WHAT VALUE            check state: exit 1 on mismatch; VALUE "<N" / ">N" is a bound (WHAT data.ADDR: the
+ *                                flash's byte at ADDR, as plat_data reads it; -1 outside its windows)
  *   reboot                       re-run boot from the simulated flash (persistence test)
  *                                (the app's plat_restart does the same, at the end of its millisecond; expect restarts)
- *   data FILE OFFSET             a file into the simulated data area (plat_data) at OFFSET (its windows: plat.h)
+ *   data FILE OFFSET             a file into the simulated data area (plat_data) at OFFSET, in any of its windows
+ *                                (plat.h), up to that window's end
+ *   data_erase OFFSET            plat_data_erase(OFFSET), as an app calls it (expect data_rc: what it returned)
+ *   data_write OFFSET HEX        plat_data_write of HEX's bytes (up to 31, e.g. F00F) at OFFSET: as the flash, each
+ *                                byte becomes the old AND the new (expect data_rc; -2: no bytes)
  *   fbdump FILE                  the screen's pixels raw (240 x 240 RGB565, high byte first) into FILE
  *   flash_fail 0|1               every store save fails (1) or works (0); expect store_tries counts the attempts
  *   clock N [MS]                 N MIDI clocks in (F8) over USB, MS apart (default 21: 119 bpm)
@@ -102,6 +107,7 @@
 #ifdef __linux__
 #define _GNU_SOURCE                             /* (open_memstream: --serve) */
 #endif
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -492,16 +498,40 @@ const char *plat_ble_log_line(int back)
 void plat_midi_out(uint32_t pkt) { plat_midi_send(pkt, TO_USB); }
 void plat_log(const char *line) { ble_say(line); }
 /* the data area and its two more windows (plat.h): a simulated flash from the first window to the last (the gap
- * between, the update's staging, refused as on the device), erased at the start, kept across a simulated reboot */
+ * between, the update's staging, refused as on the device), erased at the start, kept across a simulated reboot.
+ * FM1B_XDATA2: the fourth window too, just above the third, the store's objects there refused as on the device */
 #define DATA_BASE PLAT_XDATA0_LO
-static uint8_t data_area[PLAT_XDATA1_HI - DATA_BASE];
+#if FM1B_XDATA2
+#include "plat_xdata2.h"
+#define DATA_TOP PLAT_XDATA2_HI
+#define DATA_STORE_HIT(off, n) plat_xdata2_store_hit((off), (n))
+#else
+#define DATA_TOP PLAT_XDATA1_HI
+#define DATA_STORE_HIT(off, n) 0
+#endif
+static uint8_t data_area[DATA_TOP - DATA_BASE];
 static uint8_t data_ready;
+static int data_cmd_rc;                   /* the last script data_erase / data_write: what it returned (expect data_rc) */
 static void data_init(void)
 {
     if (!data_ready) {
         memset(data_area, 0xFF, sizeof data_area);
         data_ready = 1;
     }
+}
+static uint32_t data_window_hi(uint32_t off)   /* the end of the window that holds off, 0 = none */
+{
+    static const uint32_t W[][2] = {{PLAT_DATA_LO, PLAT_DATA_HI}, {PLAT_XDATA0_LO, PLAT_XDATA0_HI},
+                                    {PLAT_XDATA1_LO, PLAT_XDATA1_HI},
+#if FM1B_XDATA2
+                                    {PLAT_XDATA2_LO, PLAT_XDATA2_HI},
+#endif
+    };
+    uint32_t i;
+    for (i = 0; i < sizeof W / sizeof W[0]; i++)
+        if (off >= W[i][0] && off < W[i][1])
+            return W[i][1];
+    return 0;
 }
 const uint8_t *plat_data(uint32_t off)
 {
@@ -512,7 +542,7 @@ uint32_t plat_flash_held(void) { return 0; }   /* (no erase holds anything here)
 int plat_data_erase(uint32_t off)
 {
     data_init();
-    if ((off & 0xFFFu) || !PLAT_DATA_OK(off, 0x1000u))
+    if ((off & 0xFFFu) || !PLAT_DATA_OK(off, 0x1000u) || DATA_STORE_HIT(off, 0x1000u))
         return -1;
     memset(&data_area[off - DATA_BASE], 0xFF, 0x1000u);
     return 0;
@@ -521,7 +551,7 @@ int plat_data_write(uint32_t off, const void *src, uint32_t n)
 {
     uint32_t i;
     data_init();
-    if (!PLAT_DATA_OK(off, n))
+    if (!PLAT_DATA_OK(off, n) || DATA_STORE_HIT(off, n))
         return -1;
     for (i = 0; i < n; i++)                       /* as flash: bits only go from 1 to 0 */
         data_area[off - DATA_BASE + i] &= ((const uint8_t *)src)[i];
@@ -1395,6 +1425,12 @@ static int expect(const char *what, const char *val)
     else if (!strcmp(what, "restore_rc"))
         got = restore_rc;
 #endif
+    else if (!strncmp(what, "data.", 5)) {         /* data.ADDR: the flash's byte at ADDR as plat_data reads it (-1 outside
+                                                     * its windows) */
+        const uint8_t *p = plat_data((uint32_t)strtoul(what + 5, 0, 0));
+        got = p ? (int)*p : -1;
+    } else if (!strcmp(what, "data_rc"))           /* the last data_erase / data_write: 0 done, -1 refused, -2 no bytes */
+        got = data_cmd_rc;
     else if (!strcmp(what, "clocks_out"))
         got = (int)clock_out_count;
     else if (!strcmp(what, "midi_out"))
@@ -1851,15 +1887,25 @@ int main(int argc, char **argv)
             printf("\n");
         } else if (!strcmp(cmd, "expect"))
             fails += expect(a, b);
-        else if (!strcmp(cmd, "data")) {          /* data FILE OFFSET: a file into the data area (plat_data) */
+        else if (!strcmp(cmd, "data_erase"))      /* data_erase OFFSET: plat_data_erase, as an app calls it */
+            data_cmd_rc = plat_data_erase((uint32_t)strtoul(a, 0, 0));
+        else if (!strcmp(cmd, "data_write")) {    /* data_write OFFSET HEX: plat_data_write of those bytes */
+            uint8_t w[32];
+            uint32_t n = 0;
+            while (n < sizeof w && isxdigit((unsigned char)b[2u * n]) && isxdigit((unsigned char)b[2u * n + 1u])) {
+                char h[3] = {b[2u * n], b[2u * n + 1u], 0};
+                w[n++] = (uint8_t)strtoul(h, 0, 16);
+            }
+            data_cmd_rc = n && !b[2u * n] ? plat_data_write((uint32_t)strtoul(a, 0, 0), w, n) : -2;
+        } else if (!strcmp(cmd, "data")) {        /* data FILE OFFSET: a file into the data area (plat_data) */
             FILE *df = fopen(a, "rb");
-            uint32_t off = (uint32_t)strtoul(b, 0, 0);
+            uint32_t off = (uint32_t)strtoul(b, 0, 0), hi = data_window_hi(off);
             data_init();
-            if (!df || off < PLAT_DATA_LO || off >= PLAT_DATA_HI) {
+            if (!df || !hi) {
                 printf("FAIL data %s %s: no such file, or outside the data area\n", a, b);
                 fails++;
-            } else {
-                size_t n = fread(&data_area[off - PLAT_DATA_LO], 1, PLAT_DATA_HI - off, df);
+            } else {                              /* (data_area starts at DATA_BASE: the first window) */
+                size_t n = fread(&data_area[off - DATA_BASE], 1, hi - off, df);
                 printf("  ok   data: %u B at %#x\n", (unsigned)n, (unsigned)off);
             }
             if (df)
