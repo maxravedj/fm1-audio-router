@@ -81,6 +81,9 @@ app.h); the build prints what it has.
   link = true                with wifi_stack = "own": Ableton Link (link/: GPL-3.0-only, an opt-in part: FM1B_LINK,
                              plat_link_*); the build refuses it unless licence = "GPL-3.0-only" (or "-or-later") says
                              the firmware as a whole is GPL-3.0 (LICENSING.md)
+  wifi_ap = true             with wifi_stack = "own": MODE AP, the FM-1 as the access point (device/wifi_own_ap.c,
+                             wifi/wifi_ap.c, wifi_ap_dhcp.c; FM1B_WIFI_AP, plat_wifi_ap_*): WPA2-PSK, up to 4 clients,
+                             DHCP on 192.168.4.0/24, Link (with link) over it; WIFI_MODE_AP / WIFI_MODE_AP_MAN
   gen = ["tools/places.py --out {gen}/places.h"]   the app's generators, run before the build (relative to APP_DIR;
                              {gen} is the generated headers' directory, on the include path)
   asm = ["cpu1/entry.S"]     the app's own assembly units (relative to APP_DIR), assembled as felucca-bsp's are; an
@@ -145,6 +148,7 @@ OWN = False                         # with BLE: fm1.toml ble_stack = "own" (bt/,
 WIFI = False                        # fm1.toml wifi = true (JieLi's WiFi libraries and lwIP)
 WIFI_OWN = False                    # fm1.toml wifi = true, wifi_stack = "own" (wifi/, device/wifi_own.c)
 LINK = False                        # fm1.toml link = true (link/, with WIFI_OWN)
+WIFI_AP = False                     # fm1.toml wifi_ap = true (MODE AP: device/wifi_own_ap.c, with WIFI_OWN)
 CPU2 = False                        # fm1.toml cpu2 = true (FM1B_CPU2=0 / 1 in the environment: without / with)
 STEM = None                         # the build's file names: NAME, or NAME-usb (--no-ble)
 BT_SYMS = ("btstack_init", "bt_ble_init", "bt_max_pwr_set", "le_controller_set_mac", "lmp_set_sniff_disable",
@@ -564,6 +568,8 @@ def wifi_own_flags(host=False):
         f = [*inc(SRC / "host" / "wifi_fake"), *f]
     if LINK:
         f += ["-DFM1B_LINK=1", *inc(SRC / "link")]
+    if WIFI_AP:
+        f.append("-DFM1B_WIFI_AP=1")
     return f
 
 
@@ -984,7 +990,7 @@ def build_web():
 
 
 def main():
-    global PRODUCT, VERSION, APP, OUT, GEN, LDR, ROOT, CONF, NAME, BLE, OWN, WIFI, WIFI_OWN, LINK, CPU2, STEM
+    global PRODUCT, VERSION, APP, OUT, GEN, LDR, ROOT, CONF, NAME, BLE, OWN, WIFI, WIFI_OWN, LINK, WIFI_AP, CPU2, STEM
     ap = argparse.ArgumentParser()
     ap.add_argument("app", type=Path, help="the app's directory (with fm1.toml)")
     ap.add_argument("--release", metavar="X.Y[.Z]", help="release build: identity id_prefix + XXYYZZ, version string X.Y[.Z]")
@@ -1013,10 +1019,11 @@ def main():
             raise SystemExit("wifi_stack = \"own\" needs the own Bluetooth stack's radio: not with --no-ble")
         if CONF.get("net"):
             raise SystemExit("fm1.toml net: lwIP's sockets, not with wifi_stack = \"own\" (plat_net_udp_* instead)")
-    for key in ("link",):
+    for key in ("link", "wifi_ap"):
         if CONF.get(key) and not WIFI_OWN:
             raise SystemExit(f"fm1.toml {key} = true: with wifi = true and wifi_stack = \"own\"")
     LINK = WIFI_OWN and bool(CONF.get("link"))
+    WIFI_AP = WIFI_OWN and bool(CONF.get("wifi_ap"))
     if LINK and CONF.get("licence") not in ("GPL-3.0-only", "GPL-3.0-or-later"):
         raise SystemExit("fm1.toml link = true: Ableton Link (link/) is GPL-3.0-only, so the firmware as a whole is: "
                          "say licence = \"GPL-3.0-only\" (or \"GPL-3.0-or-later\") in fm1.toml (LICENSING.md)")
@@ -1070,7 +1077,7 @@ def main():
         return v == "1" if v in ("0", "1") else bool(CONF.get(key, default))
     parts = [("Bluetooth MIDI", BLE), ("Bluetooth MIDI devices", BLE and bool(CONF.get("ble_central"))), ("WiFi", WIFI),
              ("WiFi (own stack)", WIFI_OWN),
-             ("Ableton Link (GPL-3.0-only)", LINK),
+             ("Ableton Link (GPL-3.0-only)", LINK), ("WiFi access point (MODE AP)", WIFI_AP),
              ("USB audio in", on("usb_audio_in", "FM1B_UAC", True)),
              ("USB audio out", on("usb_audio_out", "FM1B_UAC_OUT", True) and on("usb_audio_in", "FM1B_UAC", True)),
              ("screen mirroring", bool(CONF.get("mirror")) or os.environ.get("FM1B_MIRROR") == "1"), ("backup and restore", bool(CONF.get("backup")) and os.environ.get("FM1B_BACKUP") != "0"),

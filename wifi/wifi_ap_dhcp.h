@@ -1,5 +1,4 @@
 /* SPDX-License-Identifier: GPL-3.0-only OR MPL-2.0 */
-/* Copyright (C) 2026 Henri David (hdavid), Optimist (github.com/w0ts/optimist) */
 /* MODE AP's DHCP server (RFC 2131, the options a small network needs): an address for each station that asks, from the
  * AP's own /24 (server .1, the stations .2 to .5), the AP as the router and the DNS, and the lease time. Pure: the caller
  * carries the UDP datagrams (port 67 in, 68 out) and the BOOTP payload is the only thing this module reads or writes. */

@@ -256,7 +256,7 @@ static void expand(const uint8_t key[16], uint8_t rk[176])
     }
 }
 
-#if WIFI_SWCCMP || !WC_FW   /* (and the host: the AES encrypt for the key wrap, its simulated authenticator's M3) */
+#if WIFI_SWCCMP || !WC_FW || (defined(FM1B_WIFI_AP) && FM1B_WIFI_AP)   /* (MODE AP and the host: the AES encrypt for the key wrap, M3) */
 void wc_aes128_encrypt(const uint8_t key[16], const uint8_t in[16], uint8_t out[16])
 {
     uint8_t rk[176], s[16], t[16];
@@ -340,7 +340,7 @@ int wc_aes_unwrap(const uint8_t kek[16], const uint8_t *in, uint32_t n, uint8_t 
     return 1;
 }
 
-#if WIFI_SWCCMP || !WC_FW   /* (and the host: the AES encrypt for the key wrap, its simulated authenticator's M3) */
+#if WIFI_SWCCMP || !WC_FW || (defined(FM1B_WIFI_AP) && FM1B_WIFI_AP)   /* (MODE AP and the host: the AES encrypt for the key wrap, M3) */
 /* RFC 3394 wrap: in n bytes (a multiple of 8, >= 16), out n + 8 bytes (the authenticator's group key, M3) */
 void wc_aes_wrap(const uint8_t kek[16], const uint8_t *in, uint32_t n, uint8_t *out)
 {

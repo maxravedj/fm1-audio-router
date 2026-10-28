@@ -35,6 +35,7 @@ parts it has.
 | Velocity and pressure from the keys | `#define APP_TOUCH` in app.h | `touch_on`, `touch_poll`, `touch_keys`, `touch_vel`, `touch_pressure` (lib/touch.h) |
 | WiFi: a station on the networks around, with lwIP's sockets | `wifi = true` (not with `ble`, yet), and `net = [...]` for the app's network code | `plat_wifi_on`, `plat_wifi_state`, `plat_wifi_scan`, `plat_wifi_found`, `plat_wifi_join`, `plat_wifi_saved`, `plat_wifi_forget`, `plat_net_task` |
 | WiFi on fm1-base's own stack, beside Bluetooth: a WPA2 station, UDP (below) | `wifi_stack = "own"`, with `wifi` and `ble_stack = "own"` | the calls above but `plat_net_task`, and `plat_wifi_mode`, `plat_wifi_step`, `plat_wifi_found_ap`, `plat_wifi_join_ssid`, `plat_wifi_leave`; `plat_net_udp_open`, `plat_net_udp_send`, `plat_net_udp_close`, `plat_net_join` |
+| The FM-1 as a Wi-Fi access point (MODE AP): a phone or a laptop joins it, gets an address, and Link and the app's UDP run over it | `wifi_ap = true`, with `wifi_stack = "own"` | `plat_wifi_mode(WIFI_MODE_AP)` / `WIFI_MODE_AP_MAN`, `plat_wifi_ap_set`, `plat_wifi_ap_set_channel`, `plat_wifi_ap_run`, `plat_wifi_ap_forget`, `plat_wifi_ap_state`, `plat_wifi_ap_name`, `plat_wifi_ap_channel`, `plat_wifi_ap_clients`, `plat_wifi_ap_client`, `plat_wifi_ap_start`, `plat_wifi_ap_stop` |
 | Ableton Link: tempo, beat, start / stop with Live and the apps (**GPL-3.0-only**: LICENSING.md) | `link = true`, with `wifi_stack = "own"`, and `licence = "GPL-3.0-only"` | `plat_link_enable`, `plat_link_peers`, `plat_link_mpb`, `plat_link_beat_at`, `plat_link_time_at`, `plat_link_phase`, `plat_link_playing`, `plat_link_set_tempo`, `plat_link_set_playing`, `plat_link_now`, `plat_link_t24` |
 | A page for Bluetooth MIDI devices: the scan while it's up, the list, SAVE to connect or let go, and what happened in words | `#define APP_BTDEV` in app.h, with `ble_central` | `btdev_page`, `btdev_event`, `btdev_word`, `btdev_found`, `btdev_choose`, `btdev_save`, `btdev_title` (lib/btdev.h) |
 | USB audio at full level, MASTER for the speaker and headphones only | with the USB audio input | `plat_usb_audio_full` (the app's setting) |
@@ -147,10 +148,19 @@ linked, no lwIP, no task. It is a WPA2-PSK station (CCMP, the MAC's) with a smal
    arrives with its time (`plat_wifi_us`).
 5. Link (`link = true`): `plat_link_enable(1)`, then the session's tempo, beat and start / stop at any time (Link's
    clock, `plat_link_now`; `plat_link_t24` turns a time into a `plat_ticks24` value for the tick or the render).
+6. MODE AP (`wifi_ap = true`): the FM-1 is the access point, where there is no router (on stage, a phone with Ableton
+   Note). `plat_wifi_ap_set(name, len, password)` makes the WPA2 key (len 0: the name FM1- and the last four digits
+   of the radio's address) and keeps it with the networks; `plat_wifi_mode(WIFI_MODE_AP)` runs the access point
+   whenever a key is kept, from power-on, `WIFI_MODE_AP_MAN` only once `plat_wifi_ap_run(1)` starts it. Up to four
+   clients (WPA2-PSK, CCMP at their own key in the MAC), DHCP on 192.168.4.0/24 (the FM-1 is 192.168.4.1, which
+   answers a ping), Link and the app's ports as on a network joined; `plat_wifi_ap_clients` counts the clients. The
+   station rests meanwhile. No web server, no internet behind it.
 
 For a working example, see `examples/link` (GPL-3.0-only: it uses Link); its host test runs it on the simulator's
-own network (`host/wifi_air.c`: an access point, DHCP, a Link peer, all in the process). On an FM-1 the station has
-joined a network, got its address and synced with Live in Optimist's firmware (docs/wifi/README.md).
+own network (`host/wifi_air.c`: an access point, DHCP, a Link peer, all in the process; with `wifi_ap` a client of
+the FM-1's own access point, `host/wifi_air_client.c`, as in `tests/wifi/link_ap`). On an FM-1 the station has
+joined a network, got its address and synced with Live in Optimist's firmware, and MODE AP has had an iPhone with
+Ableton Note join it (the 4-way handshake, DHCP, data both ways, one Link peer) (docs/wifi/README.md).
 
 ### What each costs
 
@@ -167,6 +177,7 @@ The FM-1 has a 581 KB app slot in the flash, 96 KB of RAM for `.data` and `.bss`
 | WiFi (`wifi`, from fm1-radio's measurements) | + about 300 | + about 100 | + about 276 |
 | WiFi on the own stack (`wifi_stack = "own"`: the station, the IP layer, the manager), on the own Bluetooth stack | + 18.6 | + 3.8 | 0 |
 | Ableton Link too (`link`) | + 8.8 | + 1.8 | 0 |
+| MODE AP too (`wifi_ap`: the access point, its authenticator and DHCP server) | + 6.4 | 0 | + 1.7 |
 
 - Bluetooth: JieLi's BT controller and stack (the flash), its 24 KB heap and their tables (the RAM), three task
   stacks of 8 KB (the pool). The template with Bluetooth and devices is 214 KB of flash, 75 of 96 KB of RAM: room

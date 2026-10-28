@@ -1,5 +1,4 @@
 /* SPDX-License-Identifier: GPL-3.0-only OR MPL-2.0 */
-/* Copyright (C) 2026 Henri David (hdavid), Optimist (github.com/w0ts/optimist) */
 /* MODE AP authenticator (wifi_ap.h): the 4-way handshake for one client, the mirror of wifi_sta.c. */
 #include "wifi_ap.h"
 #include "wifi_crypto.h"
