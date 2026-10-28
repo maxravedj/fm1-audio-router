@@ -220,6 +220,18 @@ void fm1_timer5_irq(void)
             if (gap > 300u)
                 t5_late++;
         }
+#if FM1B_MIDI_STAMP
+        /* what came in since the last tick came in, on the average, half way since: within 0.05 ms at 10 kHz (a tick
+         * held up by a lock: half the gap). Every tick, the render's too: the poll below waits for the render, the
+         * stamps do not. One SIE read and a look at the jack's ring */
+        {
+            uint32_t t = t5_prev ? now - (now - t5_prev) / 2u : now;
+            usb_midi_peek(t);
+#if FM1B_TRS
+            uart_midi_peek(t);
+#endif
+        }
+#endif
         t5_prev = now;
     }
     fm1b_dbg.timer_irqs++;
@@ -245,7 +257,6 @@ void fm1_timer5_irq(void)
 #if FM1B_TRS
         uart_midi_poll();                           /* the TRS jack: same context, same queue */
 #endif
-        midi_stamp_poll(fm1_ticks());               /* what these polls queued came in within the last 0.5 ms (midi_stamp.h) */
     }
 #ifdef APP_TICK
     if (sub == 0u) {                                /* 1 kHz: the app's tick (a clock, a sequencer) */
