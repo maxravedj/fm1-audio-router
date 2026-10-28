@@ -560,6 +560,8 @@ spin SELECT 1
 wait 100
 spin SELECT 1
 wait 100
+spin SELECT 1                                           # (General, USB, METERS, then BLUETOOTH)
+wait 100
 spin K1 1
 wait 1500
 expect ble 2

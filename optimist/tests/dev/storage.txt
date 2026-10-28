@@ -42,8 +42,8 @@ turn K1 1
 wait 100
 expect gv1 1
 # and USB AUDIO's MASTER (its first line, the next row) NONE -> 1+2: the routing in the settings record ("UAR3"),
-# Optimist's simulator the same (tests/optsim.mjs write)
-spin SELECT 1
+# Optimist's simulator the same (tests/optsim.mjs write); METERS between them
+spin SELECT 2
 wait 100
 spin K1 1
 wait 100

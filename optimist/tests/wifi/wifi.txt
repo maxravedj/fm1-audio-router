@@ -22,6 +22,8 @@ spin SELECT 1
 wait 100
 spin SELECT 1
 wait 100
+spin SELECT 1                                           # (METERS, then WI-FI)
+wait 100
 cells
 # MODE AUTO (OFF, MAN, AUTO ...): the radio starts on Bluetooth's, the page lists what it hears
 spin K1 1

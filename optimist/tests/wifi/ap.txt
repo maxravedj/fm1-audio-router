@@ -21,6 +21,8 @@ spin SELECT 1
 wait 100
 spin SELECT 1
 wait 100
+spin SELECT 1                                           # (METERS, then WI-FI)
+wait 100
 # MODE AP AUTO (OFF, MAN, AUTO, AP MAN, AP AUTO): no key yet
 spin K1 1
 wait 100

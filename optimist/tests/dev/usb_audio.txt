@@ -20,6 +20,8 @@ spin SELECT 1
 wait 100
 spin SELECT 1
 wait 100
+spin SELECT 1                                           # (METERS, then USB AUDIO)
+wait 100
 spin K1 1
 wait 100
 spin K1 1
