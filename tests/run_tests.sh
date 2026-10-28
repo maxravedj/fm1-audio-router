@@ -126,5 +126,7 @@ if command -v emcc >/dev/null 2>&1 && command -v node >/dev/null 2>&1; then
 else
     echo "  skip emu-sysex (no emcc or node)"
 fi
+# the companion services (device/companion.c) in the host simulator, through tools/fm1_companion.py: tests/companion_app
+run companion "$PY" tests/companion_test.py $OUT/companion
 [ $FAIL -eq 0 ] && echo "all tests passed" || echo "TESTS FAILED"
 exit $FAIL
