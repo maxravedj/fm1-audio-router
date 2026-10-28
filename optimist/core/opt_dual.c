@@ -233,15 +233,19 @@ static void opt_dual_start(void)
 }
 
 /* every main loop pass (app_loop, app_yield): its time, for the starvation check; a CPU1 put down by the render, held */
+#if FM1B_CRK_DIAG
 static void dual_log_down(void);
+#endif
 static void opt_dual_loop(void)
 {
     dual_loop_ms = plat_ms();
     fm1_dual_mb.count = dual.jobs;
     if (!dual.up && plat_cpu2_on())
         plat_cpu2_set(0);                          /* (OVERLOAD, CANARY: no job outstanding from the main loop) */
+#if FM1B_CRK_DIAG
     if (!dual.up)
         dual_log_down();                           /* (crk-J: once, with the reason) */
+#endif
 }
 
 /* CPU0, once an audio half: CPU1's load (dual_load.h), from the ticks of its jobs since the last half */
@@ -255,6 +259,7 @@ static void dual_load_half(void)
     last = b;
 }
 
+#if FM1B_CRK_DIAG
 /* crk-J (crackle hunt, a measurement build): the second core's state for fm1-base's log (device/main_fm1.c log_frame,
  * "crk cpu1"): up, why it is down (DUAL_*), the stop record's in-job and wait, the jobs posted and joined */
 void crk_cpu1_read(uint32_t v[4]);
@@ -295,6 +300,7 @@ static void dual_log_down(void)
     q[-1] = 0;
     plat_log(b);
 }
+#endif
 
 /* mix_block (fx.c) with the jobs dual_split gives CPU1 (dual.c mix_block_dual) */
 static HOT void mix_block(int32_t *out, uint32_t n)
