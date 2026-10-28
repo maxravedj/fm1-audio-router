@@ -125,6 +125,8 @@ void opt_splash(void)
 void opt_core_init(void)
 {
     uint32_t i;
+    stk_boot();                                  /* the stacks below what is live marked (main.c fm1_main's first step): SYSTEM >
+                                                  * INFO's RAM line reads how deep they go (Optimist's system/stackmark.h) */
 #if FELUCCA_EDITOR && FELUCCA_ED_MIRROR
     st_blank = mir_test_boot == MIR_TEST_MAGIC;  /* the mirror's client asked for a test session (ed_mirror.c, 108 kind 5) */
     mir_test_boot = 0;                           /* (once: a crash in the session, and the next start is the user's) */

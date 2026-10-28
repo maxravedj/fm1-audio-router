@@ -181,6 +181,7 @@ static void con_dbg(void)
     con_kv("usb_session", (int32_t)plat_usb_session());
     con_kv("battery_raw", plat_battery_raw());
     con_kv("ticks24", (int32_t)plat_ticks24());
+    stk_report(con_kv, con_kx);                  /* the stacks: their bottom, size, room never used (system/stackmark.h) */
 #if FELUCCA_BLE
     con_kv("ble_state", plat_ble_state());
     con_kv("ble_connected", plat_ble_connected());

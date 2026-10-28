@@ -98,6 +98,19 @@ static inline uint32_t fm1_cnum(void)
     uint32_t (*volatile f)(void) = plat_core;
     return f();
 }
+/* ---- the second core's jobs' stack (system/stackmark.h STK_C1_*: SYSTEM > INFO's RAM line): felucca-bsp's fm1_cpu1_ustack,
+ * fm1.toml cpu2_stack bytes (FM1_CPU1_USTACK_BYTES, the build's flag; felucca-bsp's 2816 without), its lowest 256 B the guard;
+ * plat_cpu2_stack how deep it went (0: CPU1 never started; the host: 0) */
+#if FELUCCA_DUAL >= 2
+#ifndef FM1_CPU1_USTACK_BYTES
+#define FM1_CPU1_USTACK_BYTES 2816u
+#endif
+#define STK_C1_USED() plat_cpu2_stack()
+#define STK_C1_BYTES ((uint32_t)FM1_CPU1_USTACK_BYTES - 256u)
+#else
+#define STK_C1_USED() 0u
+#define STK_C1_BYTES 0u
+#endif
 
 /* ---- time: TIMER4's 24 MHz count is plat_ticks24 on both. The host simulator's plat_ticks24 is its machine's clock,
  * while its plat_ms is the simulated one (a script's "wait 80" is 80 ms of plat_ms and some microseconds of the
