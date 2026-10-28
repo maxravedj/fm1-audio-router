@@ -42,11 +42,12 @@ PROFILE = "profiles/dev-bt.config"       # (Optimist's config/profiles/dev.confi
 RELEASE_OFF = "# ---- the release: off for lack of support on fm1-base (its own app.ld and boot are its own)\nCACHE_RAM=0\n"
 MARKER = "# ---- the trial:"                   # (the copy's line where the trial's own changes start)
 # the audio core's and the UI's headers (Optimist tools/build.py generate(): its colours for the UI; its fonts are not
-# used (fm1-base's canvas draws with fm1-base's), its icons nowhere, the help lines off (gen_param_help.py would also
-# rewrite Optimist's web/editor.html))
+# used (fm1-base's canvas draws with fm1-base's), its icons nowhere; the help lines' (PARAM_HELP) header alone: the
+# generator's own run would also bring Optimist's web/editor.html's copy up to date, in its tree)
 GENERATORS = [("gen_tables.py", "felucca_tables.h"), ("gen_samples.py", "felucca_samples.h"),
               ("gen_drumkits.py", "felucca_drumkits.h"), ("gen_x0x_drums.py", "x0x_drum_samples.h"),
-              ("gen_wavetables.py", "felucca_wavetables.h"), ("gen_colors.py", "felucca_colors.h")]
+              ("gen_wavetables.py", "felucca_wavetables.h"), ("gen_colors.py", "felucca_colors.h"),
+              ("gen_param_help.py", "felucca_param_help.h")]
 
 
 def optimist_tree():
@@ -128,6 +129,7 @@ def config(tree, prof):
             host_sd(configure.flags(cfg)[0], GEN / out)
             slot_check(configure.flags(cfg)[0].get("FELUCCA_LAYOUT", 0), prof)
             host_bt(configure.flags(cfg)[0], GEN / out)
+            ble_peers_define(configure.flags(cfg)[0], GEN / out)
         if env is None:
             env = configure.flags(cfg)[1]       # (the trial's: its sample sets, SLICE)
     return env
@@ -178,6 +180,19 @@ def host_dual(dual, path):
 
 
 BT_ITEMS = ("FELUCCA_BLE", "FELUCCA_BLE_BOND", "FELUCCA_BLE_CENTRAL", "FELUCCA_BT_AUDIO", "FELUCCA_BT_AFH")
+
+
+def ble_peers_define(flags, path):
+    """OPT_BLE_PEERS 1: the build has fm1-base's central with the devices one by one (conf: ble_central; app.h
+    APP_BLE_PEERS: app.c hands the scan's reports and a pairing's keys to the Optimist unit, ui/opt_bt_dev.h), on the host
+    too, where the Optimist unit has no Bluetooth unless OPT_HOST_BT=1 (its stand-ins then)"""
+    if not (flags.get("FELUCCA_BLE", 0) and flags.get("FELUCCA_BLE_CENTRAL", 0)):
+        return
+    extra = ("/* the trial (gen_optimist.py ble_peers_define): fm1-base's central, the devices one by one */\n"
+             "#define OPT_BLE_PEERS 1\n")
+    text = path.read_text()
+    if not text.endswith(extra):
+        path.write_text(text + extra)
 
 
 def host_bt(flags, path):
@@ -245,6 +260,13 @@ def generate(tree):
             cmd = [sys.executable, "-c", "import sys; from pathlib import Path; sys.path.insert(0, sys.argv[1]); "
                    "import gen_samples as g; g.SRC = Path('/'); g.main(sys.argv[2])",
                    str(tree / "tools"), str(GEN / out)]
+        if tool == "gen_param_help.py":
+            # the header only (its main also writes the editor's copy into Optimist's web/editor.html): load, validate,
+            # header(table, every=False), as its main does
+            cmd = [sys.executable, "-c", "import sys; sys.path.insert(0, sys.argv[1]); import gen_param_help as g; "
+                   "t = g.load(); bad = g.validate(t); "
+                   "sys.exit('tools/param_help.json: ' + '; '.join(bad)) if bad else open(sys.argv[2], 'w').write(g.header(t, False))",
+                   str(tree / "tools"), str(GEN / out)]
         r = subprocess.run(cmd, cwd=tree, env=env, capture_output=True, text=True)
         if r.returncode:
             sys.stderr.write(r.stdout + r.stderr)
@@ -255,7 +277,8 @@ def generate(tree):
 
 def conf():
     """--conf (fm1.toml conf_gen, run by tools/build.py before the build): fm1.toml's ble and bt_audio from the chosen
-    configuration's BLE and BT_AUDIO (a profile without BLE builds without the stack; OPT_PROFILE=none: neither)"""
+    configuration's BLE and BT_AUDIO (a profile with neither builds without the stack; OPT_PROFILE=none: neither), and
+    ble_central from its BLE_CENTRAL"""
     prof = profile()
     flags = {}
     if prof is not None:
@@ -263,9 +286,28 @@ def conf():
         sys.path.insert(0, str(optimist_tree() / "tools" / "builder"))
         import configure
         flags = configure.flags(configure.parse(prof.read_text())[0])[0]
-    ble = bool(flags.get("FELUCCA_BLE", 0))
-    audio = ble and bool(flags.get("FELUCCA_BT_AUDIO", 0))
+    audio = bool(flags.get("FELUCCA_BT_AUDIO", 0))
+    ble = bool(flags.get("FELUCCA_BLE", 0)) or audio     # (fm1-base's Bluetooth audio rides on its BLE stack, which starts
+                                                         # the radio; without BT MIDI it never advertises: ui/opt_bt.h)
     print(f"ble = {str(ble).lower()}\nbt_audio = {str(audio).lower()}")
+    if flags.get("FELUCCA_BLE", 0) and flags.get("FELUCCA_BLE_CENTRAL", 0):
+        # the devices the FM-1 connects to: fm1-base's central (ui/opt_bt_dev.h), at Optimist's level (3: no pairing)
+        print("ble_central = 3" if flags["FELUCCA_BLE_CENTRAL"] == 3 else "ble_central = true")
+    if flags.get("FELUCCA_BLE", 0) and flags.get("FELUCCA_BLE_BOND", 0):
+        print("ble_pairing = true")                      # (BLE_BOND: a computer's pairing kept, ui/opt_bt.h opt_ble_save)
+    if ble and flags.get("FELUCCA_BLE_DIAG", 0):
+        print("ble_diag = true")                         # (BLE_DIAG: the link layer's diagnostics, fm1-base's log: btlog)
+    if audio and flags.get("FELUCCA_BT_DIAG", 0):
+        print("bt_log = true")                           # (BT_DIAG: the audio's step-by-step lines on that log)
+    if flags.get("FELUCCA_CDC", 0):
+        # the serial console (USB_CONSOLE, ui/opt_console.h): as on Optimist, no USB audio beside it (its endpoint, EP3,
+        # is the output's feedback; the split functions have no room for it)
+        print("usb_console = true", "usb_audio_in = false", "usb_audio_out = false", "usb_audio_out_feedback = false",
+              "usb_audio_split = false", sep="\n")
+    else:
+        # USB audio as Optimist's own presents it (fm1.toml): two devices, named, the output on the FM-1's clock
+        print("usb_audio_out_feedback = true", "usb_audio_split = true", 'usb_audio_in_name = "Optimist In"',
+              'usb_audio_out_name = "Optimist Out"', 'usb_audio_in_channel_names = ["CH1", "CH2", "CH3", "CH4"]', sep="\n")
     return 0
 
 

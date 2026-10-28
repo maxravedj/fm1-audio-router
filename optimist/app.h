@@ -57,6 +57,14 @@ void app_loop(void);
 #define APP_BLE_AT_BOOT (opt_ble_at_boot() != 0)
 int opt_ble_at_boot(void);
 #define BLE_DEVICE_NAME "Optimist"
+/* Optimist's own list of the Bluetooth MIDI devices (BLE_CENTRAL: ui/opt_bt_dev.h, its LAST and remembered devices with
+ * their bonds) on fm1-base's central: the devices one by one (plat.h), the scan's reports and a pairing's keys to it */
+#if defined(FM1B_BLE_CENTRAL) && FM1B_BLE_CENTRAL
+#define APP_BLE_PEERS
+void opt_ble_scan_report(const uint8_t *pdu, uint32_t n, uint32_t rssi);
+struct plat_ble_keys;
+void opt_ble_device_keys(const struct plat_ble_keys *k);
+#endif
 void app_tick(void);
 #define APP_BATTERY_RAW                  /* plat_battery_raw: SYSTEM > BATTERY's volts and charge (ui/opt_ui.c) */
 #define APP_CPU_KHZ                      /* plat_cpu_khz: SYSTEM > INFO's CPU MHz, the CPU guard's clock (core/opt_core.c) */

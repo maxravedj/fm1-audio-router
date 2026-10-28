@@ -6,12 +6,14 @@ name = "optimist"
 id_prefix = "FM-1_79"          # a trial identity (dev FM-1_7900), not Optimist's FM-1_700
 usb_manufacturer = "Optimist"
 usb_product = "Optimist trial FM-1"
-o2 = ["core/opt_core.c", "core/opt_fpu_*.c", "core/opt_ff.c", "core/opt_ffuni.c"]
+o2 = ["core/opt_core.c", "core/opt_fpu_*.c", "core/opt_ff.c", "core/opt_ffuni.c", "core/opt_pff.c"]
                                # Optimist's audio core and UI (ui/opt_ui.c): a unit of its own (its names never meet
                                # fm1-base's; fm1-base's canvas, device/gfx.c, compiled into it); opt_fpu_*: ACID, ANALOG
-                               # 2's filter models and the X0X kits, float units of their own on the FM-1 (as Optimist
-                               # builds them), empty on the host (inside opt_core.c there); opt_ff / opt_ffuni: ChaN's
-                               # FatFs for the SD card, its own two units as Optimist builds them (empty without the card)
+                               # 2's filter models, the X0X kits and PROPHET's voice, float units of their own on the FM-1
+                               # (as Optimist builds them: each only when the build has it), empty on the host (inside
+                               # opt_core.c there); opt_ff / opt_ffuni: ChaN's FatFs for the SD card, its own two units as
+                               # Optimist builds them (empty without the card); opt_pff: its Petit FatFs (the card
+                               # without the SD card mode's layout)
 o2_include = ["build/optgen/felucca_config.h"]   # the build's switches (gen_optimist.py: the profile copy through Optimist's builder)
 include = ["build/optimist/firmware/src", "build/optgen"]   # Optimist's tree (gen_optimist.py links it), its headers
 ir_pass = "ir_pass.py"        # Optimist's tools/size_fns.py on its unit (the UI at minsize, the rest -Os: as Optimist builds felucca.c)
@@ -22,16 +24,14 @@ font_trim = true               # each glyph its lit box only (feat/font-trim): t
 # USB audio as Optimist's own presents it (io/usb, from Melodee): two devices, "Optimist Out" (the computer plays,
 # the USB input track: APP_USB_PLAY) and "Optimist In" (it records four channels, CH1..CH4, by SYSTEM > USB AUDIO's
 # routing: APP_USB_CAPTURE), 16- and 24-bit both ways; the input on the computer's clock, the output on the FM-1's
-# (its feedback): fm1-base's USB audio (felucca-bsp's UAC)
+# (its feedback): fm1-base's USB audio (felucca-bsp's UAC). The two devices, their names and the output's feedback come
+# from conf_gen (gen_optimist.py --conf: usb_audio_split, usb_audio_*_name, usb_audio_in_channel_names,
+# usb_audio_out_feedback), as Optimist's own: a configuration with the serial console (USB_CONSOLE: usb_console) has no
+# USB audio instead (the console's endpoint is the feedback's)
 usb_audio_in_channels = 4
 usb_audio_in_24bit = true
 usb_audio_in_host_clock = true
-usb_audio_out_feedback = true
 usb_audio_out_24bit = true
-usb_audio_split = true
-usb_audio_in_name = "Optimist In"
-usb_audio_out_name = "Optimist Out"
-usb_audio_in_channel_names = ["CH1", "CH2", "CH3", "CH4"]
 # The second core: Optimist's DUAL (the profile's: its split of the render, core/opt_dual.c) on fm1-base's (plat_cpu2_*,
 # felucca-bsp's chip/fm1_cpu1.h). Optimist's rule on a failure: one core from then on, never a restart (cpu2_fallback)
 xdata2 = true                  # Optimist's globals 0xFC000..0xFEFFF (its settings A/B, its autosave's copy B): plat.h's fourth
@@ -52,7 +52,8 @@ sd = true                      # the SD card on the LCD's bus (fm1-base's plat_s
                                # card it finds none
 # Bluetooth: fm1-base's own stack, which is Optimist's (bt/: the same files), for Optimist's BT MIDI, BT AUDIO and the
 # mirror over Bluetooth (ui/opt_bt.h: its screens, settings record and mirror on plat_ble_* / plat_bta_*)
-conf_gen = "gen_optimist.py --conf"   # ble and bt_audio below: the configuration's BLE and BT_AUDIO (tools/build.py)
+conf_gen = "gen_optimist.py --conf"   # ble and bt_audio below: the configuration's BLE and BT_AUDIO (tools/build.py); the
+                               # USB audio's devices or the serial console (above), ble_central
 ble = true
 ble_stack = "own"
 ble_pairing = false            # no pairing, as Optimist's dev profile has it (BLE_BOND 0): a Mac or phone connects unbonded (3,420 B)

@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Henri David */
 /* Optimist's Bluetooth in the trial (BLE: SYSTEM > BT MIDI; BT_AUDIO: SYSTEM > BT AUDIO; the screen mirrored over
- * Bluetooth): its screens (ui/optimist/op_bt.c, op_project.c), its devices list (io/midi/ble_devices.c, without the
- * central as the dev profile has it), its settings record's Bluetooth fields and its mirror (io/editor/ed_mirror.c's
+ * Bluetooth): its screens (ui/optimist/op_bt.c, op_project.c), its devices list (io/midi/ble_devices.c; with the
+ * central, BLE_CENTRAL: ui/opt_bt_dev.h), its settings record's Bluetooth fields and its mirror (io/editor/ed_mirror.c's
  * Bluetooth ring) compiled unchanged, on fm1-base's Bluetooth: its own stack (fm1.toml ble_stack = "own"), which is
  * Optimist's (bt/), through plat.h's calls, in place of Optimist's io/midi/midi_ble.c and bt/bt_audio.c:
  *   radio     ble_midi_set: plat_ble_enable; the radio's start and calibration are fm1-base's (at every start: no
@@ -29,18 +29,43 @@
 #ifndef BLE_API
 #define BLE_API static                          /* (Optimist's unity build's: these files' names stay this unit's) */
 #endif
-#include "ble/ble_store.c"                      /* (Optimist's: the devices list's store, the record's ble_dev: plain data) */
+#if !FELUCCA_BLE
+/* BT AUDIO without BT MIDI (Optimist's felucca.c: io/midi/ble_none.c in place of midi_ble.c, before anything of ble/:
+ * its BLE_CENTRAL 0 first): the page's MIDI side as Optimist's own build has it, never on, no device, no list.
+ * fm1-base's Bluetooth audio rides on its BLE stack (the radio's start and calibration: fm1.toml ble follows BT_AUDIO
+ * too, gen_optimist.py --conf), which never advertises here: Bluetooth starts with an AUDIO mode only (opt_ble_at_boot
+ * 0), and bta_start switches its BLE side off */
+#include "io/midi/ble_none.c"
+#endif
 #include "ble/ble_vm.h"                         /* (BLE_RF_COPY_SIZE: the settings record's field) */
 #define BLE_BOND_SIZE 28u                       /* (midi_ble.c's: the settings record's field) */
 #define BLE_BOND_KEPT 0xB5u
 #define BLE_ADDR_KEPT 0xA5u
 static uint8_t ble_addr_kept[8], ble_rf_kept[BLE_RF_COPY_SIZE], ble_bond_kept[BLE_BOND_SIZE];
 static uint8_t settings_later;                  /* (ui/panel.c's: saved with the settings once quiet, project.c) */
+#endif
+#if FELUCCA_BLE
+#include "ble/ble_store.c"                      /* (Optimist's: the devices list's store, the record's ble_dev: plain data) */
 static uint8_t ble_on;                          /* SYSTEM > BT MIDI on (the settings word's bit 24: settings_word.c) */
 #define ble_up (plat_ble_state() == BLE_READY)  /* (the radio started) */
+#if BLE_CENTRAL
+/* a link is up, either role (midi_ble.c's): the computer's, or the device's once ready (fm1-base's one link) */
+static int ble_connected(void) { return plat_ble_connected() || plat_ble_device() == BLE_DEV_READY; }
+#else
 static int ble_connected(void) { return plat_ble_connected(); }
+#endif
 static int ble_radio_ok(void) { return 1; }     /* (fm1-base calibrates the radio at every start) */
 #define ble_out_on (ble_on && plat_ble_connected())   /* (a computer listens: ed_mirror.c mir_bt_up) */
+/* the MIDI's link: the computer's, or with BLE_CENTRAL a device the FM-1 connected to (fm1-base's one link at a time:
+ * ui/opt_bt_dev.h), the channel messages and CLOCK OUT to whichever (the mirror's frames: to the computer alone) */
+#if BLE_CENTRAL
+#define ble_midi_linked ble_connected()
+#define OPT_BLE_MIDI_TO TO_BLE
+#else
+#define ble_midi_linked plat_ble_connected()
+#define OPT_BLE_MIDI_TO TO_BLE_HOST
+#endif
+#define ble_midi_on (ble_on && ble_midi_linked)
 /* the MIDI counters SYSTEM > BT MIDI's ACTIVITY compares (midi_ble.c's rings' indexes there) */
 #define bmi_w plat_midi_count(PORT_BLE, 0)
 #define bmo_w plat_midi_count(PORT_BLE, 1)
@@ -51,8 +76,11 @@ static int ble_radio_ok(void) { return 1; }     /* (fm1-base calibrates the radi
 #endif
 #if FELUCCA_BLE
 static void ble_midi_set(uint8_t on);
+#if !BLE_CENTRAL
 #include "io/midi/ble_devices.c"                /* SYSTEM > BT MIDI's list (NONE / LAST: no central in the dev profile) */
 #endif
+#endif
+#include "opt_bt_dev.h"                         /* with BLE_CENTRAL: the list, LAST and the search on fm1-base's central */
 
 #if FELUCCA_BLE || FELUCCA_BT_AUDIO
 /* ---- what fm1-base keeps, in Optimist's settings record (app.c app_ble_load / app_ble_save, APP_BLE_STORE). The
@@ -81,6 +109,12 @@ int opt_ble_load(struct plat_ble_rec *r)
 }
 int opt_ble_save(const struct plat_ble_rec *r)
 {
+#if !FELUCCA_BLE
+    /* (no BLE fields in the settings record without BT MIDI: storage/persist_rec.c; the BLE address fm1-base makes at
+     * each start is not kept, so only a change of the audio devices' fields is a reason to save the settings) */
+    int same = opt_btr.bta_addr_set == r->bta_addr_set && opt_btr.bta_n == r->bta_n &&
+               !memcmp(opt_btr.bta_addr, r->bta_addr, sizeof r->bta_addr) && !memcmp(opt_btr.bta, r->bta, sizeof r->bta);
+#endif
     opt_btr = *r;
     memcpy(ble_addr_kept, r->addr, 6);
     ble_addr_kept[6] = BLE_ADDR_KEPT;
@@ -92,6 +126,10 @@ int opt_ble_save(const struct plat_ble_rec *r)
         memcpy(ble_bond_kept + 4, r->bond_rand, 8);
         memcpy(ble_bond_kept + 12, r->bond_ltk, 16);
     }
+#if !FELUCCA_BLE
+    if (same)
+        return 0;
+#endif
 #if FELUCCA_BT_AUDIO
     bta.key_new = 1;                            /* (op_bt.c bt_poll: the settings saved once quiet) */
 #endif
@@ -135,10 +173,10 @@ static int ble_clock_msg(uint32_t pkt)          /* F8 FA FB FC (CIN F), F2 (CIN 
 static void mir_ble_rx(uint32_t pkt);
 /* the link's figures the mirror reports to its client (ed_mirror.c mir_poll, op 3 LINK: the app logs them): fm1-base's
  * stack keeps them to itself; 0, unknown */
-static uint32_t ble_ll_tx_octets(void) { return 0; }
-static uint32_t ble_att_mtu(void) { return 0; }
-static uint32_t ble_ll_interval(void) { return 0; }
-static uint32_t ble_ll_peer_len(uint32_t i) { (void)i; return 0; }
+static uint8_t ble_ll_tx_octets(void) { return 0; }   /* (the types: ble/ble_ll.h's, ble_host.h's) */
+static uint16_t ble_att_mtu(void) { return 0; }
+static uint16_t ble_ll_interval(void) { return 0; }
+static uint16_t ble_ll_peer_len(uint32_t i) { (void)i; return 0; }
 #endif
 static void opt_ble_in(uint32_t pkt)
 {
@@ -182,7 +220,7 @@ static volatile uint32_t boq_w, boq_r;
 static volatile uint8_t opt_mir_mid;            /* a mirror frame is going out (the main loop's: opt_bt_poll) */
 static void ble_midi_out(uint32_t pkt)
 {
-    if (!ble_out_on || boq_w - boq_r >= BOQ)
+    if (!ble_midi_on || boq_w - boq_r >= BOQ)
         return;
     ble_out_q[boq_w % BOQ] = pkt;
     RING_PUBLISH();
@@ -192,10 +230,10 @@ static void ble_midi_out(uint32_t pkt)
 #define BRTQ 8u
 static uint32_t ble_rt_q[BRTQ], ble_rt_due[BRTQ];   /* (0: taken back) */
 static volatile uint32_t brt_w, brt_r;
-static int ble_rt_on(void) { return ble_out_on; }
+static int ble_rt_on(void) { return ble_midi_on; }
 static void ble_rt_push(uint32_t due, uint32_t pkt)
 {
-    if (!ble_out_on || brt_w - brt_r >= BRTQ)
+    if (!ble_midi_on || brt_w - brt_r >= BRTQ)
         return;
     ble_rt_q[brt_w % BRTQ] = pkt;
     ble_rt_due[brt_w % BRTQ] = due;
@@ -213,13 +251,13 @@ static void ble_rt_drop_after(uint32_t t, uint32_t pkt)   /* (a start's F8s take
 /* the tick (core/opt_core.c opt_core_tick, after the MIDI in): what waits, out; a link gone, its notes ended */
 static void opt_ble_tick(uint32_t now)
 {
-    int conn = plat_ble_connected();
+    int conn = ble_midi_linked;
     if (ble_was_conn && !conn)
         ble_release = 1;                        /* (its notes are not ended by a note-off that will never come) */
     ble_was_conn = (uint8_t)conn;
     if (ble_release)
         ble_notes_end();
-    if (!ble_out_on) {
+    if (!ble_midi_on) {
         boq_r = boq_w;                          /* (nothing waits for a computer that does not listen) */
 #if FELUCCA_MIDI_CLKOUT
         brt_r = brt_w;
@@ -231,16 +269,16 @@ static void opt_ble_tick(uint32_t now)
 #if FELUCCA_MIDI_CLKOUT
     while (brt_r != brt_w && (!ble_rt_q[brt_r % BRTQ] || (int32_t)(now - ble_rt_due[brt_r % BRTQ]) >= 0)) {
         if (ble_rt_q[brt_r % BRTQ])
-            plat_midi_send(ble_rt_q[brt_r % BRTQ], TO_BLE_HOST);
+            plat_midi_send(ble_rt_q[brt_r % BRTQ], OPT_BLE_MIDI_TO);
         RING_PUBLISH();
         brt_r++;
     }
 #else
     (void)now;
 #endif
-    while (boq_r != boq_w && plat_midi_out_room(TO_BLE_HOST)) {
+    while (boq_r != boq_w && plat_midi_out_room(OPT_BLE_MIDI_TO)) {
         RING_PUBLISH();
-        plat_midi_send(ble_out_q[boq_r % BOQ], TO_BLE_HOST);
+        plat_midi_send(ble_out_q[boq_r % BOQ], OPT_BLE_MIDI_TO);
         boq_r++;
     }
 }
@@ -280,10 +318,9 @@ static void bta_start(uint32_t m)
 {
     bta.mode = (uint8_t)m;
     plat_bta_on(1);                             /* (the radio up: fm1-base starts it, and BLE with it) */
-#if FELUCCA_BLE
     if (!ble_on)
-        plat_ble_enable(0);                     /* (BT MIDI OFF: no advertising, the radio for the audio alone) */
-#endif
+        plat_ble_enable(0);                     /* (BT MIDI OFF, or not built: no advertising, the radio for the audio
+                                                 * alone) */
     opt_bta_view();
 }
 static void bta_stop(void)
@@ -388,6 +425,9 @@ static void opt_bt_poll(void)
     opt_bta_view();
 #endif
 #if FELUCCA_BLE
+#if BLE_CENTRAL
+    opt_ble_dev_poll();                         /* (the list's scan once the radio is up: ui/opt_bt_dev.h) */
+#endif
     ble_devices_poll();
 #if MIR_BLE_BUILT
     if (!ble_out_on) {

@@ -2,7 +2,8 @@
  * Copyright (C) 2026 Henri David */
 /* Optimist's SD card in the trial (builder item SDCARD, the SD card mode: LAYOUT 1, FAR_OK, ARENA, SD_RING, SD_REC;
  * Optimist's docs/SD-CARD-DESIGN.md), after its storage, in felucca.c's order: its card code compiled unchanged
- * (storage/sd/sdcard.c with full FatFs, its disk layer, the card's own folder, the index, the browser, the saves, the
+ * (storage/sd/sdcard.c with full FatFs, or Petit FatFs without the SD card mode's layout: core/opt_pff.c; its disk
+ * layer, the card's own folder, the index, the browser, the saves, the
  * recorder, the streams and their plan; storage/sd/sd_mode.c: the projects, presets, kits and samples by name), on
  * fm1-base's SD card (core/opt_sd_mmc.c in sd_mmc.c's place: plat_sd_*). FatFs itself (storage/sd/fatfs/ff.c,
  * ffunicode.c) is its own two units (core/opt_ff.c, core/opt_ffuni.c: fm1.toml o2). The main loop's card work

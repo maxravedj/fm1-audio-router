@@ -54,6 +54,13 @@ static void opt_leds_out(void)
     oin_side(fm1_led, &fb, &fk);
     oin_side(fm1_led_dim, &db, &dk);
     oin_side(fm1_led_half, &hb, &hk);
+#if FELUCCA_LIGHTS
+    if (fm1_led_bg_ns) {                               /* (the backlight: fm1-base's dim layer, opt_in.h) */
+        uint32_t gb, gk;
+        oin_side(fm1_led_bg, &gb, &gk);
+        db |= gb & ~LED_PLAY_GREEN, dk |= gk;
+    }
+#endif
     if (fb == oin_shown[0] && fk == oin_shown[1] && db == oin_shown[2] && dk == oin_shown[3] && hb == oin_shown[4] &&
         hk == oin_shown[5])
         return;                                        /* (on a change only, as Optimist writes its columns) */

@@ -10,7 +10,8 @@
                     the unit at ROOTS (app.c app_render): those are given to it as roots too. Then every function left
                     without minsize gets optsize, so the unit is built as Optimist builds felucca.c (-Os, the UI at
                     minsize) though fm1-base compiles o2 units at -O2 (OPT_IR_OS=0: the sound side at -O2 instead)
-  core/opt_ff.c, core/opt_ffuni.c   FatFs (the SD card): every function at optsize, as Optimist builds them (-Os)
+  core/opt_ff.c, core/opt_ffuni.c, core/opt_pff.c   FatFs and Petit FatFs (the SD card): every function at optsize, as
+                    Optimist builds them (-Os)
   unity.c           (no UNIT: fm1-base's unit) its Bluetooth stack, Optimist's own files (bt/ble, bt/br: the same as
                     Optimist's ble/, bt/), as Optimist builds them: size_fns.py's lists cut to those files, so their
                     files built for size there (SIZE_FILES: the pairing's arithmetic, the radio's start, the links'
@@ -110,7 +111,7 @@ def main(argv):
     unit = argv[2] if len(argv) == 3 else None
     if unit == "core/opt_core.c":
         return size_pass(src, dst)
-    if unit in ("core/opt_ff.c", "core/opt_ffuni.c"):
+    if unit in ("core/opt_ff.c", "core/opt_ffuni.c", "core/opt_pff.c"):
         return os_pass(src, dst)
     if unit is None and os.environ.get("OPT_IR_BT", "1") != "0":
         return bt_pass(src, dst)

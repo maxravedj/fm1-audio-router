@@ -8,17 +8,20 @@
  * the LCD and gives it back: sdcard.c's sd_begin / sd_end do nothing here), the read modes and the DMA probe (fm1-base's
  * start-up; fm1_sd_mode / fm1_sd_dma stay for Optimist's code to read), the CRCs and their retries (fm1-base checks
  * every block's CRC16 and reads a failed one again; sd_crc_retry here lets the stream read it once more). Left out:
- * the 30 MHz clock (fm1-base runs the card at 20: sd_clock_probe says not tried), Petit FatFs (the trial builds full
- * FatFs only: the SD card mode's).
+ * the 30 MHz clock (fm1-base runs the card at 20: sd_clock_probe says not tried).
+ *   Petit FatFs  (SDCARD without the SD card mode's layout: core/opt_pff.c) its disk_initialize, disk_readp (a block
+ *                read whole into a buffer, the part asked copied: fm1-base reads whole blocks, each one's CRC checked)
+ *                and disk_writep (the block gathered, written whole at its end), at the end of this file
  *   sd_rd_*      a multi-block read: plat_sd_read_open / plat_sd_read_next (a short wait a poll, as sd_rd_poll's few
  *                token bytes) / plat_sd_close
  *   sd_wr_*      the recorder's multi-block write: plat_sd_write_open, plat_sd_write_next (0 for the block: the card's
  *                busy asked without sending), plat_sd_close (the stop, its busy waited for) */
-#if !FELUCCA_SD_FATFS
-#error "the trial's card: full FatFs only (SDCARD with LAYOUT 1 and FAR_OK: FELUCCA_SD_FATFS)"
-#endif
+#if FELUCCA_SD_FATFS
 #include "storage/sd/fatfs/ff.h"
 #include "storage/sd/fatfs/diskio.h"
+#else
+#include "storage/sd/diskio.h"                  /* (Petit FatFs': sdcard.c included its pff.h) */
+#endif
 
 /* ---- what sdcard.c reads of hal/fm1_sd_bus.h and the LCD driver: the bus is fm1-base's */
 enum { FM1_SD_DUPLEX = 0, FM1_SD_DIRRX = 1, FM1_SD_BITBANG = 2 };
@@ -224,3 +227,58 @@ static void sd_wr_abort(void)
     (void)plat_sd_close();
     sd_wr.state = SDW_IDLE;
 }
+
+#if !FELUCCA_SD_FATFS
+/* ---- Petit FatFs' entry points (storage/sd/diskio.h; Optimist's sd_mmc.c streams a block's bytes past, fm1-base
+ * moves whole blocks): the last block read kept, so the reads of one sector's parts read the card once */
+static BYTE sd_pblk[512] __attribute__((aligned(4)));
+static DWORD sd_pblk_at = 0xFFFFFFFFu;           /* the sector sd_pblk holds (none: ~0) */
+static UINT sd_pwc;                              /* a write under way: the bytes of its block still to come */
+DSTATUS disk_initialize(void)
+{
+    sd_pblk_at = 0xFFFFFFFFu;
+    sd_pwc = 0;
+    return sd_card_init();
+}
+/* Read partial sector: count bytes from offset (offset + count <= 512); buff 0: skipped. A CRC failure read again
+ * (sd_crc_retry, as sd_mmc.c sd_readp) */
+DRESULT disk_readp(BYTE *buff, DWORD sector, UINT offset, UINT count)
+{
+    BYTE fails = 0;
+    UINT i;
+    if (offset + count > 512u)
+        return RES_PARERR;
+    if (sector != sd_pblk_at) {
+        sd_pblk_at = 0xFFFFFFFFu;
+        while (disk_readblocks(sd_pblk, sector, 1) != RES_OK)
+            if (!sd_crc_retry(&fails))
+                return RES_ERROR;
+        sd_pblk_at = sector;
+    }
+    if (buff)
+        for (i = 0; i < count; i++)
+            buff[i] = sd_pblk[offset + i];
+    return RES_OK;
+}
+/* Write partial sector (pff.c's protocol): buff 0, sc a sector: a write begins there; buff, sc bytes: the next of
+ * its bytes; buff 0, sc 0: the block ends (the rest zeros), written whole */
+static DWORD sd_pw_at;
+DRESULT disk_writep(const BYTE *buff, DWORD sc)
+{
+    UINT n;
+    if (buff) {
+        for (n = (UINT)sc; n && sd_pwc; n--, sd_pwc--)
+            sd_pblk[512u - sd_pwc] = *buff++;
+        return RES_OK;
+    }
+    if (sc) {
+        sd_pblk_at = 0xFFFFFFFFu;                /* (the buffer is the block being written now) */
+        sd_pw_at = sc;
+        sd_pwc = 512u;
+        return RES_OK;
+    }
+    while (sd_pwc)
+        sd_pblk[512u - sd_pwc--] = 0;
+    return disk_writeblock(sd_pblk, sd_pw_at);
+}
+#endif

@@ -66,6 +66,7 @@ int32_t opt_ui_guard(void);                                  /* the CPU guard's 
 uint32_t opt_ui_drops(void);                                 /* late halves since power-on (overload.h ovl.drops) */
 int32_t opt_ui_batt(void);                                   /* the battery's reading as SYSTEM > BATTERY has it */
 int32_t opt_ui_uad(uint32_t s);                              /* USB AUDIO's source s (0 MASTER): its channels (3: 1+2); -1 none */
+uint32_t opt_supply_read(uint32_t *regs);                    /* the rails as fm1-base's start left them (app.c) */
 /* the globals' sectors 0xFC000..0xFEFFF: plat.h's PLAT_XDATA2 (app.c, on plat_data*) */
 #define OPT_GLOB_LO 0xFC000u
 #define OPT_GLOB_HI 0xFF000u

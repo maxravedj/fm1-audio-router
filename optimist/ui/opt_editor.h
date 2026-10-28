@@ -19,14 +19,14 @@
 #pragma once
 
 #if FELUCCA_EDITOR
-#if FELUCCA_ED_LIVE
-#error "the trial's editor: ED_LIVE off (the dev profile's: backup, librarian, mirror); the live editor is not wired"
-#endif
+#ifndef FELUCCA_OTA
 #define FELUCCA_OTA 1                           /* (felucca.c: the editor needs the OTA SysEx plumbing, here fm1-base's) */
+#endif
 /* fm1-base's companion services (fm1.toml companion = true, docs/COMPANION.md): the backup's objects and the sample slots
  * are its files (Optimist's io/editor/ed_comp.c; app.c app_file_* through opt_cf_*, below), the editor's own cmds 43..48
- * and 11..15 left out (web/editor.html uses the files when the capability query answers) */
-#if OPT_COMPANION && FELUCCA_FLASH && FELUCCA_BACKUP
+ * and 11..15 left out (web/editor.html uses the files when the capability query answers). With live editing (ED_LIVE,
+ * editor.c's rule) the editor keeps its own commands, Optimist's as they are, and the companion lists no files */
+#if OPT_COMPANION && FELUCCA_FLASH && FELUCCA_BACKUP && !FELUCCA_ED_LIVE
 #define FELUCCA_ED_COMPANION 1
 #endif
 #define MIR_BLE MIR_BLE_BUILT                   /* the mirror over Bluetooth too (felucca.c's: with BLE; ui/opt_bt.h sends its

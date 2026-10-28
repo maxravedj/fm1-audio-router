@@ -99,6 +99,22 @@ void app_say(const char *a, const char *b)
 uint32_t opt_irq_enabled(void) { return (fm1_icfg() & 0x200u) != 0u; }
 #endif
 
+/* the rails as fm1-base's start left them (device/main_fm1.c: M-VAVE's VDC14 7 and SYSVDD 15, the 1.3 V supply on its
+ * DC-DC), for SYSTEM > INTERNALS' SUPPLY line (ui/opt_supply.h): VDC14 << 4 | SYSVDD (felucca-bsp's fm1_sys.h), and
+ * P3_ANA_CON0 | CON5 << 8 | CON6 << 16 | CON9 << 24 in regs (Optimist's hal/fm1_supply.h fm1_supply_regs). The host:
+ * the raised levels, on the DC-DC */
+uint32_t opt_supply_read(uint32_t *regs)
+{
+#ifdef PLAT_HOST
+    *regs = 0x0Fu << 24 | 0x07u << 16 | 0x08u;
+    return 0x7Fu;
+#else
+    *regs = fm1_p33_read(0x00u) | (uint32_t)fm1_p33_read(0x05u) << 8 | (uint32_t)fm1_p33_read(FM1_P3_ANA_CON6) << 16 |
+            (uint32_t)fm1_p33_read(FM1_P3_ANA_CON9) << 24;
+    return fm1_vdc14() << 4 | fm1_sysvdd();
+#endif
+}
+
 void app_splash(void) { opt_splash(); }
 void app_ui_init(void) { opt_ui_init(); }
 int app_sysex(const uint8_t *p, uint32_t n) { return opt_ed_frame(p, n); }
@@ -107,6 +123,11 @@ void app_loop(void) { opt_ed_poll(); }
 /* what Bluetooth keeps (APP_BLE_STORE): Optimist's settings record's fields (ui/opt_bt.h) */
 int app_ble_load(struct plat_ble_rec *r) { return opt_ble_load(r); }
 int app_ble_save(const struct plat_ble_rec *r) { return opt_ble_save(r); }
+#ifdef APP_BLE_PEERS
+/* the devices one by one (plat.h): to Optimist's own list (ui/opt_bt_dev.h), main loop */
+void app_ble_scan_report(const uint8_t *pdu, uint32_t n, uint32_t rssi) { opt_ble_scan_report(pdu, n, rssi); }
+void app_ble_device_keys(const struct plat_ble_keys *k) { opt_ble_device_keys(k); }
+#endif
 void app_input_only(void) { opt_ui_input(); }
 void app_frame(void) { opt_ui_frame(); }
 

@@ -85,6 +85,7 @@ static void cv_mirror(uint32_t x, uint32_t y) { mir_blit(x, y, cv_w, cv_h, cv_px
 #include "drums/dsnd_desc.c"
 #include "ui/meters.c"
 #include "opt_stubs.h"                           /* the parts of Optimist not in the trial yet, as the UI sees them */
+#include "opt_supply.h"                          /* SYSTEM > INTERNALS' SUPPLY line: the rails fm1-base raised */
 #include "opt_bt.h"                              /* Optimist's Bluetooth on fm1-base's plat_ble_* / plat_bta_* (before its screens) */
 /* font_big (op_graph.c): FONT_L with FONT_S's range, made once, "made" read from .scale (Optimist's font has one,
  * fm1-base's has none): its height instead, as nonzero once copied (fm1-base's FONT_L has lower case with fm1.toml
@@ -96,6 +97,7 @@ static void cv_mirror(uint32_t x, uint32_t y) { mir_blit(x, y, cv_w, cv_h, cv_px
 #include "opt_storage.h"                         /* Optimist's storage on fm1-base's flash access (after the UI: felucca.c's order) */
 #include "opt_sd.h"                              /* its SD card on fm1-base's (after the storage: felucca.c's order) */
 #include "opt_editor.h"                          /* Optimist's web editor on fm1-base's SysEx (after the storage: felucca.c's) */
+#include "opt_console.h"                         /* its USB serial console on fm1-base's (USB_CONSOLE: after the editor) */
 
 /* ---- the boot screen (fm1-base's APP_SPLASH, app.c app_splash: before app_init): Optimist's own, the dinghy logo,
  * "OPTIMIST" and the version (ui/splash.c, always built in Optimist: main.c boot_splash), on this unit's canvas */
@@ -117,6 +119,7 @@ void opt_core_init(void)
     opt_ed_forget();                             /* (the host's restart: what an FM-1's clears) */
     opt_bt_forget();
     cpu_khz = opt_cpu_khz();                     /* the CPU clock (main.c: before the audio), the guard's (core/opt_core.c) */
+    opt_supply_boot();                           /* the rails read back (main.c supply_boot: before the rest; ui/opt_supply.h) */
     tab_expand();                                /* the smooth tables into RAM (core/opt_core.c TAB_CODED_FORCE), first */
     opt_cv_init();                               /* the canvas (the app's unit's), before anything draws */
     persist_boot();                              /* the settings record, the stores found (before settings_init) */
@@ -126,6 +129,7 @@ void opt_core_init(void)
     czb_find();
 #endif
     settings_init();
+    opt_con_boot();                              /* USB SERIAL: the console presented from this start (ui/opt_console.h) */
     opt_sd_boot();                               /* the card's filesystem (main.c sd_mount_boot, after the settings) */
     panel_init();
     for (i = 0; i < G_COUNT; i++)
@@ -211,6 +215,7 @@ void opt_ui_frame(void)
     usb.config = plat_battery() == 4;            /* (opt_stubs.h: a USB host powers the FM-1) */
 #endif
     opt_ua_poll();                               /* (USB audio's counters, for SYSTEM > INFO: core/opt_core.c) */
+    opt_con_task();                              /* the USB serial console's line (ui/opt_console.h: main.c's cdc_task) */
 #if FELUCCA_DUAL >= 2
     opt_dual_loop();                             /* (a main loop pass: core/opt_dual.c's starvation check) */
 #endif

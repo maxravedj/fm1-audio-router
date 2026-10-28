@@ -121,6 +121,10 @@ static void opt_ble_in(uint32_t pkt);          /* (ui/opt_bt.h: Bluetooth MIDI i
 static void opt_ble_tick(uint32_t now);        /* (ui/opt_bt.h: Bluetooth MIDI out, CLOCK OUT's F8s at their time) */
 #endif
 #include "io/midi/midi_rings.c"
+#if FELUCCA_EDITOR && FELUCCA_ED_LIVE && !defined(FELUCCA_OTA)
+#define FELUCCA_OTA 1                            /* (felucca.c's, before the sequencer: the notes the live editor plays,
+                                                  * seq/ednote.c EDN_ON; the editor's SysEx is fm1-base's, ui/opt_editor.h) */
+#endif
 #if FELUCCA_ARRANGER
 #include "seq/arranger.c"
 #endif
