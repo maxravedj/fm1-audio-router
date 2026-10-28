@@ -40,6 +40,7 @@ run_sd() {
     X0X_FONTSET=terminus "$PY" tools/build.py optimist --host
     $H/optimist_host optimist/tests/note.txt $H
     $H/optimist_host optimist/tests/sd/nocard.txt $H
+    $H/optimist_host optimist/tests/sd/editor_files.txt $H   # (the slots, which hold nothing, as the companion's files)
     if "$PY" optimist/sdcard.py $H/sd/card0.img; then
         cp $H/sd/card0.img $H/sd/card.img
         FM1B_SD=$H/sd/card.img $H/optimist_host optimist/tests/sd/card.txt $H
@@ -55,6 +56,12 @@ run_sd() {
     else
         echo "optimist/run.sh: the card's checks NOT run (no card image)"
     fi
+    # the same layout with the editor's own backup commands (profiles/sd-live.config: ED_LIVE on, as the release's
+    # fm1-next profile has it): the connect's BK_LIST and BK_READ on the slots that hold nothing (tests/sd/editor.txt)
+    echo "optimist/run.sh: profile sd-live (tests/sd/editor.txt)"
+    export OPT_PROFILE=profiles/sd-live.config
+    X0X_FONTSET=terminus "$PY" tools/build.py optimist --host
+    $H/optimist_host optimist/tests/sd/editor.txt $H
     unset OPT_PROFILE FM1B_APP_END
 }
 
