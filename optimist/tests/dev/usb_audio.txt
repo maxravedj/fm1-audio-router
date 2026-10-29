@@ -5,6 +5,11 @@
 # source 18) NONE -> 3+4; then, the volume knob at half (a quarter's gain), it plays usb-in.wav through the USB input
 # track while it records, the FM-1's own output beside (wav): USB's MASTER at its fixed level, the knob's on the output
 wait 1500
+# headphones in, HP BASS OFF: the codec's output uncorrected (fm1-next 37faaf46: with nothing plugged SPK LOWCUT, ON at
+# first, filters the FM-1's own output and never USB's, so the output would not be the capture at the knob's gain)
+jack in
+wait 300
+expect oc 0
 master 4096
 wait 100
 usb_rec usb-stems.wav
