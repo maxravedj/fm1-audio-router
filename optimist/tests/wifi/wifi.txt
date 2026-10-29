@@ -20,9 +20,7 @@ spin SELECT 1
 wait 100
 spin SELECT 1
 wait 100
-spin SELECT 1
-wait 100
-spin SELECT 2                                           # (METERS, KEYS, then WI-FI)
+spin SELECT 1                                           # (then WI-FI: the KEYS page, two steps, is gone: fm1-next b9a394bc)
 wait 100
 cells
 # MODE AUTO (OFF, MAN, AUTO ...): the radio starts on Bluetooth's, the page lists what it hears
