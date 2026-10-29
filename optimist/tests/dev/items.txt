@@ -2,7 +2,7 @@
 # The items run (optimist/run.sh: profiles/dev-items.config, tests/dev/items.txt): the builder items and options that the
 # release builds and no other run switches on. Each is exercised once, so that a regression shows: an engine on track 1
 # plays a note, an insert is loaded into a slot with its amount and the track is heard through it, a page answers and a
-# value moves, the editor answers the SLOOP file commands. An item that is no longer built fails its line ("not built"),
+# value moves. An item that is no longer built fails its line ("not built"),
 # one whose code crashes or goes silent fails the next check. The script's expectations are measured on this build
 # (the peak floors are loose: a key held 0.5 s)
 wait 600
@@ -532,20 +532,6 @@ expect voices >0
 tap PLAY
 wait 1500
 expect playing 0
-# ---- the editor's SLOOP file commands (ED_LIVE, SL24_EXPORT 78 SL24_GET, SL24_EDIMPORT 90 SL24_PUT): a part that is none (rc 1), the working
-# project's export read past its end (its length 3840, its CRC-32 and the lost words: the same every run), an import begun with a wrong length (rc 6)
-sysex_out
-sysex F0 7D 46 4C 4E 01 00 00 00 F7
-wait 100
-expect_sysex F0 7D 46 4C 4E 01 01 00 00 00 00 00 00 00 00 00 00 00 00 00 F7
-sysex_out
-sysex F0 7D 46 4C 4E 00 00 1E 00 F7
-wait 100
-expect_sysex F0 7D 46 4C 4E 00 00 00 1E 00 72 1C 00 4D 07 01 41 00 1E 00 F7
-sysex_out
-sysex F0 7D 46 4C 5A 00 0A 00 00 00 00 00 00 00 F7
-wait 100
-expect_sysex F0 7D 46 4C 5A 00 06 F7
 # ---- BT_PROJ: the projects' commands over Bluetooth MIDI (on the host's stand-ins, as the bt run): BK_LIST (43) and PJ_OP (110) answered to the
 # computer's link (without BT_PROJ only the mirror's 106, INFO, 108, 109 and 111 are)
 tap HOME

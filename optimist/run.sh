@@ -106,7 +106,7 @@ run_console() {                     # the dev profile with the USB serial consol
 }
 
 run_items() {                       # the builder items and options that nothing else switches on (profiles/dev-items.config, the host's
-                                    # Bluetooth stand-ins for BT_PROJ): engines, inserts, pages, the editor's SLOOP commands
+                                    # Bluetooth stand-ins for BT_PROJ): engines, inserts, pages
                                     # (tests/dev/items.txt)
     echo "optimist/run.sh: profile dev, the items nothing else runs (tests/dev/items.txt)"
     export OPT_PROFILE=profiles/dev-items.config
