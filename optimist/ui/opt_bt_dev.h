@@ -21,13 +21,6 @@
 #if FELUCCA_BLE && BLE_CENTRAL
 #include "ble/ble.h"                            /* (Optimist's: struct ble_peer, ble_keys, BLE_CS_*, BLE_CF_*: plat.h's) */
 #include "ble/ble_ll.h"
-#ifndef FELUCCA_BLE_DIAG
-#define FELUCCA_BLE_DIAG 0                      /* (felucca.c's: the link layer's diagnostics are fm1-base's here) */
-#endif
-#include "ble/ble_diag.h"                       /* (BLE_DG: ble_connect.c's counters, this unit's own) */
-#if BLE_DIAG
-static uint32_t ble_hw_diag_now(void) { return fm1_ticks() / FM1_TICKS_PER_US; }   /* (its records' clock, us) */
-#endif
 #include "ble/ble_scan.c"                       /* (Optimist's: the nearby devices' table, from the reports) */
 _Static_assert(sizeof(struct ble_peer) == sizeof(struct plat_ble_peer) && sizeof(struct ble_keys) ==
                sizeof(struct plat_ble_keys), "plat.h plat_ble_peer / plat_ble_keys: ble/ble.h's ble_peer / ble_keys");
