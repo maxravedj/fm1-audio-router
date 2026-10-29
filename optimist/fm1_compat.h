@@ -145,5 +145,15 @@ static struct {
  * the UI reads it (ui/opt_panel.h) and into the keys the render plays (core/opt_core.c) */
 static volatile uint32_t fm1_rem_btn, fm1_rem_note;
 
+/* ---- the data cache's ways as RAM (hal/fm1_cache.h, CACHE_RAM): fm1-base's (plat_cache_ram: felucca-bsp's
+ * fm1_cache_ram.h, set and tested at the start, fm1.toml cache_ram_ways from the configuration's CACHE_RAM:
+ * gen_optimist.py --conf). Its part no .cache_ram object takes, 0 without its test passed: the undo history's second
+ * part (seq/undo.c), the arena that much more of the SRAM (engines.c ARN_UNDO_KEEP) */
+#if FELUCCA_CACHE_RAM
+static inline int fm1_cache_ram_ok(void) { return plat_cache_ram()->status == PLAT_CR_OK; }
+static inline uint8_t *fm1_cache_ram_lo(void) { return plat_cache_ram()->base; }
+static inline uint32_t fm1_cache_ram_free(void) { return plat_cache_ram()->bytes; }
+#endif
+
 /* ---- the user sample slots (USR1..3, flash 0xA0000, eng_sample.c): read in place from fm1-base's data window */
 #define SMP_USER_XIP(k) plat_data(SMP_USER_BASE + (k) * SMP_USER_SIZE)

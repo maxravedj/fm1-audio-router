@@ -45,7 +45,9 @@
  *   FM1B_ERASE_SLICED 1     the store's and plat_data's erases in windows of about 1 ms, the sound on (felucca-bsp's
  *                           FL_ERASE_SLICED); 0: in one window, the sound silenced (the fm1-emulator: it has no
  *                           erase suspend)
- *   FM1B_SD 0               an SD card on the LCD's bus (fm1.toml sd = true: sd.c, felucca-bsp's fm1_sd_hw.h) */
+ *   FM1B_SD 0               an SD card on the LCD's bus (fm1.toml sd = true: sd.c, felucca-bsp's fm1_sd_hw.h)
+ *   FM1B_CACHE_RAM 0        data-cache ways as RAM, 2, 4 or 7 (fm1.toml cache_ram_ways: plat_cache_ram, felucca-bsp's
+ *                           fm1_cache_ram.h; set and tested in fm1_cstart, main_fm1.c) */
 #include <stdint.h>
 #include "plat.h"
 #include "app.h"                  /* first: the scan's hooks below may call the app */
@@ -86,6 +88,12 @@ static uint32_t flash_held;               /* erases that held the sound for the 
 #include "fm1_xip.h"
 #include "fm1_perf.h"
 #include "fm1_clock.h"
+#ifndef FM1B_CACHE_RAM
+#define FM1B_CACHE_RAM 0
+#endif
+#if FM1B_CACHE_RAM
+#include "fm1_cache_ram.h"        /* data-cache ways as RAM (fm1.toml cache_ram_ways): plat_cache_ram */
+#endif
 
 #include "libc.c"
 #include "lcd.c"

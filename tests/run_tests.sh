@@ -48,6 +48,10 @@ run usb-audio sh -c "$CC -std=c11 -O1 -Wall -Wextra -Werror -Wno-unused-function
     $CC -std=c11 -O1 -Wall -Wextra -Werror -Wno-unused-function -Wno-unused-variable -Wno-missing-field-initializers \
     -Ibsp/chip -DTEST_SPLIT=1 -DTEST_NAMES=1 -DTEST_FB=1 -DTEST_O24=1 -DTEST_HC=1 -DTEST_CH=4 -DTEST_24=1 \
     -o $OUT/uac_test_split bsp/tests/uac_test.c -lm && $OUT/uac_test_split"
+# the cache RAM (felucca-bsp's chip/fm1_cache_ram.h, fm1.toml cache_ram_ways) on a model of the cache's registers, tags and
+# ways: 2, 4 and 7 ways set, tested and zeroed; 0 and 8 nothing; a cache that never idles, masks not taken, a stuck bit
+# in each way: all put back, 0 bytes
+run cache-ram sh -c "$CC -std=c11 -O1 -Wall -Wextra -Werror -Ibsp/chip -o $OUT/cache_ram_test bsp/tests/cache_ram_test.c && $OUT/cache_ram_test"
 run trs-stamp sh -c "$CC -O2 -w -DFELUCCA_MIDI_STAMP=1 -Ibsp/chip -Ibsp/boards/fm1 -Idevice -o $OUT/trs_test_stamp tests/trs_test.c && $OUT/trs_test_stamp"
 # the MIDI-in stamps (FELUCCA_MIDI_STAMP): USB and the jack against a model of their registers on the TIMER5 schedule,
 # each stamp against its message's landing (within +-0.05 ms; the poll's and the read's stamps beside it)
