@@ -85,8 +85,9 @@ ram_code_allow = [
     # Optimist); a2_filter's table of SVF kernels (A2_FLT, A2_FLT_I) holds RAM code (OVL), here and on Optimist
     "analog_render", "a2_fltb", "a2_filter",
     # the effect buses (fx.c): the reverb's rare clear and parameters, the delay's block, the returns' zeroing, the
-    # distortion's gains, the drum inserts' rest
-    "rev_post", "rev_bus", "dly_run", "fx_ret_block", "dist_run", "dins_of",
+    # distortion's gains, the drum inserts' rest; rev_run: rev_bus's per-block worker (the reverb type's parameters through
+    # its table, as rev_bus), a function of its own when not inlined ("?": some builds inline it)
+    "rev_post", "rev_bus", "rev_run?", "dly_run", "fx_ret_block", "dist_run", "dins_of",
     # the insert effects (insfx/*.c): their marks and widths, the gater's block, the limiter's chorus, the drive's gains,
     # TAPE / SPIT's block coefficients (tapespit.c ifx_ts_block through FAR, once a block: tsvf_coef_k divides; "?":
     # a profile with TAPE / SPIT off builds no ifx_ts_run)
