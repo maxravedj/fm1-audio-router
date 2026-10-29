@@ -464,6 +464,32 @@ int main(void)
     check(wa.st == WA_UP && wa.ssid_len == 8u && memcmp(wa.ssid, "FM1-4455", 8) == 0 && wn_st.ap.ssid_len == 0u,
           "the automatic name: FM1- and the last four digits of the address");
 
+    /* 13b. MODE JAM's pick: an Optimist name (FM1- and four capital hex digits), WPA2-PSK, not our own, the strongest first, one that
+     * refused the default password left alone for a while */
+    {
+        struct wn_ap a1 = {{0}}, a2 = {{0}}, a3 = {{0}}, a4 = {{0}};
+        wc_tab.n = 0;
+        check(wc_is_optimist_name((const uint8_t *)"FM1-A1B2", 8) && !wc_is_optimist_name((const uint8_t *)"FM1-a1b2", 8) &&
+              !wc_is_optimist_name((const uint8_t *)"FM1-A1B", 7) && !wc_is_optimist_name((const uint8_t *)"HOMEWIFI", 8) &&
+              !wc_is_optimist_name((const uint8_t *)"Optimist", 8), "JAM: the Optimist name is FM1- and four capital hex digits");
+        check(wc_is_own_name((const uint8_t *)"FM1-4455", 8) && !wc_is_own_name((const uint8_t *)"FM1-4456", 8), "JAM: our own name (FM1-4455 here) is never joined");
+        memcpy(a1.ssid, "FM1-4455", 8), a1.ssid_len = 8, a1.sec = WN_SEC_PSK, a1.rssi = -30, a1.bssid[5] = 1;   /* (ours: strongest) */
+        memcpy(a2.ssid, "FM1-A1B2", 8), a2.ssid_len = 8, a2.sec = WN_SEC_OPEN, a2.rssi = -40, a2.bssid[5] = 2;   /* (open: not ours to join) */
+        memcpy(a3.ssid, "FM1-C3D4", 8), a3.ssid_len = 8, a3.sec = WN_SEC_PSK, a3.rssi = -50, a3.bssid[5] = 3;
+        memcpy(a4.ssid, "FM1-E5F6", 8), a4.ssid_len = 8, a4.sec = WN_SEC_PSK, a4.rssi = -60, a4.bssid[5] = 4;
+        wn_scan_add(&wc_tab, &a4);
+        wn_scan_add(&wc_tab, &a3);
+        wn_scan_add(&wc_tab, &a2);
+        wn_scan_add(&wc_tab, &a1);
+        check(wc_jam_pick() >= 0 && !memcmp(wc_tab.ap[wc_jam_pick()].ssid, "FM1-C3D4", 8), "JAM: the strongest usable one: not ours, not open");
+        wc.jam_bad = 1, memcpy(wc.jam_bssid, a3.bssid, 6), wc.jam_t = ms;
+        check(wc_jam_pick() >= 0 && !memcmp(wc_tab.ap[wc_jam_pick()].ssid, "FM1-E5F6", 8), "JAM: one that refused the default password is skipped: the next one");
+        ms += WC_JAM_BAD_MS + 1u;
+        check(wc_jam_pick() >= 0 && !memcmp(wc_tab.ap[wc_jam_pick()].ssid, "FM1-C3D4", 8), "JAM: ... and tried again after two minutes");
+        wc.jam_bad = 0;
+        wc_tab.n = 0;
+    }
+
     /* 14. the radio does not start */
     wa_stop();
     wa.by_mode = 1;

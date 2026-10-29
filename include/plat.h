@@ -338,7 +338,7 @@ int plat_net_task(void (*fn)(void *), void *arg, const char *name);   /* a task 
 #define FM1B_WIFI_OWN 0
 #endif
 #define PLAT_WIFI_STORE_SIZE 336u
-enum { WIFI_MODE_OFF, WIFI_MODE_AUTO, WIFI_MODE_MAN, WIFI_MODE_AP, WIFI_MODE_AP_MAN };
+enum { WIFI_MODE_OFF, WIFI_MODE_AUTO, WIFI_MODE_MAN, WIFI_MODE_AP, WIFI_MODE_AP_MAN, WIFI_MODE_JAM };   /* JAM: AUTO, and an Optimist access point (FM1-xxxx, its password wifi_ap_default_key's) is joined when no saved network is heard */
 void plat_wifi_mode(int mode);         /* OFF: nothing runs (the radio, once started, stays up); MAN: joins when asked;
                                         * AUTO: and the best saved network heard, at the start and whenever none is
                                         * joined; AP, AP_MAN: the FM-1 is the access point (wifi_ap = true, below).
@@ -405,6 +405,7 @@ int plat_wifi_ap_set(const uint8_t *ssid, uint32_t len, const char *pass);   /* 
 int plat_wifi_ap_set_channel(int ch);  /* 1..13, kept; a running access point moves once it has rested 1.2 s. 0 / -1 */
 int plat_wifi_ap_channel(void);        /* the channel (kept, or the one plat_wifi_ap_start runs) */
 int plat_wifi_ap_name(char *name);     /* the network's name (33 bytes, may be 0): its length */
+int plat_wifi_jam(void);               /* MODE JAM: 0 not joined that way, 1 joining / joined an Optimist access point (plat_wifi_ssid), 2 the last one tried refused its default password (it has a typed one) */
 int plat_wifi_ap_has_key(void);        /* a typed password's key is kept */
 int plat_wifi_ap_default_key(char *out);   /* the default password of the current name (wifi_ap_default_key, 9 bytes): 1 when it is the one in use (none typed), 0 a typed one replaces it */
 void plat_wifi_ap_forget(void);        /* the typed key goes (the name and channel stay): the default password again, the access point starts again on it */

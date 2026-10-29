@@ -316,6 +316,10 @@ int app_expect(const char *what, int *got)
         *got = (int)opt_ui_batt();
     else if (!strcmp(what, "lights"))          /* SYSTEM > LIGHTS' level (0 OFF .. 3 HIGH; -1 not built) */
         *got = (int)opt_ui_lights();
+    else if (!strcmp(what, "link_eff"))        /* SYNC > LINK in force (MODE JAM turns OFF into ON) */
+        *got = (int)opt_ui_link(1);
+    else if (!strcmp(what, "link_stored"))     /* SYNC > LINK as stored (JAM never touches it) */
+        *got = (int)opt_ui_link(0);
     else if (!strcmp(what, "hp"))              /* the headphone jack as the UI read it (1 in; the script's "jack") */
         *got = (int)opt_ui_hp();
     else if (!strcmp(what, "oc"))              /* the output's correction (0 none, 1 SPK LOWCUT, 2 BASS+, 3 / 4 HP BASS) */
@@ -420,6 +424,10 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
                 pkt |= (uint32_t)f[i + j] << (8u * (j + 1u));
             opt_core_midi(pkt, PORT_BLE);
         }
+        return 1;
+    }
+    if (!strcmp(cmd, "linkset")) {               /* linkset N: SYNC > LINK stored as N (0 OFF, 1 ON, 2 ON+S/S) */
+        opt_ui_link_set((uint32_t)atoi(a ? a : "0"));
         return 1;
     }
     if (!strcmp(cmd, "lights")) {                /* lights N: SYSTEM > LIGHTS set to level N (0 OFF .. 3 HIGH) */

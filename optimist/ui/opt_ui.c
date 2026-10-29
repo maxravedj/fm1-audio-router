@@ -372,6 +372,13 @@ int32_t opt_ui_lights(void) { return lights_lvl; }                /* SYSTEM > LI
 int32_t opt_ui_hp(void) { return hp_in; }                          /* the jack (system/hpjack.h hp_poll) */
 int32_t opt_ui_oc(void) { return oc_last; }                        /* the output's correction (fx/outcorr.c) */
 void opt_ui_lights_set(uint32_t v) { lights_lvl = (uint8_t)(v % LIGHTS_N); }   /* (as the menu's step does) */
+#if FELUCCA_LINK || (defined(FELUCCA_WIFI) && FELUCCA_WIFI)
+void opt_ui_link_set(uint32_t v) { link_mode = (uint8_t)(v % 3u); }   /* SYNC > LINK as the menu's step sets it (the stored value) */
+int32_t opt_ui_link(int eff) { return eff ? (int32_t)link_eff() : (int32_t)link_mode; }   /* the LINK in force (MODE JAM: OFF reads ON) / the stored one */
+#else
+void opt_ui_link_set(uint32_t v) { (void)v; }
+int32_t opt_ui_link(int eff) { (void)eff; return -1; }
+#endif
 #ifdef OPT_HAS_USBH
 int32_t opt_ui_usbh(void) { return (int32_t)usbh_mode(); }       /* SYSTEM > USB's MODE: 0 DEVICE, 1 HOST */
 void opt_ui_usbh_reboot(void) { usbh_want = 0; usbh_said = 0; }   /* (a restart: RAM cleared, MODE DEVICE) */
