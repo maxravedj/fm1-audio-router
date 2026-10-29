@@ -14,7 +14,8 @@ tests/dev/usb_audio.txt, the checks here:
      every frame of it taken (usb_play_frames), CH1 / CH2 the FM-1's own output (its speaker's, the simulator's WAV of
      it: the same samples at the codec's scale, within the WAV's 16-bit rounding), and the signal itself through the
      master (Optimist's limiter and knee on it: its gain within 0.1 %, the rest under -40 dB), CH3 / CH4 silence (T3,
-     DRUMS: nothing played)"""
+     DRUMS: nothing played; RET C, the reverb's return, routed there too (uad.18 6): no send reaches it, it adds nothing.
+     Its signal on its channels: Optimist's tests/usb_audio_route_test.c)"""
 import math
 import struct
 import subprocess
