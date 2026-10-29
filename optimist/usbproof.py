@@ -12,10 +12,11 @@ tests/dev/usb_audio.txt, the checks here:
   2. SYSTEM > USB AUDIO's MASTER set to 1+2 (the UI: uad.0 3), the volume knob at half (master 2048: APP_GAIN's
      quarter), then the computer plays a second of a stereo signal (usb_play: 1 kHz on L, 441 Hz on R, 16-bit) through
      Optimist's USB input track (APP_USB_PLAY) while it records: every frame of it taken (usb_play_frames), CH1 / CH2
-     the signal itself through the master bus at its fixed level (the user, 2026-10-29: the volume knob never reaches
-     USB; its gain within 0.1 %, the rest under -40 dB), the FM-1's own output (its speaker's, the simulator's WAV of
-     it) the same at the knob's quarter (within 1 %, the rest under -30 dB: the output's DC blocker; LIMIT's lookahead,
-     64 samples, after the capture when it is on), CH3 / CH4
+     the signal itself through the master as the FM-1's output gives it at full volume (the user, 2026-10-29: the
+     volume knob never reaches USB, "same limiter as the output": Optimist's fx.c ua_mst_out, its own DC blocker,
+     limiter and knee or LIMIT's lookahead; its gain within 0.1 %, the rest under -40 dB), the FM-1's own output (its
+     speaker's, the simulator's WAV of it) the same at the knob's quarter, at the same time (no lag: the same
+     lookahead on both; within 1 %, the rest under -30 dB), CH3 / CH4
      silence (T3, DRUMS: nothing played; RET C, the reverb's return, routed there too (uad.18 6): no send reaches it,
      it adds nothing. Its signal on its channels, the knob at any position: Optimist's tests/usb_audio_route_test.c)"""
 import math
@@ -82,12 +83,12 @@ def main() -> int:
 
     def out_fit(c: int, lag: int) -> tuple[float, float]:
         return fit([m[i][c] / 256 * 32767 / 65536 for i in range(lo, hi)], [spk[i + lag][c] for i in range(lo, hi)])
-    # the output after the capture by LIMIT's lookahead when it is on (64 samples: master_comp.c MLIM_N), else 0: the
-    # lag both sides fit best (441 Hz on R: no lag of 1 kHz's period passes for another)
+    # the lag both sides fit best (441 Hz on R: no lag of 1 kHz's period passes for another): 0, USB's MASTER through the
+    # same lookahead as the output (LIMIT on: master_comp.c MLIM_N, 64 samples, on both)
     lag = min(range(0, 129), key=lambda k: out_fit(0, k)[1] + out_fit(1, k)[1])
     for c, name in ((0, "L"), (1, "R")):
         g, res = out_fit(c, lag)
-        if lag not in (0, 64) or abs(g / knob - 1) > 1e-2 or res > -30:
+        if lag != 0 or abs(g / knob - 1) > 1e-2 or res > -30:
             fail(f"the FM-1's own output {name}: the capture's at the knob's {knob:.3f}, {lag} samples later (gain {g:.5f}, "
                  f"the rest {res:.1f} dB)")
         print(f"  ok   usbproof master {name}: {len(m)} frames, the FM-1's own output the capture's at the knob's {knob:.3f}, "
@@ -99,7 +100,7 @@ def main() -> int:
         if abs(g - 1) > 1e-3 or res > -40:
             fail(f"the computer's {name} through the USB input track and the master: gain {g:.5f}, the rest {res:.1f} dB")
         print(f"  ok   usbproof the computer's {name}: through Optimist's USB input track to the master and back, gain "
-              f"{g:.5f}, the rest {res:.1f} dB (the knob at half: not in it; -inf: the same samples)")
+              f"{g:.5f}, the rest {res:.1f} dB (the knob at half: not in it; the output's DC blocker on it)")
     print("  ok usbproof: the trial's USB audio, out and in")
     return 0
 
