@@ -71,7 +71,7 @@ void opt_ui_clock_out(uint32_t on);                          /* the HOME menu's 
 int32_t opt_ui_guard(void);                                  /* the CPU guard's level (cpuguard.h CG_L_*; -1 not built) */
 uint32_t opt_ui_drops(void);                                 /* late halves since power-on (overload.h ovl.drops) */
 #ifdef PLAT_HOST
-int32_t opt_ui_lights(void);                                 /* SYSTEM > LIGHTS' level (0 OFF .. 3 HIGH; -1 not built) */
+int32_t opt_ui_lights(void);                                 /* SYSTEM > LIGHTS' level (0 OFF .. 3 HIGH) */
 void opt_ui_lights_set(uint32_t v);                          /* the host: that level set, as the menu's step does */
 int32_t opt_ui_usbh(void);                                   /* SYSTEM > USB's MODE (0 DEVICE, 1 HOST; -1 not built: USB_HOST) */
 void opt_ui_usbh_reboot(void);                               /* the host: a reboot, MODE DEVICE again (as RAM is cleared) */

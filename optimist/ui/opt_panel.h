@@ -82,7 +82,6 @@ static void opt_leds_out(void)
 #ifdef APP_DIM_LEVELS
     uint32_t ns = 0;
 #endif
-#if FELUCCA_LIGHTS
     if (fm1_led_bg_ns) {                               /* (the backlight: fm1-base's dim layer, opt_in.h) */
         uint32_t gb, gk;
         oin_side(fm1_led_bg, &gb, &gk);
@@ -91,7 +90,6 @@ static void opt_leds_out(void)
         ns = fm1_led_bg_ns;                            /* (its level, LOW 500 / MID 1000 / HIGH 2000 ns: the layer's pulse) */
 #endif
     }
-#endif
     if (fb == oin_shown[0] && fk == oin_shown[1] && db == oin_shown[2] && dk == oin_shown[3] && hb == oin_shown[4] &&
         hk == oin_shown[5]
 #ifdef APP_DIM_LEVELS

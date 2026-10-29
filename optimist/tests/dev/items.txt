@@ -560,7 +560,7 @@ spin SELECT 2
 wait 100
 spin SELECT 1
 wait 100
-spin SELECT 1                                           # (DEBUG, General, USB, METERS, then BLUETOOTH)
+spin SELECT 2                                           # (DEBUG, General, USB, METERS, KEYS, then BLUETOOTH)
 wait 100
 spin K1 1
 wait 1500

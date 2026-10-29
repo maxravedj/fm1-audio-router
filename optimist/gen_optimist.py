@@ -139,10 +139,11 @@ def config(tree, prof):
 
 
 def dim_header(flags, path):
-    """build/optgen/opt_dim.h: OPT_DIM_LEVELS 1 when the build has LIGHTS (the backlight's LOW / MID / HIGH): app.h then
-    defines APP_DIM_LEVELS, fm1-base's plat_dim_ns, for the platform's units too (they see none of felucca_config.h)"""
+    """build/optgen/opt_dim.h: OPT_DIM_LEVELS 1 (LIGHTS, the backlight's LOW / MID / HIGH, is in every Optimist build since
+    2026-10-29): app.h then defines APP_DIM_LEVELS, fm1-base's plat_dim_ns, for the platform's units too (they see none of
+    felucca_config.h). flags stays for the call sites"""
     text = ("/* the trial (gen_optimist.py dim_header): LIGHTS's levels on fm1-base's dim pulse */\n#pragma once\n"
-            f"#define OPT_DIM_LEVELS {1 if flags.get('FELUCCA_LIGHTS', 0) else 0}\n")
+            f"#define OPT_DIM_LEVELS 1\n")
     if not path.exists() or path.read_text() != text:
         path.write_text(text)
 

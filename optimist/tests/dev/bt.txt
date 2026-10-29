@@ -15,9 +15,9 @@ spin SELECT 2
 wait 100
 spin SELECT 1
 wait 100
-spin SELECT 1
+spin SELECT 2
 wait 100
-# BT MIDI MODE MAN (SYSTEM: DEBUG, General, USB, METERS, then BLUETOOTH): the radio starts, advertises
+# BT MIDI MODE MAN (SYSTEM: DEBUG, General, USB, METERS, KEYS, then BLUETOOTH): the radio starts, advertises
 spin K1 1
 wait 1500
 cells

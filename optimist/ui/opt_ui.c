@@ -363,13 +363,8 @@ int32_t opt_ui_guard(void)
 uint32_t opt_ui_drops(void) { return ovl.drops; }
 int32_t opt_ui_batt(void) { return song.batt_raw; }      /* (SYSTEM > BATTERY's reading) */
 #ifdef PLAT_HOST
-#if FELUCCA_LIGHTS
 int32_t opt_ui_lights(void) { return lights_lvl; }                /* SYSTEM > LIGHTS' level (0 OFF .. 3 HIGH) */
 void opt_ui_lights_set(uint32_t v) { lights_lvl = (uint8_t)(v % LIGHTS_N); }   /* (as the menu's step does) */
-#else
-int32_t opt_ui_lights(void) { return -1; }                        /* (not built) */
-void opt_ui_lights_set(uint32_t v) { (void)v; }
-#endif
 #ifdef OPT_HAS_USBH
 int32_t opt_ui_usbh(void) { return (int32_t)usbh_mode(); }       /* SYSTEM > USB's MODE: 0 DEVICE, 1 HOST */
 void opt_ui_usbh_reboot(void) { usbh_want = 0; usbh_said = 0; }   /* (a restart: RAM cleared, MODE DEVICE) */
