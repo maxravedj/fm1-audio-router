@@ -9,6 +9,7 @@ void opt_core_init(void);                                    /* power-on: the pa
                                                               * the settings, the UI on its home screen (the mixer) */
 void opt_core_render(int32_t *lr, uint32_t n, uint32_t master_q12, uint32_t keys);   /* n stereo frames (a multiple of
                                                               * opt_core_block()), 24-bit; keys: plat_keys() */
+const int32_t *opt_core_bt_frames(const int32_t *lr);        /* the frames Bluetooth takes from the last render (0: silence) */
 uint32_t opt_core_block(void);                               /* Optimist's mix block (CTL frames) */
 const int32_t *opt_core_capture(uint32_t n);                 /* the last render's USB capture: n frames of Optimist's 4
                                                               * channels, 24-bit; 0 = none (the computer not recording) */
@@ -72,6 +73,9 @@ int32_t opt_ui_guard(void);                                  /* the CPU guard's 
 uint32_t opt_ui_drops(void);                                 /* late halves since power-on (overload.h ovl.drops) */
 #ifdef PLAT_HOST
 int32_t opt_ui_lights(void);                                 /* SYSTEM > LIGHTS' level (0 OFF .. 3 HIGH) */
+int32_t opt_ui_hp(void);                                     /* the headphone jack as the UI read it (1 in) */
+int32_t opt_ui_oc(void);                                     /* the last render's output correction (fx/outcorr.c OC_*: 0
+                                                              * none, 1 SPK LOWCUT, 2 BASS+, 3 HP BASS +3 dB, 4 +6 dB) */
 void opt_ui_lights_set(uint32_t v);                          /* the host: that level set, as the menu's step does */
 int32_t opt_ui_usbh(void);                                   /* SYSTEM > USB's MODE (0 DEVICE, 1 HOST; -1 not built: USB_HOST) */
 void opt_ui_usbh_reboot(void);                               /* the host: a reboot, MODE DEVICE again (as RAM is cleared) */

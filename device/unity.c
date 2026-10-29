@@ -71,6 +71,7 @@
 #include "fm1_timer.h"
 #include "fm1_audio.h"
 #include "fm1_adc.h"
+#include "fm1_jack.h"               /* the headphone jack's switch (PB5): plat_headphones */
 #include "fm1_lcd_hw.h"
 #if FM1B_SD
 #include "fm1_sd_hw.h"

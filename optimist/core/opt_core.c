@@ -296,10 +296,14 @@ static uint32_t opt_cpu_khz(void) { return plat_cpu_khz(); }
 
 #if FELUCCA_SD_REC
 static void sdr_feed(const int32_t *q15, uint32_t n);    /* storage/sd/sd_rec.c (ui/opt_sd.h) */
+static uint32_t sdr_recording(void);
 #endif
+/* the frames Bluetooth audio takes from the render (app.c app_bt_frames): the output, or 0 (silence) when it was
+ * corrected (fx/outcorr.c: a stream that started during it) */
+const int32_t *opt_core_bt_frames(const int32_t *lr) { return oc_bt_frames(lr); }
 void opt_core_render(int32_t *lr, uint32_t n, uint32_t master_q12, uint32_t keys)
 {
-    uint32_t i, f, t0 = fm1_ticks(), a;
+    uint32_t i, f, t0 = fm1_ticks(), a, rec = 0;
     fm1_ms = plat_ms();
     a = sync_anchor(t0);
     opt_half_post();
@@ -318,6 +322,11 @@ void opt_core_render(int32_t *lr, uint32_t n, uint32_t master_q12, uint32_t keys
         opt_play_seen = 1;
     }
 #endif
+#if FELUCCA_SD_REC
+    rec = sdr_recording();                          /* (this render's: the recorder takes the plain output) */
+#endif
+    oc_begin((uint32_t)plat_bta_streams(), rec, n);    /* SPK LOWCUT / HP BASS, the codec's output only (fx/outcorr.c; the
+                                                     * frames Bluetooth takes: app.c app_bt_frames) */
     for (f = 0; f + CTL <= n; f += CTL) {
         int32_t *o = lr + 2u * f;
         sync_out_t = a + (((HALF_FRAMES + f) * SY_TPS_Q8) >> 8);   /* (this block's audio leaves then: audio.c's) */
@@ -327,7 +336,9 @@ void opt_core_render(int32_t *lr, uint32_t n, uint32_t master_q12, uint32_t keys
             opt_cap_block(o, f, CTL);               /* (audio.c ua_block: the channels, the master before the shift) */
 #endif
 #if FELUCCA_SD_REC
-        sdr_feed(o, CTL);                           /* the master into the card's ring (audio.c audio_block's place) */
+        if (rec)
+            sdr_feed(oc_rec_frames(o), CTL);        /* the master into the card's ring (audio.c audio_block's place): the
+                                                     * plain output, or its own stage's while the codec's is corrected */
 #endif
         for (i = 0; i < 2u * CTL; i++)
             o[i] <<= OUT_SHIFT;

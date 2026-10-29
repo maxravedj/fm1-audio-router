@@ -67,6 +67,10 @@ int32_t plat_battery_raw(void);        /* the reading plat_battery's bars come f
                                         * the main loop's slow average, in the converter's counts (the bars' thresholds
                                         * 531 / 561 / 591); 0 = not read yet. Whether USB powers the FM-1 or not. For an
                                         * app that shows the volts itself; built for an app with APP_BATTERY_RAW (below) */
+int plat_headphones(void);             /* the headphone jack's switch (PB5: 0 with a plug in), read by the main loop every
+                                        * pass and debounced (a state counts once the pin held it 100 ms: the contact
+                                        * bounces ~150 ms a plug): 1 headphones in, 0 nothing plugged; -1 not read yet (the
+                                        * host: its script's "jack"). The speaker mutes itself in hardware on a plug */
 int plat_battery_charging(void);       /* the supply, read from the chip's own power registers twice a second (P33: P3_LDO5V_CON bit 5
                                         * LDO5V_DET, P3_CHG_CON0 bit 0 CHARGE_EN, P3_CHG_READ bit 0 the charge-full flag; JieLi AC79
                                         * SDK p33.h): 0 no 5 V on the supply pin (running on the cell), 1 5 V present and the
@@ -287,6 +291,8 @@ int plat_bta_timed_out(void);          /* PLAT_BTA_REFUSED because the set-up ti
 int32_t plat_bta_latency_us(void);     /* what the stream adds on the FM-1's side (its queue), us; -1: not streaming.
                                         * An app that follows a clock may play that much earlier (the device's own
                                         * buffer comes on top and is not known) */
+int plat_bta_streams(void);            /* 1: the last render went to Bluetooth (the FM-1's own output muted for it); for the
+                                        * render (the audio interrupt) to plan its block by. 0 without Bluetooth audio */
 
 /* WiFi (fm1.toml wifi = true: FM1B_WIFI 1): a station on JieLi's WiFi libraries and the SDK's lwIP, on the same shim.
  * Off until the app turns it on; then it joins the networks it joined before (kept in the app's store object OBJ_WIFI,
@@ -806,6 +812,10 @@ int app_stats_quiet(void);
  *                   app until the call returns (lr: the block as the output has it, the master, MASTER not yet
  *                   applied with plat_usb_audio_full); 0 = silence. Audio interrupt, after each render, only while
  *                   the computer records (plat_usb_audio_rec). Without it the input is the master (2 channels)
+ *   APP_BT_FRAMES   const int32_t *app_bt_frames(const int32_t *lr, uint32_t n)   the frames Bluetooth audio takes from
+ *                   the render just made (lr, n frames, 24-bit; 0 = silence): for an app whose own output differs from
+ *                   what Bluetooth should get. Audio interrupt, after each render (Bluetooth audio built). Without it
+ *                   Bluetooth takes the output
  *   APP_USB_STATS   (no function) plat_usb_audio_stats is built (the app shows USB audio's counters)
  *   APP_USB_PLAY    (no function) the app mixes the computer's audio itself (plat_usb_audio_play in its render: a
  *                   mixer track) instead of the platform adding it at MASTER after the render

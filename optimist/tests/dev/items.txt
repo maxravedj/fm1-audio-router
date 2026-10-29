@@ -439,7 +439,8 @@ expect peak_db_min -60
 key 7 up
 wait 1500
 expect voices 0
-# BASSPLUS: SYSTEM > GENERAL's LOWCUT has a third value (BASS+), a key played
+# BASS+ (always built since 2026-10-29): SYSTEM > GENERAL's SPK LOWCUT (ON at the start: OFF / ON / BASS+), a key played;
+# the jack: nothing plugged SPK LOWCUT, headphones in HP BASS (OFF / +3 dB / +6 dB), each only on its side (fx/outcorr.c)
 tap GLO
 wait 100
 tap GLO
@@ -449,10 +450,14 @@ wait 50
 turn SELECT 2
 wait 50
 cells
-expect gv2 0
+expect gv2 1
+expect gv3 0
+expect hp 0
+expect oc 1
 turn K2 2
 wait 100
 expect gv2 2
+expect oc 2
 cells
 tap HOME
 wait 100
@@ -466,6 +471,11 @@ expect peak_db_min -60
 key 7 up
 wait 1500
 expect voices 0
+# headphones in: SPK LOWCUT off them, HP BASS OFF: no correction; +6 dB: HP BASS; out again: BASS+ back
+jack in
+wait 300
+expect hp 1
+expect oc 0
 tap GLO
 wait 100
 tap GLO
@@ -474,9 +484,40 @@ turn SELECT -30
 wait 50
 turn SELECT 2
 wait 50
+turn K3 2
+wait 100
+expect gv3 2
+expect oc 4
+tap HOME
+wait 100
+expect scr 0
+peakreset
+key 7 down
+wait 500
+expect voices >0
+expect peak_db_min -60
+key 7 up
+wait 1500
+expect voices 0
+jack out
+wait 300
+expect hp 0
+expect oc 2
+tap GLO
+wait 100
+tap GLO
+wait 100
+turn SELECT -30
+wait 50
+turn SELECT 2
+wait 50
+turn K3 -2
+wait 50
+expect gv3 0
 turn K2 -2
 wait 50
 expect gv2 0
+expect oc 0
 tap HOME
 wait 100
 # LANE_FX: DR selected, a lane's black key held: the page of ROLL, CHANCE, FILL, NUDGE; ROLL and FILL moved, the next row's VRAND
