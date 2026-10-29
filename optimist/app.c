@@ -29,6 +29,13 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
 void app_tick(void) { opt_core_tick(); }
 
 void app_panic(void) { opt_core_panic(); }
+/* the frames Bluetooth audio takes from the render (APP_BT_FRAMES): the plain output, or silence for a render corrected
+ * for the FM-1's own codec (SPK LOWCUT / HP BASS, Optimist's fx/outcorr.c) */
+const int32_t *app_bt_frames(const int32_t *lr, uint32_t n)
+{
+    (void)n;
+    return opt_core_bt_frames(lr);
+}
 /* the USB audio input's frames, Optimist's four channels (opt_core_render made them while the computer records) */
 const int32_t *app_usb_capture(const int32_t *lr, uint32_t n)
 {
@@ -309,6 +316,10 @@ int app_expect(const char *what, int *got)
         *got = (int)opt_ui_batt();
     else if (!strcmp(what, "lights"))          /* SYSTEM > LIGHTS' level (0 OFF .. 3 HIGH; -1 not built) */
         *got = (int)opt_ui_lights();
+    else if (!strcmp(what, "hp"))              /* the headphone jack as the UI read it (1 in; the script's "jack") */
+        *got = (int)opt_ui_hp();
+    else if (!strcmp(what, "oc"))              /* the output's correction (0 none, 1 SPK LOWCUT, 2 BASS+, 3 / 4 HP BASS) */
+        *got = (int)opt_ui_oc();
     else if (!strcmp(what, "usbh_mode"))       /* SYSTEM > USB's MODE: 0 DEVICE, 1 HOST (-1: no USB_HOST) */
         *got = (int)opt_ui_usbh();
     else if (!strcmp(what, "panel_hits"))      /* Optimist's object sectors on OBJ_PANEL's 0xD8000..0xD9FFF */

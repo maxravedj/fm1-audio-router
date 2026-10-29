@@ -95,6 +95,10 @@ void app_splash(void);
  * routing (APP_USB_CAPTURE: app_usb_capture, core/opt_core.c) */
 #define APP_USB_PLAY
 #define APP_USB_CAPTURE
+/* Bluetooth audio takes the plain output, never the FM-1's own codec's correction (SPK LOWCUT / HP BASS: APP_BT_FRAMES,
+ * app_bt_frames, core/opt_core.c) */
+#define APP_BT_FRAMES
+const int32_t *app_bt_frames(const int32_t *lr, uint32_t n);
 #define APP_USB_STATS                    /* plat_usb_audio_stats: SYSTEM > INFO's USB counters (core/opt_core.c) */
 /* the debug stats (plat.h plat_stats_enable: SYSTEM > DEBUG > DEBUG STATS, Optimist's core/dbgstats.h): each record's
  * 7 bytes of Optimist's own (ui/opt_stats.h app_stats): CPU0's longest half in the last 10 s and 1 min (% of a

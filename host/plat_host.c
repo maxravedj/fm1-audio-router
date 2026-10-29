@@ -22,6 +22,7 @@
  *   ble connect | ble link | ble disconnect   a central listening, or linked and not yet listening (FM1B_BLE: the
  *                                stand-in stack is ready a second after the start)
  *   bta add NAME | bta drop NAME a Bluetooth audio device around, or gone (FM1B_BT_AUDIO: a link to it is lost)
+ *   jack in | jack out           headphones into the jack, or out (plat_headphones; nothing plugged at the start)
  *   wav FILE | wavstop           start / stop recording the output
  *   usb_rec FILE | usb_recstop   (FM1B_UAC) a computer records the USB audio input from the next render into FILE (a WAV
  *                                of FM1B_UAC_CH channels at 44.1 kHz, 24-bit with FM1B_UAC_24, else 16): the app's own
@@ -245,6 +246,8 @@ int32_t plat_enc(int role)
 }
 uint32_t plat_master(void) { return mirror_in_master(master); }
 int plat_battery(void) { return 3; }   /* (the host and the emulator: full) */
+static int host_hp;                                /* the headphone jack: a script's "jack in" / "jack out" (0: none) */
+int plat_headphones(void) { return host_hp; }   /* (debounced on the device: here the script's state at once) */
 #ifdef APP_BATTERY_RAW
 int32_t plat_battery_raw(void) { return 620; }   /* (full: over the third bar's 591, as plat_battery's 3) */
 int plat_battery_charging(void) { return 0; }   /* (the host and the emulator: on the cell) */
@@ -829,6 +832,7 @@ void plat_bta_hangup(void)
         bth_st = bth_rest();
 }
 int plat_bta_state(void) { return bth_st; }
+int plat_bta_streams(void) { return bth_st == PLAT_BTA_STREAMING && bth_out; }   /* (the device's own output muted then) */
 void plat_bta_output(int to_device)
 {
     if (bth_st == PLAT_BTA_STREAMING)
@@ -866,6 +870,8 @@ static int bta_script(const char *what, const char *name, int lineno)   /* "bta 
     printf("line %d: bta %s %s: add or drop NAME\n", lineno, what, name);
     return 1;
 }
+#else
+int plat_bta_streams(void) { return 0; }
 #endif
 #if FM1B_WIFI && !FM1B_WIFI_OWN
 /* WiFi (FM1B_WIFI): a stand-in, two networks around ("Home", kept, and "Cafe", open), on 0.5 s after asked, joined
@@ -2866,6 +2872,9 @@ int main(int argc, char **argv)
             plat_host_exact = 1;
             run_ms(1);
             plat_host_exact = 0;
+        } else if (!strcmp(cmd, "jack")) {          /* jack in | jack out: the headphone jack (plat_headphones) */
+            host_hp = !strcmp(a, "in");
+            run_ms(2);
         } else if (!strcmp(cmd, "master")) {
             master = (uint32_t)atoi(a);
             run_ms(40);                         /* as the device's smoothing settles */

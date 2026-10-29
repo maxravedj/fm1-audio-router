@@ -97,6 +97,7 @@ static void cv_mirror(uint32_t x, uint32_t y) { mir_blit(x, y, cv_w, cv_h, cv_px
 /* font_big (op_graph.c): FONT_L with FONT_S's range, made once, "made" read from .scale (Optimist's font has one,
  * fm1-base's has none): its height instead, as nonzero once copied (fm1-base's FONT_L has lower case with fm1.toml
  * font_full = ["L"], so the range it is given is its own) */
+#define HPJ_PLAT plat_headphones                 /* (system/hpjack.h: the jack read and debounced by fm1-base) */
 #define scale h
 #include "ui/optimist/optimist.c"
 #undef scale
@@ -368,6 +369,8 @@ uint32_t opt_ui_drops(void) { return ovl.drops; }
 int32_t opt_ui_batt(void) { return song.batt_raw; }      /* (SYSTEM > BATTERY's reading) */
 #ifdef PLAT_HOST
 int32_t opt_ui_lights(void) { return lights_lvl; }                /* SYSTEM > LIGHTS' level (0 OFF .. 3 HIGH) */
+int32_t opt_ui_hp(void) { return hp_in; }                          /* the jack (system/hpjack.h hp_poll) */
+int32_t opt_ui_oc(void) { return oc_last; }                        /* the output's correction (fx/outcorr.c) */
 void opt_ui_lights_set(uint32_t v) { lights_lvl = (uint8_t)(v % LIGHTS_N); }   /* (as the menu's step does) */
 #ifdef OPT_HAS_USBH
 int32_t opt_ui_usbh(void) { return (int32_t)usbh_mode(); }       /* SYSTEM > USB's MODE: 0 DEVICE, 1 HOST */
