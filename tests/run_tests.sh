@@ -65,6 +65,8 @@ run fastmath sh -c "$CC -O2 -w -o $OUT/fastmath_test tests/fastmath_test.c -lm &
 run installer "$PY" tests/install_test.py
 # the check on an app's RAM code (tools/ramcode.py, plat.h PLAT_RAM_CODE): RAM -> RAM passes, into XIP fails
 run ramcode "$PY" tests/ramcode_test.py
+# the check that nothing calls the chip ROM or uses its addresses (tools/romref.py): a constant kept as a number passes
+run romref "$PY" tests/romref_test.py
 # the build's check that a function is in the RAM code run, _rt_start.._rt_end wherever app.ld puts it (tools/ram_run.py)
 run ram-run "$PY" tests/ram_run_test.py
 # the web installer's m-bootloader step (web/fm1ota.js installBoot) against a simulated FM-1, and finding the FM-1 by
