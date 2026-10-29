@@ -5,7 +5,7 @@
 name = "Optimist"             # (shown: the site, the installer, the emulator page; the build's files are lower case: optimist-X.Y.fwsc)
 id_prefix = "FM-1_79"          # a trial identity (dev FM-1_7900), not Optimist's FM-1_700
 usb_manufacturer = "Optimist"
-usb_product = "Optimist trial FM-1"
+usb_product = "Optimist"         # (the MIDI device and its ports, as Optimist's own firmware names them: tools find the port "Optimist")
 o2 = ["core/opt_core.c", "core/opt_fpu_*.c", "core/opt_ff.c", "core/opt_ffuni.c", "core/opt_pff.c"]
                                # Optimist's audio core and UI (ui/opt_ui.c): a unit of its own (its names never meet
                                # fm1-base's; fm1-base's canvas, device/gfx.c, compiled into it); opt_fpu_*: ACID, ANALOG
