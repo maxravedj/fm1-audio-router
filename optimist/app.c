@@ -43,6 +43,17 @@ const int32_t *app_usb_capture(const int32_t *lr, uint32_t n)
     return opt_core_capture(n);
 }
 
+/* the USB name (fm1.toml usb_name_fn; felucca-bsp FELUCCA_USB_NAME_FN, asked each time a host reads it): "FM1-XXXX", the
+ * MIDI device and its ports, and "FM1-XXXX In" / "FM1-XXXX Out" for the audio. XXXX as the Bluetooth name has it
+ * (opt_dev_id: the kept address's, else the flash ID's, which is the address fm1-base makes when none is kept) */
+int opt_dev_id(void);
+const char *app_usb_name(void)
+{
+    static char name[9];
+    plat_dev_name(name, opt_dev_id());
+    return name;
+}
+
 #ifdef PLAT_HOST
 static int flash_load(const char *path, uint32_t *sectors);
 #endif

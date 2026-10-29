@@ -381,8 +381,8 @@ def conf():
               "usb_audio_split = false", sep="\n")
     else:
         # USB audio as Optimist's own presents it (fm1.toml): two devices, named, the output on the FM-1's clock
-        print("usb_audio_out_feedback = true", "usb_audio_split = true", 'usb_audio_in_name = "Optimist In"',
-              'usb_audio_out_name = "Optimist Out"', 'usb_audio_in_channel_names = ["CH1", "CH2", "CH3", "CH4"]', sep="\n")
+        print("usb_audio_out_feedback = true", "usb_audio_split = true",
+              'usb_audio_in_channel_names = ["CH1", "CH2", "CH3", "CH4"]', sep="\n")   # (the devices' names follow usb_name_fn: "FM1-XXXX In" / "Out")
     import json
     print("ram_code_allow =", json.dumps(ram_code_allow(flags)))   # (the engines' places, FAST_ALLOW; ut_mix with USB audio)
     return 0

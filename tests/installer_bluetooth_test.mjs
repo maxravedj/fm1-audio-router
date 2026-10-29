@@ -32,7 +32,7 @@ function port(name, answers) {
 }
 const midi = (ports) => ({ inputs: new Map(ports.map((p, k) => ["i" + k, p.input])), outputs: new Map(ports.map((p, k) => ["o" + k, p.output])) });
 
-check(IS_BLUETOOTH("Optimist 112D Bluetooth") && IS_BLUETOOTH("FM-1 bluetooth") && !IS_BLUETOOTH("FM-1") && !IS_BLUETOOTH(""),
+check(IS_BLUETOOTH("FM1-112D Bluetooth") && IS_BLUETOOTH("Optimist 112D Bluetooth") && IS_BLUETOOTH("FM-1 bluetooth") && !IS_BLUETOOTH("FM-1") && !IS_BLUETOOTH(""),
       "IS_BLUETOOTH: any case, part of the name");
 
 // the paired port first, then the USB one: the USB one is found, the Bluetooth one is never sent anything

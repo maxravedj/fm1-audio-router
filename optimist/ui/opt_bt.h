@@ -142,6 +142,18 @@ int opt_ble_load(struct plat_ble_rec *r) { (void)r; return 0; }
 int opt_ble_save(const struct plat_ble_rec *r) { (void)r; return 0; }
 #endif
 
+/* this FM-1's four hex digits, for the USB name (app.c app_usb_name): the low two octets of the BLE address kept in the
+ * record (an FM-1 that named itself "Optimist XXXX" keeps its XXXX), else plat_dev_id() = what fm1-base's own stack
+ * makes the address's low two octets of when none is kept; -1: no flash ID either */
+int opt_dev_id(void)
+{
+#if FELUCCA_BLE || FELUCCA_BT_AUDIO
+    if (ble_addr_kept[6] == BLE_ADDR_KEPT && (ble_addr_kept[5] >> 6) == 3u)
+        return (int)((uint32_t)ble_addr_kept[1] << 8 | ble_addr_kept[0]);
+#endif
+    return plat_dev_id();
+}
+
 #if FELUCCA_BLE
 /* ---- the radio: SYSTEM > BT MIDI's ON / OFF (op_bt.c bt_enter, op_project.c) */
 static void ble_midi_set(uint8_t on)

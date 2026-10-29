@@ -73,7 +73,8 @@ void app_wifi_store_dirty(void);
 #endif
 #define APP_BLE_AT_BOOT (opt_ble_at_boot() != 0)
 int opt_ble_at_boot(void);
-#define BLE_DEVICE_NAME "Optimist"
+#define BLE_DEVICE_NAME "FM1-"                   /* the name "FM1-XXXX": ble/ble_cfg.h BLE_NAME_SEP "" (plat.h plat_dev_id) */
+#define BLE_NAME_SEP ""
 /* Optimist's own list of the Bluetooth MIDI devices (BLE_CENTRAL: ui/opt_bt_dev.h, its LAST and remembered devices with
  * their bonds) on fm1-base's central: the devices one by one (plat.h), the scan's reports and a pairing's keys to it */
 #if defined(FM1B_BLE_CENTRAL) && FM1B_BLE_CENTRAL
