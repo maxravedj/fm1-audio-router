@@ -194,7 +194,9 @@ def host_dual(dual, path):
         path.write_text(text + extra)
 
 
-BT_ITEMS = ("FELUCCA_BLE", "FELUCCA_BLE_BOND", "FELUCCA_BLE_CENTRAL", "FELUCCA_BT_AUDIO", "FELUCCA_BT_AFH")
+BT_ITEMS = ("FELUCCA_BLE", "FELUCCA_BLE_BOND", "FELUCCA_BLE_CENTRAL", "FELUCCA_BT_AUDIO")
+# (BT_AFH: retired on Optimist 2026-10-29, Bluetooth audio always hops adaptively: pinned on, as the release had it)
+BT_PINNED = {"FELUCCA_BT_AFH": 1}
 
 
 def ble_peers_define(flags, path):
@@ -218,6 +220,7 @@ def host_bt(flags, path):
     if os.environ.get("OPT_HOST_BT") != "1":
         return
     lines = "".join(f"#define {k} {flags.get(k, 0)}\n" for k in BT_ITEMS)
+    lines += "".join(f"#define {k} {v}\n" for k, v in BT_PINNED.items())
     extra = ("/* the trial (gen_optimist.py host_bt, OPT_HOST_BT=1): the profile's Bluetooth on the host too */\n"
              f"#if defined(PLAT_HOST)\n{lines}#endif\n")
     text = path.read_text()
@@ -369,10 +372,8 @@ def conf():
     if flags.get("FELUCCA_USB_HOST", 0):
         # the USB MIDI host (USB_HOST): fm1-base's (felucca-bsp's chip/usb_host.c), SYSTEM > USB's MODE HOST (ui/opt_usbh.h)
         print("usb_host = true")
-    if ble and flags.get("FELUCCA_BLE_DIAG", 0):
-        print("ble_diag = true")                         # (BLE_DIAG: the link layer's diagnostics, fm1-base's log: btlog)
-    if audio and flags.get("FELUCCA_BT_DIAG", 0):
-        print("bt_log = true")                           # (BT_DIAG: the audio's step-by-step lines on that log)
+    # (Optimist's BLE_DIAG and BT_DIAG items were retired 2026-10-29: fm1-base's ble_diag stays fm1.toml's false, its bt_log
+    # off; both remain fm1-base's own options)
     if flags.get("FELUCCA_CDC", 0):
         # the serial console (USB_CONSOLE, ui/opt_console.h): as on Optimist, no USB audio beside it (its endpoint, EP3,
         # is the output's feedback; the split functions have no room for it)
