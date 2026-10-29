@@ -98,6 +98,14 @@ static inline uint32_t fm1_cnum(void)
     uint32_t (*volatile f)(void) = plat_core;
     return f();
 }
+/* the same, always inlined: for RAM code whose caller has no other copy (an engine's "code in RAM", eng_fm6.c fm6_bus;
+ * fm1_cnum's own out-of-line copy is XIP code) */
+#define FM1_CNUM_RAM 1
+static inline __attribute__((always_inline)) uint32_t fm1_cnum_ram(void)
+{
+    uint32_t (*volatile f)(void) = plat_core;
+    return f();
+}
 /* ---- the second core's jobs' stack (system/stackmark.h STK_C1_*: SYSTEM > INFO's RAM line): felucca-bsp's fm1_cpu1_ustack,
  * fm1.toml cpu2_stack bytes (FM1_CPU1_USTACK_BYTES, the build's flag; felucca-bsp's 2816 without), its lowest 256 B the guard;
  * plat_cpu2_stack how deep it went (0: CPU1 never started; the host: 0) */
