@@ -467,7 +467,8 @@ int main(void)
     /* 13b. MODE JAM's pick: an Optimist name (FM1- and four capital hex digits), WPA2-PSK, not our own, the strongest first, one that
      * refused the default password left alone for a while */
     {
-        struct wn_ap a1 = {{0}}, a2 = {{0}}, a3 = {{0}}, a4 = {{0}};
+        struct wn_ap a1, a2, a3, a4;
+        memset(&a1, 0, sizeof a1), memset(&a2, 0, sizeof a2), memset(&a3, 0, sizeof a3), memset(&a4, 0, sizeof a4);
         wc_tab.n = 0;
         check(wc_is_optimist_name((const uint8_t *)"FM1-A1B2", 8) && !wc_is_optimist_name((const uint8_t *)"FM1-a1b2", 8) &&
               !wc_is_optimist_name((const uint8_t *)"FM1-A1B", 7) && !wc_is_optimist_name((const uint8_t *)"HOMEWIFI", 8) &&
