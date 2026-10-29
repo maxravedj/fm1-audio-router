@@ -50,7 +50,13 @@
  *   power                        a power-off and on: .noinit lost (the crash record), the flash kept, then the boot
  *                                (expect crashes: the history's records, crash_count: .noinit's count, crash_boot_rc:
  *                                the last boot's save, 1 kept, 0 nothing new, < 0 not kept; the history over "sysex
- *                                F0 7D 4C 48 F7", cleared with "sysex F0 7D 4C 48 43 4C 52 F7")
+ *                                F0 7D 4C 48 F7", cleared with "sysex F0 7D 4C 48 43 4C 52 F7"); the debug stats' queue
+ *                                lost too (device/dbgstats.c: "crash" and "reboot" keep it)
+ *   stats_switch 1|0             the debug stats on / off (plat_stats_enable, as an app's setting does; expect stats:
+ *                                the records in the flash, stats_pending: queued, stats_on, stats_rc: the last write's;
+ *                                read over "sysex F0 7D 4C 53 F7", cleared with "sysex F0 7D 4C 53 43 4C 52 F7")
+ *   ota_stage / ota_unstage      an update staged as ota.c leaves it (a word at 0xE0000: the stats write nothing), and
+ *                                the staging erased whole (0xE0000..0xE4FFF: the stats and the crash history with it)
  *   data FILE OFFSET             a file into the simulated data area (plat_data) at OFFSET, in any of its windows
  *                                (plat.h), up to that window's end
  *   data_erase OFFSET            plat_data_erase(OFFSET), as an app calls it (expect data_rc: what it returned)
@@ -1172,6 +1178,72 @@ static void hcr_boot(void)                          /* main_fm1.c fm1_main's: a 
     memcpy(r.r, hcr.r, sizeof r.r);
     hcr_rc = cl_boot(&r, &hcr.kept, &hcr.busy);
 }
+/* the debug stats (device/dbgstats.c) over the simulated flash's last staging sector, as main_fm1.c keeps them: its
+ * queue (.noinit on the device) kept by "crash" and "reboot", lost by "power"; a snapshot every 5 minutes of the
+ * simulated uptime while the app has them on; the crash's at the boot. "ota_stage" / "ota_unstage" stage an update as
+ * ota.c leaves the area (a loader's first word at 0xE0000) and erase it whole; "sysex F0 7D 4C 53 F7" asks for them,
+ * expect stats / stats_pending / stats_on / stats_rc read them */
+#define DS_NOINIT
+#ifdef APP_STATS_LAYOUT
+#define DS_LAYOUT APP_STATS_LAYOUT
+#else
+#define DS_LAYOUT 0
+#endif
+#include "dbgstats.c"
+#define HDS_OTA_AREA 0xE0000u                       /* ota.c's OTA_AREA and OTA_RES (0xE4F00) */
+#define HDS_OTA_RES 0xE4F00u
+static int ds_in(uint32_t off, uint32_t n) { return off >= DS_LO && n <= DS_SLOTS * DS_REC - (off - DS_LO); }
+static int ds_read(uint32_t off, void *dst, uint32_t n)
+{
+    data_init();
+    if (!ds_in(off, n))
+        return -1;
+    memcpy(dst, &data_area[off - DATA_BASE], n);
+    return 0;
+}
+static int ds_erase(uint32_t off)
+{
+    data_init();
+    if (off != DS_LO)
+        return -1;
+    memset(&data_area[off - DATA_BASE], 0xFF, 0x1000u);
+    return 0;
+}
+static int ds_prog(uint32_t off, const void *src, uint32_t n)
+{
+    uint32_t i;
+    data_init();
+    if (!ds_in(off, n) || (off & 0xFFu) + n > 256u)
+        return -1;                                  /* (as the device's driver: within a page) */
+    for (i = 0; i < n; i++)
+        data_area[off - DATA_BASE + i] &= ((const uint8_t *)src)[i];
+    return 0;
+}
+static int ds_send(const uint8_t *f, uint32_t n) { return plat_sysex_send(f, n); }
+static int ds_staged(void)
+{
+    static const uint8_t E[4] = {0xFF, 0xFF, 0xFF, 0xFF};
+    data_init();
+    return memcmp(&data_area[HDS_OTA_AREA - DATA_BASE], E, 4) || memcmp(&data_area[HDS_OTA_RES - DATA_BASE], E, 4);
+}
+static int ds_quiet(void)
+{
+#ifdef APP_STATS_QUIET
+    return app_stats_quiet();
+#else
+    return 1;
+#endif
+}
+void plat_stats_enable(int on) { ds_enable(on); }
+int plat_stats_on(void) { return ds_on; }
+static uint32_t hds_boots, hds_halves;              /* starts since the power-on (fm1b_dbg.boots), halves since the boot */
+static void hds_boot(void)                          /* main_fm1.c stats_keep: the queue, a crash's snapshot */
+{
+    hds_boots++;
+    hds_halves = 0;
+    ds_init();
+    (void)ds_boot(hcr.magic == HCR_MAGIC ? hcr.count : 0u);
+}
 #if FM1B_SD
 /* the SD card (plat.h plat_sd_*): an image file, its 512-byte blocks read and written in place (FM1B_SD=FILE in the
  * environment at the start, the script's sd FILE | sd out later; plat_sd_init finds the card then), the runs one at a
@@ -1441,8 +1513,9 @@ int plat_store_save(uint32_t obj, const void *src, uint32_t len)
 /* the whole flash as a file (flash_dump / flash_load, FM1B_FLASH): a 1 MiB image at the FM-1's offsets, a reference
  * FM-1's flash read whole, say. What the simulator has of it: plat.h's data windows, byte for byte, and the store's
  * objects as device/storage.c keeps them (each at its APP_STORE_MAP offset, A then B: a 32-byte header at 0, the
- * payload at 256; the current copy is the valid one with the highest seq), and the crash history's two sectors in the
- * update's staging (device/crashlog.c CL_LO). The rest (the head, the app area, the rest of the staging, the SDK's
+ * payload at 256; the current copy is the valid one with the highest seq), the crash history's two sectors in the
+ * update's staging (device/crashlog.c CL_LO) and the debug stats' (device/dbgstats.c DS_LO). The rest (the head, the
+ * app area, the rest of the staging, the SDK's
  * sectors) is not the simulator's: erased in a dump, left out of a load */
 #define HIMG_SIZE 0x100000u
 #define HIMG_MAGIC 0x30583058u                  /* storage.c's ST_MAGIC, "X0X0" */
@@ -1489,6 +1562,7 @@ static int himg_dump(const char *path)
         if (PLAT_DATA_OK(off, 0x1000u))
             memcpy(&himg[off], plat_data(off), 0x1000u);
     memcpy(&himg[CL_LO], &data_area[CL_LO - DATA_BASE], CL_SECTORS * 0x1000u);   /* (the crash history) */
+    memcpy(&himg[DS_LO], &data_area[DS_LO - DATA_BASE], 0x1000u);   /* (the debug stats) */
     for (obj = 0; obj < OBJ_NOBJ; obj++) {      /* copy A, seq 1 (B erased): what a first save leaves */
         uint32_t s = himg_sector(obj, 0);
         uint8_t *h = &himg[s];
@@ -1526,6 +1600,7 @@ static int himg_load(const char *path, uint32_t *objs)   /* 0 = loaded (*objs: t
         if (PLAT_DATA_OK(off, 0x1000u))
             memcpy(&data_area[off - DATA_BASE], &himg[off], 0x1000u);
     memcpy(&data_area[CL_LO - DATA_BASE], &himg[CL_LO], CL_SECTORS * 0x1000u);   /* (the crash history) */
+    memcpy(&data_area[DS_LO - DATA_BASE], &himg[DS_LO], 0x1000u);   /* (the debug stats) */
     *objs = 0;
     for (obj = 0; obj < OBJ_NOBJ; obj++) {
         uint32_t sa = 0, sb = 0;
@@ -1545,6 +1620,16 @@ static int himg_load(const char *path, uint32_t *objs)   /* 0 = loaded (*objs: t
 
 static uint32_t cpu_pct;
 uint32_t plat_cpu_pct(void) { return cpu_pct; }
+static void ds_fill(ds_rec_t *r)                    /* what the simulator has of main_fm1.c's counters (the rest 0) */
+{
+    r->up_s = (now_ms - hcr_boot_ms) / 1000u, r->halves = hds_halves;
+    r->cpu_q12 = (uint16_t)(cpu_pct < 1599u ? cpu_pct * 4096u / 100u : 65535u);
+    r->boots = (uint8_t)(hds_boots < 255u ? hds_boots : 255u);
+    r->crashes = hcr.magic == HCR_MAGIC ? (uint8_t)(hcr.count < 255u ? hcr.count : 255u) : 0u;
+#ifdef APP_STATS
+    app_stats(r->app);
+#endif
+}
 #ifdef APP_CPU_KHZ
 uint32_t plat_cpu_khz(void) { return 0; }        /* (no clock to speak of: the host's) */
 #endif
@@ -2050,6 +2135,7 @@ static void wifi_tick(void)
 static void boot(void)
 {
     hcr_boot();                                     /* a crash before this boot into the flash history (main_fm1.c) */
+    hds_boot();                                     /* the debug stats' queue, a crash's snapshot (main_fm1.c) */
     palette_set(APP_PALETTE);                       /* as the device does at boot */
 #if FM1B_WIFI_OWN
     wifi_own_forget();                              /* (a reboot: the Wi-Fi stack's RAM as after a restart) */
@@ -2159,7 +2245,9 @@ static void run_ms(uint32_t ms)
                 }
             }
             audio_due_ms += APP_BLOCK * 1000.0 / 44100.0;
+            hds_halves++;
         }
+        ds_poll(now_ms - hcr_boot_ms, 0u, 0u);       /* (the debug stats: main_fm1.c's pass, once a millisecond) */
         if (sim_listen && now_ms % 2000u == 0) {        /* the reader's HELLO, as it sends it */
             static const uint8_t HELLO[] = {ANN_H0, ANN_H1, ANN_H2, ANN_HELLO, ANN_VER};
             ann_frame(HELLO, sizeof HELLO, now_ms);
@@ -2278,6 +2366,17 @@ static int expect(const char *what, const char *val)
 #endif
     else if (!strcmp(what, "store_tries"))
         got = (int)store_tries;
+    else if (!strcmp(what, "stats")) {             /* the debug stats' records in the flash (at most 60) */
+        uint8_t at[DS_SLOTS];
+        got = (int)ds_list(at);
+    } else if (!strcmp(what, "stats_pending")) {   /* their queue's not in the flash yet */
+        uint32_t j;
+        for (j = 0, got = 0; j < ds_ni.nq; j++)
+            got += !ds_ni.q[j].seq;
+    } else if (!strcmp(what, "stats_on"))          /* the switch (plat_stats_enable) */
+        got = ds_on;
+    else if (!strcmp(what, "stats_rc"))            /* the last write's: 0 kept, < 0 not (-7: an update staged) */
+        got = ds_last_rc;
     else if (!strcmp(what, "crashes")) {           /* the flash history's records, as a readout lists them (at most 8) */
         uint32_t at[CL_KEEP];
         got = (int)cl_list(at);
@@ -2409,8 +2508,8 @@ static int serve(const char *dir)
             }
             if (n < 3 || raw[0] != 0xF0 || raw[n - 1] != 0xF7)
                 continue;
-            if (cl_request(raw + 1, n - 2u))
-                continue;                            /* (the crash history: the platform's, before the app's) */
+            if (cl_request(raw + 1, n - 2u) || ds_request(raw + 1, n - 2u))
+                continue;                            /* (the crash history, the stats: the platform's, before the app's) */
 #if FM1B_COMPANION
 #ifdef APP_SYSEX
             if (n - 2u <= 640u && app_sysex(raw + 1, n - 2u))
@@ -2533,8 +2632,8 @@ static int hsx_in(const char *hex)
 #endif
     if (!ok || n - 2u > HOST_SX_MAX)
         return 0;                                 /* (a status byte inside, or too long: the device drops it) */
-    if (cl_request(raw + 1, n - 2u))
-        return 0;                                 /* (the crash history: the platform's, before the app's) */
+    if (cl_request(raw + 1, n - 2u) || ds_request(raw + 1, n - 2u))
+        return 0;                                 /* (the crash history, the stats: the platform's, before the app's) */
 #ifdef APP_SYSEX
     if (app_sysex(raw + 1, n - 2u))
         return 0;                                 /* (the app's first, as the device's main loop offers it) */
@@ -2856,9 +2955,11 @@ int main(int argc, char **argv)
             usbh_reboot();                      /* (every boot is a device: plat_usb_host) */
             boot();
         } else if (!strcmp(cmd, "crash") || !strcmp(cmd, "crash_in_save") || !strcmp(cmd, "power")) {
-            if (!strcmp(cmd, "power"))
+            if (!strcmp(cmd, "power")) {
                 memset(&hcr, 0, sizeof hcr);    /* (.noinit lost; the flash kept) */
-            else                                /* crash [PC [VEC]] (hex): the fault, then the restart */
+                memset(&ds_ni, 0x5A, sizeof ds_ni);   /* (the stats' queue: what a power-on finds, not its own) */
+                hds_boots = 0;                  /* (fm1b_dbg.boots: from 0 after a power-on) */
+            } else                               /* crash [PC [VEC]] (hex): the fault, then the restart */
                 hcr_crash(a[0] ? (uint32_t)strtoul(a, 0, 16) : 0x02012344u, b[0] ? (uint32_t)strtoul(b, 0, 16) : 3u,
                           cmd[5] != 0);
 #ifdef APP_HOST_REBOOT
@@ -2867,6 +2968,14 @@ int main(int argc, char **argv)
             boot();
             printf("  %s at %u ms: restarted, crash count %u, history %d\n", cmd, now_ms,
                    hcr.magic == HCR_MAGIC ? hcr.count : 0u, hcr_rc);
+        } else if (!strcmp(cmd, "stats_switch")) {   /* stats_switch 1|0: plat_stats_enable, as an app's setting */
+            plat_stats_enable(atoi(a));
+        } else if (!strcmp(cmd, "ota_stage") || !strcmp(cmd, "ota_unstage")) {
+            data_init();                        /* (ota.c: a loader's first word at 0xE0000; its unstage: all 5) */
+            if (cmd[4] == 's')
+                memset(&data_area[HDS_OTA_AREA - DATA_BASE], 0x00, 4u);
+            else
+                memset(&data_area[HDS_OTA_AREA - DATA_BASE], 0xFF, 0x5000u);
         } else if (!strcmp(cmd, "listen")) {
             static const uint8_t HELLO[] = {ANN_H0, ANN_H1, ANN_H2, ANN_HELLO, ANN_VER};
             sim_listen = 1;
