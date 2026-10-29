@@ -14,7 +14,8 @@ tests/dev/usb_audio.txt, the checks here:
      Optimist's USB input track (APP_USB_PLAY) while it records: every frame of it taken (usb_play_frames), CH1 / CH2
      the signal itself through the master bus at its fixed level (the user, 2026-10-29: the volume knob never reaches
      USB; its gain within 0.1 %, the rest under -40 dB), the FM-1's own output (its speaker's, the simulator's WAV of
-     it) the same at the knob's quarter (within 1 %, the rest under -30 dB: the output's DC blocker), CH3 / CH4
+     it) the same at the knob's quarter (within 1 %, the rest under -30 dB: the output's DC blocker; LIMIT's lookahead,
+     64 samples, after the capture when it is on), CH3 / CH4
      silence (T3, DRUMS: nothing played; RET C, the reverb's return, routed there too (uad.18 6): no send reaches it,
      it adds nothing. Its signal on its channels, the knob at any position: Optimist's tests/usb_audio_route_test.c)"""
 import math
@@ -77,12 +78,20 @@ def main() -> int:
     if any(f[2] or f[3] for f in m):
         fail("CH3 / CH4 silent")
     knob = 2048 * 2048 / 4096 / 4096                 # (tests/dev/usb_audio.txt's master 2048: APP_GAIN, the square)
-    for c, name in ((0, "L"), (1, "R")):          # (the codec's scale: the capture's Q15 x 256 = the output's 24 bit / 128)
-        g, res = fit([m[i][c] / 256 * 32767 / 65536 for i in range(len(m))], [spk[i][c] for i in range(len(m))])
-        if abs(g / knob - 1) > 1e-2 or res > -30:
-            fail(f"the FM-1's own output {name}: the capture's at the knob's {knob:.3f} (gain {g:.5f}, the rest {res:.1f} dB)")
-        print(f"  ok   usbproof master {name}: {len(m)} frames, the FM-1's own output at the knob's {knob:.3f} (gain {g:.5f}, "
-              f"the rest {res:.1f} dB), USB's at the fixed level; CH3 / CH4 silent")
+    lo, hi = 4000, len(m) - 4000                     # (the codec's scale: the capture's Q15 x 256 = the output's 24 bit / 128)
+
+    def out_fit(c: int, lag: int) -> tuple[float, float]:
+        return fit([m[i][c] / 256 * 32767 / 65536 for i in range(lo, hi)], [spk[i + lag][c] for i in range(lo, hi)])
+    # the output after the capture by LIMIT's lookahead when it is on (64 samples: master_comp.c MLIM_N), else 0: the
+    # lag both sides fit best (441 Hz on R: no lag of 1 kHz's period passes for another)
+    lag = min(range(0, 129), key=lambda k: out_fit(0, k)[1] + out_fit(1, k)[1])
+    for c, name in ((0, "L"), (1, "R")):
+        g, res = out_fit(c, lag)
+        if lag not in (0, 64) or abs(g / knob - 1) > 1e-2 or res > -30:
+            fail(f"the FM-1's own output {name}: the capture's at the knob's {knob:.3f}, {lag} samples later (gain {g:.5f}, "
+                 f"the rest {res:.1f} dB)")
+        print(f"  ok   usbproof master {name}: {len(m)} frames, the FM-1's own output the capture's at the knob's {knob:.3f}, "
+              f"{lag} samples later (gain {g:.5f}, the rest {res:.1f} dB): USB's at the fixed level; CH3 / CH4 silent")
     s0 = next(i for i, f in enumerate(m) if f[0] or f[1]) - 1   # (sig[0] is 0, 0)
     lo, hi = 2000, n - 2000
     for c, name in ((0, "L 1 kHz"), (1, "R 441 Hz")):
