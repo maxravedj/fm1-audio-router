@@ -80,7 +80,7 @@ static uint16_t crc16(const uint8_t *p, int n)
     for (int i = 0; i < n; i++) {
         r ^= (uint16_t)(p[i] << 8);
         for (int k = 0; k < 8; k++)
-            r = (uint16_t)(r & 0x8000u ? (r << 1) ^ 0x1021u : r << 1);
+            r = (uint16_t)(r & 0x8000u ? ((uint32_t)r << 1) ^ 0x1021u : (uint32_t)r << 1);
     }
     return r;
 }

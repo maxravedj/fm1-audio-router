@@ -48,7 +48,7 @@ static uint16_t sd_crc16_byte(uint16_t c, uint8_t b)   /* CRC16-CCITT (x^16 + x^
     uint32_t i;
     c ^= (uint16_t)(b << 8);
     for (i = 0; i < 8u; i++)
-        c = (uint16_t)(c & 0x8000u ? (c << 1) ^ 0x1021u : c << 1);
+        c = (uint16_t)(c & 0x8000u ? ((uint32_t)c << 1) ^ 0x1021u : (uint32_t)c << 1);
     return c;
 }
 
