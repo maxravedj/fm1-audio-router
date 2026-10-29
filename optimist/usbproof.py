@@ -48,7 +48,7 @@ def fit(x: list[float], y: list[float]) -> tuple[float, float]:
     """y ~ g x: the gain and what is left (dB under the fitted signal)"""
     g = sum(a * b for a, b in zip(x, y)) / sum(a * a for a in x)
     res = sum((b - g * a) ** 2 for a, b in zip(x, y))
-    return g, 10 * math.log10(res / sum((g * a) ** 2 for a in x))
+    return g, 10 * math.log10(res / sum((g * a) ** 2 for a in x)) if res else -math.inf   # (0: the same samples)
 
 
 def fail(msg: str) -> None:
@@ -99,7 +99,7 @@ def main() -> int:
         if abs(g - 1) > 1e-3 or res > -40:
             fail(f"the computer's {name} through the USB input track and the master: gain {g:.5f}, the rest {res:.1f} dB")
         print(f"  ok   usbproof the computer's {name}: through Optimist's USB input track to the master and back, gain "
-              f"{g:.5f}, the rest {res:.1f} dB (the knob at half: not in it)")
+              f"{g:.5f}, the rest {res:.1f} dB (the knob at half: not in it; -inf: the same samples)")
     print("  ok usbproof: the trial's USB audio, out and in")
     return 0
 
