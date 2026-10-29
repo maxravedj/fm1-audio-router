@@ -101,7 +101,7 @@ void app_splash(void);
  * half), the CPU guard's steps, the late halves, MIDI in lost (the stacks are the platform's own: plat_stack_left);
  * written at a stop (APP_STATS_QUIET: the transport stopped) */
 #define APP_STATS
-#define APP_STATS_LAYOUT "c10 1 c60 1 guard 1 drops 2 midi 2"
+#define APP_STATS_LAYOUT "c10 1 cmax 1 guard 1 drops 2 midi 2"
 #define APP_STATS_QUIET
 /* the second core (fm1.toml cpu2, cpu2_fallback: Optimist's DUAL on fm1-base's, core/opt_dual.c): a job not back within
  * two of Optimist's 32-frame mix blocks retires it, as Optimist's own join bound (system/dual.c DUAL_JOIN_US: 1,451 us at

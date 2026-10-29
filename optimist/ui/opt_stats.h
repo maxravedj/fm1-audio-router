@@ -14,8 +14,8 @@ void app_stats(uint8_t out[PLAT_STATS_APP])          /* (the stacks: the platfor
 {
     uint32_t ms = plat_ms();
     _Static_assert(PLAT_STATS_APP == 7u, "app.h APP_STATS_LAYOUT: 7 bytes");
-    out[0] = opt_st_u8(ovl_win_pct(OVL_CPU0, ms, OVL_W10));   /* c10, c60: SYSTEM > INFO's CPU0 MAX 10S, MAX 1M */
-    out[1] = opt_st_u8(ovl_win_pct(OVL_CPU0, ms, OVL_W60));
+    out[0] = opt_st_u8(ovl_win_pct(OVL_CPU0, ms, OVL_W10));   /* c10, cmax: SYSTEM > INFO's CPU0 MAX 10S, MAX (since boot) */
+    out[1] = opt_st_u8(ovl_maxall_pct(OVL_CPU0));
 #if FELUCCA_CPU_GUARD
     out[2] = opt_st_u8(cg.steps);                    /* guard: the CPU guard's steps up (system/cpuguard.h) */
 #endif
