@@ -34,8 +34,8 @@
 
 _Static_assert(sizeof(struct plat_wifi_ap) == sizeof(struct wn_ap), "plat.h plat_wifi_ap: wifi_nets.h wn_ap");
 _Static_assert(PLAT_WIFI_STORE_SIZE == WN_STORE_SIZE, "plat.h PLAT_WIFI_STORE_SIZE: wifi_nets.h WN_STORE_SIZE");
-_Static_assert(WIFI_MODE_OFF == WN_MODE_OFF && WIFI_MODE_AUTO == WN_MODE_AUTO && WIFI_MODE_MAN == WN_MODE_MAN &&
-               WIFI_MODE_AP == WN_MODE_AP && WIFI_MODE_AP_MAN == WN_MODE_AP_MAN,
+_Static_assert((int)WIFI_MODE_OFF == (int)WN_MODE_OFF && (int)WIFI_MODE_AUTO == (int)WN_MODE_AUTO && (int)WIFI_MODE_MAN == (int)WN_MODE_MAN &&
+               (int)WIFI_MODE_AP == (int)WN_MODE_AP && (int)WIFI_MODE_AP_MAN == (int)WN_MODE_AP_MAN,
                "plat.h WIFI_MODE_*: wifi_nets.h's");
 
 #define WC_CH_MS 150u                    /* one channel's listening in a scan */
@@ -379,9 +379,9 @@ static void wl_stop(void)                         /* the service off (the statio
 
 /* ---- the connection manager (Optimist's wifi_conn.c) */
 enum { WC_OFF, WC_RADIO, WC_IDLE, WC_SCAN, WC_PMK, WC_AUTH, WC_ASSOC, WC_HS, WC_UP, WC_FAIL, WC_LINK, WC_PRE };
-_Static_assert(WC_OFF == WIFI_STEP_OFF && WC_PRE == WIFI_STEP_PRE && WC_FAIL == WIFI_STEP_FAIL, "plat.h WIFI_STEP_*");
+_Static_assert((int)WC_OFF == (int)WIFI_STEP_OFF && (int)WC_PRE == (int)WIFI_STEP_PRE && (int)WC_FAIL == (int)WIFI_STEP_FAIL, "plat.h WIFI_STEP_*");
 enum { WCF_NONE, WCF_NOCAL, WCF_NOAP, WCF_AUTH, WCF_ASSOC, WCF_HS, WCF_KEY, WCF_LOST };
-_Static_assert(WCF_KEY == WIFI_FAIL_KEY && WCF_NOCAL == WIFI_FAIL_RADIO && WCF_LOST == WIFI_FAIL_LOST, "plat.h WIFI_FAIL_*");
+_Static_assert((int)WCF_KEY == (int)WIFI_FAIL_KEY && (int)WCF_NOCAL == (int)WIFI_FAIL_RADIO && (int)WCF_LOST == (int)WIFI_FAIL_LOST, "plat.h WIFI_FAIL_*");
 static struct {
     uint8_t st, fail, ch, tries;
     uint8_t scan_want;                            /* the app asks for scans (its list is on screen, nothing joined) */
