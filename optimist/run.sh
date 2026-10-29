@@ -183,8 +183,14 @@ run_profile() {                     # $1: dev (the trial's profile copy), none (
     fi
 }
 
+# Optimist's simulator needs emcc and node (tools/sim.py --wasm): without them its checks are said NOT run, as
+# Optimist's own tests/run_tests.sh skips its simulator test, and the rest runs (OPTSIM=0 says it outright)
+if [ "${OPTSIM:-1}" != 0 ] && ! { command -v emcc >/dev/null 2>&1 && command -v node >/dev/null 2>&1; }; then
+    echo "optimist/run.sh: Optimist's simulator's checks NOT run (no emcc or node): optsim.py, storage_boot / keep / touched, edproof.py"
+    OPTSIM=0 SIMNOTE=", Optimist's simulator NOT run"
+fi
 for p in ${PROFILES:-none sd bt lights wifi wifi-ap usbhost console items dev}; do
     run_profile "$p"
 done
 unset OPT_PROFILE
-echo "optimist/run.sh: every check passed (${PROFILES:-none sd bt lights wifi wifi-ap usbhost console items dev})"
+echo "optimist/run.sh: every check passed (${PROFILES:-none sd bt lights wifi wifi-ap usbhost console items dev}${SIMNOTE:-})"
