@@ -476,8 +476,7 @@ jack in
 wait 300
 expect hp 1
 expect oc 0
-tap GLO
-wait 100
+# (GLO opens the one of GLOBAL / SYSTEM open last, SYSTEM since HOME left it: 2026-10-29)
 tap GLO
 wait 100
 turn SELECT -30
@@ -503,8 +502,7 @@ jack out
 wait 300
 expect hp 0
 expect oc 2
-tap GLO
-wait 100
+# (GLO opens the one of GLOBAL / SYSTEM open last, SYSTEM since HOME left it: 2026-10-29)
 tap GLO
 wait 100
 turn SELECT -30
@@ -577,8 +575,7 @@ expect playing 0
 # computer's link (without BT_PROJ only the mirror's 106, INFO, 108, 109 and 111 are)
 tap HOME
 wait 100
-tap GLO
-wait 100
+# (GLO opens the one of GLOBAL / SYSTEM open last: SYSTEM, which the first block left by HOME; 2026-10-29)
 tap GLO
 wait 100
 spin SELECT -30
@@ -587,7 +584,7 @@ spin SELECT 2
 wait 100
 spin SELECT 1
 wait 100
-spin SELECT 2                                           # (DEBUG, General, USB, METERS, KEYS, then BLUETOOTH)
+spin SELECT 2                                           # (DEBUG, General, METERS, KEYS, then BLUETOOTH)
 wait 100
 spin K1 1
 wait 1500

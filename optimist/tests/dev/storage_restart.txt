@@ -74,6 +74,9 @@ wait 100
 expect gv2 116
 shot st-loaded.png
 # the tempo 120, hands off: the autosave's second copy, B at 0xFE000 (copy A, 0x9F000, stays the older)
+# (GLO opens the one of GLOBAL / SYSTEM open last, SYSTEM here: GLO twice is GLOBAL; 2026-10-29)
+tap GLO
+wait 100
 tap GLO
 wait 100
 turn K1 4
