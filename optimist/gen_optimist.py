@@ -308,6 +308,33 @@ def generate(tree):
     print(f"optimist {tree} (headers: {GEN}; profile {prof.name if prof else 'none: the source defaults'})")
 
 
+# The RAM functions of an engine's render path that call out of RAM or through a pointer (tools/ramcode.py), by the
+# engine's switch (Optimist's core.h FAST_RAM_<name>: its builder item "on, code in RAM"): in fm1.toml's
+# ram_code_allow while the engine's code is RAM code, out of it otherwise (a name there must be a RAM function)
+FAST_ALLOW = {
+    "analog": ["analog_render", "a2_fltb", "a2_filter"],   # (the float filter models, a2_models.c: XIP, through FAR)
+    "fm6": ["fm6_render"],
+    "prophet": ["prophet_render"],                    # (p5_render, its own unit: FAR, RAM code with it)
+}
+
+
+def ram_code_allow(flags):
+    """fm1.toml's ram_code_allow for this configuration: the file's, the engines' names by their places (FAST_ALLOW),
+    without ut_mix when there is no USB audio (the serial console)"""
+    import tomllib
+    allow = tomllib.loads((APP / "fm1.toml").read_text())["ram_code_allow"]
+    out = list(allow)
+    if "FAST_RAM_analog" in flags:                    # (an Optimist with the engines' places: theirs; an older one: the file's)
+        every = {f for names in FAST_ALLOW.values() for f in names}
+        out = [f for f in allow if f not in every]
+        for nm, names in FAST_ALLOW.items():
+            if flags.get(f"FAST_RAM_{nm}", 0):
+                out += [f for f in names if f not in out]
+    if flags.get("FELUCCA_CDC", 0):
+        out = [f for f in out if f != "ut_mix"]       # (ut_mix, the USB input track's mix, is not built without USB audio)
+    return out
+
+
 def conf():
     """--conf (fm1.toml conf_gen, run by tools/build.py before the build): fm1.toml's ble and bt_audio from the chosen
     configuration's BLE and BT_AUDIO (a profile with neither builds without the stack; OPT_PROFILE=none: neither), and
@@ -351,13 +378,12 @@ def conf():
         # is the output's feedback; the split functions have no room for it)
         print("usb_console = true", "usb_audio_in = false", "usb_audio_out = false", "usb_audio_out_feedback = false",
               "usb_audio_split = false", sep="\n")
-        import json, tomllib                            # (ut_mix, the USB input track's mix, is not built without USB audio)
-        allow = tomllib.loads((APP / "fm1.toml").read_text())["ram_code_allow"]
-        print("ram_code_allow =", json.dumps([f for f in allow if f != "ut_mix"]))
     else:
         # USB audio as Optimist's own presents it (fm1.toml): two devices, named, the output on the FM-1's clock
         print("usb_audio_out_feedback = true", "usb_audio_split = true", 'usb_audio_in_name = "Optimist In"',
               'usb_audio_out_name = "Optimist Out"', 'usb_audio_in_channel_names = ["CH1", "CH2", "CH3", "CH4"]', sep="\n")
+    import json
+    print("ram_code_allow =", json.dumps(ram_code_allow(flags)))   # (the engines' places, FAST_ALLOW; ut_mix with USB audio)
     return 0
 
 

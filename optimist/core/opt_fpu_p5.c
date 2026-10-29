@@ -5,6 +5,7 @@
  * core/opt_core.c already (eng_prophet.c includes it there without __PI32V2__): nothing here. The build's switches:
  * fm1.toml o2_include. */
 #if !defined(PLAT_HOST) && FELUCCA_ENG_PROPHET
+#define FAST_SECTION ".app_ram"                  /* ("on, code in RAM": fm1-base's RAM code, plat.h PLAT_RAM_CODE) */
 #include "engines/prophet/p5_dsp.c"
 #else
 typedef int opt_fpu_p5_empty;            /* (ISO C: a unit holds a declaration) */
