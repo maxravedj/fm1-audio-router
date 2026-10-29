@@ -9,7 +9,7 @@ tap GLO
 wait 100
 tap GLO
 wait 100
-turn SELECT 1
+turn SELECT 2
 wait 100
 expect gv4 0
 turn K4 1

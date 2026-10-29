@@ -12,7 +12,7 @@ tap GLO
 wait 100
 tap GLO
 wait 100
-spin SELECT 1
+spin SELECT 2
 wait 100
 expect gv1 1
 turn K1 -1

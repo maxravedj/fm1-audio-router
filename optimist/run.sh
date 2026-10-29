@@ -156,6 +156,7 @@ run_profile() {                     # $1: dev (the trial's profile copy), none (
     $H/optimist_host $T/storage.txt $H
     OPT_FLASH=$H/trial-flash.bin OPT_DUMP=$H/trial-flash2.bin $H/optimist_host $T/storage_restart.txt $H
     OPT_FLASH=$H/trial-flash2.bin $H/optimist_host $T/storage_resume.txt $H
+    $H/optimist_host optimist/tests/dbgstats.txt $H   # (SYSTEM > DEBUG STATS: fm1-base's stats, the setting kept)
     if [ "$1" != none ]; then       # (USB audio: a computer recording and playing, fm1-base's simulator: usbproof.py)
         "$PY" optimist/usbproof.py $H/optimist_host $H/usb
         "$PY" optimist/dualproof.py $H/optimist_host $H/dual single   # (the second core: the same samples, any split)

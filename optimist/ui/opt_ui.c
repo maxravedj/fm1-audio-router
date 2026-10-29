@@ -111,6 +111,7 @@ static void cv_mirror(uint32_t x, uint32_t y) { mir_blit(x, y, cv_w, cv_h, cv_px
 #include "ui/optimist/op_wifi.c"                  /* SYSTEM > WI-FI: the page and the password entry (on ui/opt_wifi.h's mirrors) */
 #endif
 #include "opt_console.h"                         /* its USB serial console on fm1-base's (USB_CONSOLE: after the editor) */
+#include "opt_stats.h"                           /* its part of fm1-base's debug stats (app.h APP_STATS: after the UI) */
 
 /* ---- the boot screen (fm1-base's APP_SPLASH, app.c app_splash: before app_init): Optimist's own, the dinghy logo,
  * "OPTIMIST" and the version (ui/splash.c, always built in Optimist: main.c boot_splash), on this unit's canvas */

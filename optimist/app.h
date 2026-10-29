@@ -96,6 +96,14 @@ void app_splash(void);
 #define APP_USB_PLAY
 #define APP_USB_CAPTURE
 #define APP_USB_STATS                    /* plat_usb_audio_stats: SYSTEM > INFO's USB counters (core/opt_core.c) */
+/* the debug stats (plat.h plat_stats_enable: SYSTEM > DEBUG > DEBUG STATS, Optimist's core/dbgstats.h): each record's
+ * 13 bytes of Optimist's own (ui/opt_stats.h app_stats): CPU0's longest half in the last 10 s, 1 min and since the
+ * start (% of a half), the CPU guard's steps, the stack with the least left (0 main, 1 interrupts, 2 the second
+ * core's; 255 none measured), the late halves, MIDI in lost, that stack's bytes left, the SRAM nothing is linked
+ * into; written at a stop (APP_STATS_QUIET: the transport stopped) */
+#define APP_STATS
+#define APP_STATS_LAYOUT "c10 1 c60 1 call 1 guard 1 stk 1 drops 2 midi 2 left 2 sram 2"
+#define APP_STATS_QUIET
 /* the second core (fm1.toml cpu2, cpu2_fallback: Optimist's DUAL on fm1-base's, core/opt_dual.c): a job not back within
  * two of Optimist's 32-frame mix blocks retires it, as Optimist's own join bound (system/dual.c DUAL_JOIN_US: 1,451 us at
  * 44.1 kHz; opt_dual.c checks the two agree), instead of felucca-bsp's 8 ms default (chip/fm1_cpu1.h, a bound per job:
