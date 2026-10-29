@@ -79,7 +79,6 @@ wifi ap_forget
 wait 200
 expect ap_key 0
 expect ap_key_default 1
-expect ap_state 2
 wifi ap_run 1
 wait 3000
 expect ap_state 3

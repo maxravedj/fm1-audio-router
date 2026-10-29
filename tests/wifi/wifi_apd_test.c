@@ -279,6 +279,7 @@ int main(void)
     }
     check(plat_wifi_step() == WIFI_STEP_OFF, "the station's manager rests in MODE AP");
     plat_wifi_mode(WIFI_MODE_OFF);
+    wifi_poll();
     check(plat_wifi_ap_state() == WIFI_AP_OFF, "MODE not AP: state OFF");
     plat_wifi_mode(WIFI_MODE_AP);
 

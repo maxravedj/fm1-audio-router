@@ -655,7 +655,13 @@ static void wc_scan_step(void)
 }
 static void wc_poll(void)                         /* once a main-loop pass: one step */
 {
+    static uint8_t mode_seen = 0xFFu;
     uint32_t now = own_ms();
+    if (wn_st.mode != mode_seen) {                /* MODE JAM just chosen: look at once, not after the next retry */
+        mode_seen = wn_st.mode;
+        if (mode_seen == WN_MODE_JAM)
+            wc.t_retry = now - WC_RETRY_MS;
+    }
     if (wc_mode_off() && wc.st != WC_OFF && wc.st != WC_RADIO) {   /* MODE OFF, in any state: everything stops */
         wc_enable(0);
         return;
