@@ -103,6 +103,10 @@ void app_splash(void);
 #define APP_STATS
 #define APP_STATS_LAYOUT "c10 1 cmax 1 guard 1 drops 2 midi 2"
 #define APP_STATS_QUIET
+/* the development readout over USB-MIDI (plat.h APP_LOG: F0 7D 4C 47 F7, tools/fm1_remote.py log): Optimist's lines
+ * after fm1-base's, where its memory went: the arena, the undo history's two parts (ui/opt_lg.h app_log) */
+#define APP_LOG
+void app_log(void (*line)(const char *t));
 /* the second core (fm1.toml cpu2, cpu2_fallback: Optimist's DUAL on fm1-base's, core/opt_dual.c): a job not back within
  * two of Optimist's 32-frame mix blocks retires it, as Optimist's own join bound (system/dual.c DUAL_JOIN_US: 1,451 us at
  * 44.1 kHz; opt_dual.c checks the two agree), instead of felucca-bsp's 8 ms default (chip/fm1_cpu1.h, a bound per job:

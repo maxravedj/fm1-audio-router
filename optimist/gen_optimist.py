@@ -20,7 +20,8 @@
    build writes: tools/optimist.py build), instead of the profile copy: the felucca_config.h is FILE with RELEASE_OFF
    (below) appended, felucca_config_profile.h FILE as it is (the profile as Optimist's own firmware would run it)
    as Optimist's host tests have them.
-   Bluetooth is the configuration's: fm1.toml's ble and bt_audio follow its BLE and BT_AUDIO (--conf, fm1.toml conf_gen).
+   Bluetooth and the cache RAM are the configuration's: fm1.toml's ble, bt_audio and cache_ram_ways follow its BLE,
+   BT_AUDIO and CACHE_RAM (--conf, fm1.toml conf_gen).
 3. build/optgen: Optimist's generated headers for the audio core (tables, samples, drum kits, the 909 samples,
    wavetables), in the profile's environment (its sample sets); made again only when Optimist's HEAD, its working
    tree or the profile changed (build/optgen/stamp)."""
@@ -37,9 +38,10 @@ GEN = BUILD / "optgen"
 HOST_ENV = {"FELUCCA_SAMPLES_SKIP": "", "FELUCCA_SLICE": "0"}
 PROFILE = "profiles/dev-bt.config"       # (Optimist's config/profiles/dev.config at 171e96a3, the trial's block after: with Bluetooth)
 # what the release leaves off whatever the configuration says, for lack of support in fm1-base's platform (the trial's
-# block in the profile copy says the same): never a data format or an address. Bluetooth (BLE, BT_AUDIO) is the
-# configuration's own: fm1.toml's ble / bt_audio follow it (conf_gen, --conf below)
-RELEASE_OFF = "# ---- the release: off for lack of support on fm1-base (its own app.ld and boot are its own)\nCACHE_RAM=0\n"
+# block in the profile copy says the same): never a data format or an address. Nothing today: Bluetooth (BLE,
+# BT_AUDIO) and the cache RAM (CACHE_RAM, fm1-base's cache_ram_ways since feat/cache-ram) are the configuration's own,
+# fm1.toml's ble / bt_audio / cache_ram_ways follow it (conf_gen, --conf below)
+RELEASE_OFF = ""
 MARKER = "# ---- the trial:"                   # (the copy's line where the trial's own changes start)
 # the audio core's and the UI's headers (Optimist tools/build.py generate(): its colours for the UI; its fonts are not
 # used (fm1-base's canvas draws with fm1-base's), its icons nowhere; the help lines' (PARAM_HELP) header alone: the
@@ -308,7 +310,7 @@ def generate(tree):
 def conf():
     """--conf (fm1.toml conf_gen, run by tools/build.py before the build): fm1.toml's ble and bt_audio from the chosen
     configuration's BLE and BT_AUDIO (a profile with neither builds without the stack; OPT_PROFILE=none: neither), and
-    ble_central from its BLE_CENTRAL, usb_host from its USB_HOST"""
+    ble_central from its BLE_CENTRAL, usb_host from its USB_HOST, cache_ram_ways from its CACHE_RAM"""
     prof = profile()
     flags = {}
     if prof is not None:
@@ -325,6 +327,10 @@ def conf():
         print("ble_central = 3" if flags["FELUCCA_BLE_CENTRAL"] == 3 else "ble_central = true")
     if flags.get("FELUCCA_BLE", 0) and flags.get("FELUCCA_BLE_BOND", 0):
         print("ble_pairing = true")                      # (BLE_BOND: a computer's pairing kept, ui/opt_bt.h opt_ble_save)
+    if flags.get("FELUCCA_CACHE_RAM", 0):
+        # the data cache's ways as RAM (CACHE_RAM: 2, 4 or 7): fm1-base's (felucca-bsp's fm1_cache_ram.h, plat_cache_ram;
+        # the trial's fm1_compat.h), the undo history's second part, the arena that much more of the SRAM
+        print(f"cache_ram_ways = {int(flags['FELUCCA_CACHE_RAM'])}")
     if flags.get("FELUCCA_WIFI", 0):
         # Wi-Fi + Link (WIFI_LINK): fm1-base's own Wi-Fi stack, which is Optimist's moved, on the radio
         # its own Bluetooth stack starts (the builder refuses WIFI_LINK without BLE), and Ableton Link on it (link/:
