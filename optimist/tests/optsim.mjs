@@ -41,7 +41,7 @@ if (mode === "write") {
   tap("GLO"); turn("KNOB 1", 5);                       // the tempo: 111 -> 116
   tap("GLO");                                          // SYSTEM, GENERAL's KNOB COLORS on
   if (DEV) { turn("SELECT", 1); turn("KNOB 1", 1); } else { turn("SELECT", 3); turn("KNOB 1", 1); }
-  if (DEV) { turn("SELECT", 3); turn("KNOB 1", 3); }   // and USB AUDIO's MASTER NONE -> 1+2 (the routing, "UAR3"; past METERS and KEYS)
+  if (DEV) { turn("SELECT", 2); turn("KNOB 1", 3); }   // and USB AUDIO's MASTER NONE -> 1+2 (the routing, "UAR3"; past METERS: no KEYS page since fm1-next b9a394bc)
   tap("HOME");
   tap("SAVE"); turn("KNOB 2", 1); key(2); tap("SAVE"); tap("SAVE");   // PROJECT: SAVE to slot 3, YES, the name's SAVE
   turn("SELECT", DEV ? 1 : 2); turn("KNOB 2", 1); key(0); tap("SAVE"); tap("SAVE");   // USER: SAVE to U01, YES, the name's SAVE
