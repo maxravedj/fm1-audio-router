@@ -30,6 +30,8 @@
 #if defined(PLAT_HOST) || FM1B_WIFI_AP
 #include "wifi_ap.c"                         /* (MODE AP: wifi_own_ap.c; the host: its simulated access point too, host/wifi_air.c) */
 #include "wifi_ap_dhcp.c"
+#else
+#include "wifi_ap_key.c"                     /* (MODE JAM: an Optimist access point's default password, no MODE AP built; 74d77c2) */
 #endif
 
 _Static_assert(sizeof(struct plat_wifi_ap) == sizeof(struct wn_ap), "plat.h plat_wifi_ap: wifi_nets.h wn_ap");
