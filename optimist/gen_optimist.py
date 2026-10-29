@@ -162,7 +162,7 @@ def slot_check(layout, prof):
                          f" in the environment, not {end:#x}")
 
 
-SD_ITEMS = ("FELUCCA_SDCARD", "FELUCCA_LAYOUT", "FELUCCA_FAR_OK", "FELUCCA_SD_RING_KB", "FELUCCA_SD_REC_KB")
+SD_ITEMS = ("FELUCCA_SDCARD", "FELUCCA_LAYOUT", "FELUCCA_SD_RING_KB", "FELUCCA_SD_REC_KB")
 
 
 def host_sd(flags, path):

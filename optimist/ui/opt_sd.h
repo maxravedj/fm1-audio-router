@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Henri David */
-/* Optimist's SD card in the trial (builder item SDCARD, the SD card mode: LAYOUT 1, FAR_OK, ARENA, SD_RING, SD_REC;
+/* Optimist's SD card in the trial (builder item SDCARD, the SD card mode: LAYOUT 1, ARENA, SD_RING, SD_REC;
  * Optimist's docs/SD-CARD-DESIGN.md), after its storage, in felucca.c's order: its card code compiled unchanged
  * (storage/sd/sdcard.c with full FatFs, or Petit FatFs without the SD card mode's layout: core/opt_pff.c; its disk
  * layer, the card's own folder, the index, the browser, the saves, the
