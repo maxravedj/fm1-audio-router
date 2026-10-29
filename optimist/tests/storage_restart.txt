@@ -21,7 +21,7 @@ tap GLO
 wait 100
 tap GLO
 wait 100
-spin SELECT 4
+spin SELECT 3
 wait 100
 expect gv1 1
 tap HOME

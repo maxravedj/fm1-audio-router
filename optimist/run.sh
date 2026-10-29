@@ -23,7 +23,7 @@
 # The screens and the flashes in optimist/build/host. PYTHON: a python with Pillow (fm1-base's font generator), default
 # the first python3 on PATH. OPTSIM=0: without Optimist's simulator (no emcc / node). PROFILES: the runs (default
 # "none sd bt lights wifi wifi-ap usbhost console items dev"; wifi: the dev profile with Wi-Fi + Link, tests/wifi/wifi.txt (run_wifi); wifi-ap: the same with MODE AP, tests/wifi/ap.txt (run_wifi_ap); usbhost: the same with the USB MIDI host, tests/usbhost/usbhost.txt (run_usbhost); console: the dev profile with the USB serial console, run_console; items: the builder items and
-# options no other run switches on, run_items; lights: the dev profile with LIGHTS on the dim levels, tests/dev/lights.txt; sd: the SD card mode, run_sd below; bt: the dev profile with its Bluetooth on the host too,
+# options no other run switches on, run_items; lights: the dev profile with LIGHTS, its levels gone (the dim pulse the glow's), tests/dev/lights.txt; sd: the SD card mode, run_sd below; bt: the dev profile with its Bluetooth on the host too,
 # OPT_HOST_BT=1, tests/dev/bt.txt and ui.txt).
 set -e
 cd "$(dirname "$0")/.."
@@ -74,8 +74,8 @@ run_bt() {                          # the dev profile with its Bluetooth on the 
     $H/optimist_host optimist/tests/dev/ui.txt $H
 }
 
-run_lights() {                      # the dev profile with LIGHTS (profiles/dev-lights.config): the backlight's levels on
-                                    # fm1-base's dim layer (plat_dim_ns), each level its own pulse
+run_lights() {                      # the dev profile with LIGHTS (profiles/dev-lights.config): no backlight levels any more
+                                    # (fm1-next b9a394bc): every level asked leaves the dim pulse at the glow's
     echo "optimist/run.sh: profile dev, LIGHTS (tests/dev/lights.txt)"
     export OPT_PROFILE=profiles/dev-lights.config
     X0X_FONTSET=terminus "$PY" tools/build.py optimist --host
@@ -157,7 +157,7 @@ run_profile() {                     # $1: dev (the trial's profile copy), none (
     $H/optimist_host $T/storage.txt $H
     OPT_FLASH=$H/trial-flash.bin OPT_DUMP=$H/trial-flash2.bin $H/optimist_host $T/storage_restart.txt $H
     OPT_FLASH=$H/trial-flash2.bin $H/optimist_host $T/storage_resume.txt $H
-    $H/optimist_host optimist/tests/dbgstats.txt $H   # (SYSTEM > DEBUG STATS: fm1-base's stats, the setting kept)
+    $H/optimist_host $T/dbgstats.txt $H   # (SYSTEM > General > DEBUG STATS: fm1-base's stats, the setting kept)
     if [ "$1" != none ]; then       # (USB audio: a computer recording and playing, fm1-base's simulator: usbproof.py)
         "$PY" optimist/usbproof.py $H/optimist_host $H/usb
         "$PY" optimist/dualproof.py $H/optimist_host $H/dual single   # (the second core: the same samples, any split)

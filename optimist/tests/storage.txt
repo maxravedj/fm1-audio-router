@@ -29,13 +29,13 @@ wait 100
 turn K1 5
 wait 100
 expect bpm 116
-# a setting: SYSTEM (GLO again), GENERAL (its fifth row: INFO, DEBUG, INTERNALS, USB STATS before it, Optimist's USB audio on),
+# a setting: SYSTEM (GLO again), GENERAL (its fourth row: INFO, INTERNALS, USB STATS before it, Optimist's USB audio on; the DEBUG page gone, fm1-next c6aef4ee),
 # KNOB COLORS OFF -> ON (the settings word's bit 25, GENERAL's first card;
 # the settings record saved: copy A, 0xFC000 (outside plat.h's windows: the app's unit writes it, app.c
 # opt_glob_*)
 tap GLO
 wait 100
-spin SELECT 4
+spin SELECT 3
 wait 100
 expect gv1 0
 turn K1 1
