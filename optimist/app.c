@@ -309,6 +309,8 @@ int app_expect(const char *what, int *got)
         *got = (int)opt_ui_batt();
     else if (!strcmp(what, "lights"))          /* SYSTEM > LIGHTS' level (0 OFF .. 3 HIGH; -1 not built) */
         *got = (int)opt_ui_lights();
+    else if (!strcmp(what, "usbh_mode"))       /* SYSTEM > USB's MODE: 0 DEVICE, 1 HOST (-1: no USB_HOST) */
+        *got = (int)opt_ui_usbh();
     else if (!strcmp(what, "panel_hits"))      /* Optimist's object sectors on OBJ_PANEL's 0xD8000..0xD9FFF */
         *got = (int)opt_st_panel_hits();
     else if (!strcmp(what, "bta_out"))         /* Bluetooth audio: the sound to the device (1) or the FM-1's own (0) */
@@ -381,6 +383,7 @@ static int flash_load(const char *path, uint32_t *sectors)
 }
 
 int app_host_fails(void) { return (int)app_fails; }
+void app_host_reboot(void) { opt_ui_usbh_reboot(); }   /* (what RAM would forget: SYSTEM > USB's MODE) */
 
 int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, const char *d)
 {

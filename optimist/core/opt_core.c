@@ -350,6 +350,8 @@ void opt_core_render(int32_t *lr, uint32_t n, uint32_t master_q12, uint32_t keys
     opt_half_us = (fm1_ticks() - t0) / FM1_TICKS_PER_US;   /* (into PEAK and the guard at the next render) */
 }
 
+#include "../ui/opt_usbh.h"                        /* the USB MIDI host (USB_HOST): MSRC_USBH, a lost session's notes let go */
+
 /* a USB-MIDI packet from fm1-base (plat_midi_in, from port PORT_*): Optimist's checks (usb.c usb_midi_rx_packet's, the
  * rings' midi_rx_bad / midi_rx_wanted) into its queue, with its source (SYNC USB / TRS / BLE) and arrival time */
 static uint32_t opt_rx_bad;
@@ -360,7 +362,8 @@ static uint32_t opt_rx_bad;
 #endif
 void opt_core_midi(uint32_t pkt, int port)
 {
-    uint32_t src = port == PORT_TRS ? MSRC_TRS : port == PORT_BLE ? MSRC_BLE : MSRC_USB;
+    uint32_t src = port == PORT_TRS ? MSRC_TRS : port == PORT_BLE ? MSRC_BLE : usbh_src();   /* (USB: the computer, or
+                                                     * the host's device: ui/opt_usbh.h) */
 #if FELUCCA_BLE
     if (port == PORT_BLE) {
         opt_ble_in(pkt);                             /* (Optimist's midi_ble.c checks, the sender's time: ui/opt_bt.h) */
@@ -371,8 +374,11 @@ void opt_core_midi(uint32_t pkt, int port)
         opt_rx_bad++;
         return;
     }
-    if (midi_rx_wanted(pkt))
+    if (midi_rx_wanted(pkt)) {
+        if (port == PORT_USB)
+            usbh_note(pkt);                          /* (what the port holds, let go when its session ends) */
         (void)midi_in_enqueue(pkt, src, OPT_MIDI_T24());   /* (when it came in: plat_midi_in_t24) */
+    }
 }
 
 /* fm1-base's 1 kHz tick (app.c app_tick, APP_TICK: the timer interrupt), Optimist's TIMER5 work (system/main.c
@@ -387,6 +393,7 @@ void opt_core_tick(void)
 {
     uint32_t pkt;
     int port;
+    usbh_tick_lost(fm1_ticks());                    /* a USB session ended: its notes off first (ui/opt_usbh.h) */
     while (plat_midi_in(&pkt, &port))
         opt_core_midi(pkt, port);
 #if USB_RT_OUT
