@@ -247,6 +247,7 @@ uint32_t plat_master(void) { return mirror_in_master(master); }
 int plat_battery(void) { return 3; }   /* (the host and the emulator: full) */
 #ifdef APP_BATTERY_RAW
 int32_t plat_battery_raw(void) { return 620; }   /* (full: over the third bar's 591, as plat_battery's 3) */
+int plat_battery_charging(void) { return 0; }   /* (the host and the emulator: on the cell) */
 #endif
 #ifdef APP_DIM_LEVELS
 static uint32_t dim_ns_app, dim_glow;   /* plat_dim_ns's pulse (0: the glow's); the glow plat_lights last got */
