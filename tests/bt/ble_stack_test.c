@@ -1025,7 +1025,7 @@ static void test_l2cap(void)
                   ble_dg.pdu[(k - 1) & (BLE_DIAG_PDUS - 1)].b[0] == 0x0A &&
                   ble_dg.pdu[(k - 1) & (BLE_DIAG_PDUS - 1)].b[1] == 3 && ble_dg.pdu[(k - 1) & (BLE_DIAG_PDUS - 1)].n == 3 &&
                   ble_dg.pdu[k & (BLE_DIAG_PDUS - 1)].ch == (BDP_ATT | BDP_TX) &&
-                  ble_dg.pdu[k & (BLE_DIAG_PDUS - 1)].b[0] == 0x0B && ble_dg.pdu[k & (BLE_DIAG_PDUS - 1)].n == 14);
+                  ble_dg.pdu[k & (BLE_DIAG_PDUS - 1)].b[0] == 0x0B && ble_dg.pdu[k & (BLE_DIAG_PDUS - 1)].n == 9);
     }
     memset(big, 0, sizeof big);
     big[0] = 0x52, big[1] = 14, big[2] = 0, big[3] = 0x80;
@@ -1210,7 +1210,7 @@ static void test_encryption(void)
     C.enc = 1;
     C.crx.ctr = 2;
     r = c_att((const uint8_t[]){0x0A, 3, 0}, 3, &n);
-    check("encrypted both ways: Read Device Name", r && r[0] == 0x0B && n == 14);
+    check("encrypted both ways: Read Device Name", r && r[0] == 0x0B && n == 9);
     {
         uint8_t bad[2 + 8] = {0x02, 0x05, 1, 2, 3, 4, 5, 6, 7, 8};
         memcpy(C.q[C.qn++], bad, sizeof bad);
@@ -1351,7 +1351,7 @@ static void test_smp(void)
               peer_id.n == 1 && !memcmp(peer_id.irk, k55, 16) && !memcmp(peer_id.addr, k55, 6) && peer_id.rnd == 0);
     }
     r = c_att((const uint8_t[]){0x0A, 3, 0}, 3, &n);
-    check("encrypted with the STK: Read Device Name", r && r[0] == 0x0B && n == 14);
+    check("encrypted with the STK: Read Device Name", r && r[0] == 0x0B && n == 9);
     c_ctrl((const uint8_t[]){LL_TERMINATE_IND, 0x13}, 2);
     c_event();
     C.enc = 0;
@@ -1359,7 +1359,7 @@ static void test_smp(void)
     c_events(2);
     check("a returning central: LL encryption with the bond's LTK (EDIV, Rand)", c_start_enc(ltk, rand, ediv));
     r = c_att((const uint8_t[]){0x0A, 3, 0}, 3, &n);
-    check("encrypted with the LTK: Read Device Name; no SMP", r && r[0] == 0x0B && n == 14 && c_frame(6, &n) == 0);
+    check("encrypted with the LTK: Read Device Name; no SMP", r && r[0] == 0x0B && n == 9 && c_frame(6, &n) == 0);
     c_ctrl((const uint8_t[]){LL_TERMINATE_IND, 0x13}, 2);
     c_event();
     C.enc = 0;
