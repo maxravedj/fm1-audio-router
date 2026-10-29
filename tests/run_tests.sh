@@ -66,6 +66,7 @@ run storage-bounce sh -c "$CC -O2 -w -DAPP_STORE_BOUNCE=1 -o $OUT/storage_bounce
     $OUT/storage_bounce_test > $OUT/storage_bounce.txt && $OUT/storage_test > $OUT/storage_plain.txt && \
     cmp $OUT/storage_plain.txt $OUT/storage_bounce.txt"
 run fastmath sh -c "$CC -O2 -w -o $OUT/fastmath_test tests/fastmath_test.c -lm && $OUT/fastmath_test"
+run outside-hosts "$PY" tests/outside_hosts_test.py
 run installer "$PY" tests/install_test.py
 # the tools that find the FM-1 by its port name (fm1_remote.py, fm1_debug.py): FM1-XXXX, the old Optimist, not other gear
 run fm1-ports "$PY" tests/fm1_ports_test.py
