@@ -17,10 +17,10 @@ wait 100
 expect gv1 101
 cells
 shot ui-mix-volume.png
-# SELECT one detent: the cursor to the next row, INSERT (its cards S1 DIST, S2 FILTER: the third card 5)
+# SELECT one detent: the cursor to the next row, INSERT (its cards S1 DIST, S2 FILTER: the third card 7: CHO and DLY lead the TYPE list since fm1-next 91d180eb)
 turn SELECT 1
 wait 100
-expect gv3 5
+expect gv3 7
 cells
 # ENV tapped: SOUND (1), its ENV row; KNOB 2 turns DEC up
 tap ENV
