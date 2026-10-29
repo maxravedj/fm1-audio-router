@@ -23,7 +23,7 @@ tap GLO
 wait 100
 spin SELECT 4
 wait 100
-expect gv2 1
+expect gv1 1
 tap HOME
 wait 100
 # a NEW project (PROJECT, card 4, YES, YES): the defaults, BPM 111, DEC 112

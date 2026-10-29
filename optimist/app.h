@@ -6,7 +6,7 @@
 #pragma once
 #include <stdint.h>
 #include "plat.h"
-#include "opt_dim.h"                     /* (build/optgen, gen_optimist.py dim_header: OPT_DIM_LEVELS 1 with LIGHTS) */
+#include "opt_dim.h"                     /* (build/optgen, gen_optimist.py dim_header: OPT_DIM_LEVELS 1: LIGHTS is always built) */
 
 #define APP_NAME "OPTIMIST"
 #define APP_SPLASH_RGB RGB(255, 214, 10)

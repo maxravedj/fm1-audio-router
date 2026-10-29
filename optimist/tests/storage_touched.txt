@@ -20,4 +20,4 @@ tap GLO
 wait 100
 spin SELECT 4
 wait 100
-expect gv2 1
+expect gv1 1

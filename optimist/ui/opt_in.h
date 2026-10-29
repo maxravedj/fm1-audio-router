@@ -24,13 +24,11 @@ static const int8_t FM1_KEYMAP[6][FM1_NCOL] = {
     {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1},          /* PB7: encoder 6 */
 };
 static uint8_t fm1_led[FM1_NCOL], fm1_led_dim[FM1_NCOL], fm1_led_half[FM1_NCOL];
-#if FELUCCA_LIGHTS
 /* the backlight (menu LIGHTS: ui/lights.c, op_input.c): its LEDs and pulse (hal/fm1_input.h fm1_led_bg, fm1_led_bg_ns;
  * 0 off). fm1-base has no level of that width (LOW .. HIGH 0.5 .. 2 us a frame, under its glow's 3.2 us): any level is
  * its dim layer (ui/opt_panel.h opt_leds_out) */
 static uint8_t fm1_led_bg[FM1_NCOL];
 static volatile uint16_t fm1_led_bg_ns;
-#endif
 static void fm1_led_key(uint32_t id, int on)            /* (hal/fm1_input.h: the LED of key id, 0..13 a button, 14..40 a key) */
 {
     uint32_t p, r;
