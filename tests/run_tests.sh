@@ -67,6 +67,8 @@ run storage-bounce sh -c "$CC -O2 -w -DAPP_STORE_BOUNCE=1 -o $OUT/storage_bounce
     cmp $OUT/storage_plain.txt $OUT/storage_bounce.txt"
 run fastmath sh -c "$CC -O2 -w -o $OUT/fastmath_test tests/fastmath_test.c -lm && $OUT/fastmath_test"
 run installer "$PY" tests/install_test.py
+# the tools that find the FM-1 by its port name (fm1_remote.py, fm1_debug.py): FM1-XXXX, the old Optimist, not other gear
+run fm1-ports "$PY" tests/fm1_ports_test.py
 # the check on an app's RAM code (tools/ramcode.py, plat.h PLAT_RAM_CODE): RAM -> RAM passes, into XIP fails
 run ramcode "$PY" tests/ramcode_test.py
 # the build's check that a function is in the RAM code run, _rt_start.._rt_end wherever app.ld puts it (tools/ram_run.py)
