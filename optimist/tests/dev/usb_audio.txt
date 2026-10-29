@@ -2,8 +2,8 @@
 # The trial's USB audio in fm1-base's host simulator (usbproof.py: the files, the checks). A computer records the four
 # channels while T1 plays a note (the stems, Optimist's default routing); SYSTEM > USB AUDIO's MASTER (its first line:
 # GENERAL's row, then the next) NONE -> 1+2, its RET C (the reverb's return, the fifth page's third line: Optimist's
-# source 18) NONE -> 3+4; then it plays usb-in.wav through the USB input track while it records, the FM-1's own output
-# beside (wav)
+# source 18) NONE -> 3+4; then, the volume knob at half (a quarter's gain), it plays usb-in.wav through the USB input
+# track while it records, the FM-1's own output beside (wav): USB's MASTER at its fixed level, the knob's on the output
 wait 1500
 master 4096
 wait 100
@@ -37,6 +37,8 @@ wait 100
 expect uad.18 6
 tap HOME
 wait 300
+master 2048                                             # (the knob: the FM-1's own output only, never USB's)
+wait 100
 usb_rec usb-master.wav
 wav usb-master-out.wav
 usb_play usb-in.wav
