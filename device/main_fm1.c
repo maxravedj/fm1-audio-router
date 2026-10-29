@@ -396,8 +396,12 @@ static int ds_send(const uint8_t *f, uint32_t n)   /* (120 frames, ~20 KB: half 
 }
 static int ds_staged(void)                          /* an update staged (or no flash): the area is not the stats' */
 {
-    return !flash_ok || *(const volatile uint32_t *)FL_XIP(OTA_AREA) != 0xFFFFFFFFu ||
-           *(const volatile uint32_t *)FL_XIP(OTA_RES) != 0xFFFFFFFFu;
+    uint32_t w[2];
+    if (!flash_ok)
+        return 1;
+    memcpy(&w[0], (const void *)FL_XIP(OTA_AREA), 4u);   /* (the plain window, as ds_read) */
+    memcpy(&w[1], (const void *)FL_XIP(OTA_RES), 4u);
+    return (w[0] & w[1]) != 0xFFFFFFFFu;
 }
 static uint8_t ds_u8(uint32_t v) { return (uint8_t)(v < 255u ? v : 255u); }
 static uint16_t ds_u16(uint32_t v) { return (uint16_t)(v < 65535u ? v : 65535u); }
