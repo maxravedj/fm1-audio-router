@@ -128,7 +128,7 @@ def config(tree, prof):
             raise SystemExit(f"gen_optimist: {prof.name} ({out}): " + "; ".join(err))
         configure.write_header(cfg, name, GEN / out)
         if out == "felucca_config.h":
-            host_dual(configure.flags(cfg)[0].get("FELUCCA_DUAL", 0), GEN / out)
+            host_dual(0 if os.environ.get("OPT_HOST_DUAL") == "0" else configure.flags(cfg)[0].get("FELUCCA_DUAL", 0), GEN / out)
             host_sd(configure.flags(cfg)[0], GEN / out)
             slot_check(configure.flags(cfg)[0].get("FELUCCA_LAYOUT", 0), prof)
             host_bt(configure.flags(cfg)[0], GEN / out)
@@ -184,7 +184,8 @@ def host_sd(flags, path):
 def host_dual(dual, path):
     """the profile's second core (DUAL: an FM-1-only item, its header sets FELUCCA_DUAL under __PI32V2__ alone) on the
     host too: fm1-base's simulated second core (host/plat_host.c, fm1.toml cpu2) runs core/opt_dual.c's jobs there, so
-    the host runs the FM-1's render path"""
+    the host runs the FM-1's render path. OPT_HOST_DUAL=0: one core on the host (dualproof.py single: DUAL is retired on
+    Optimist since fm1-next 4864f79a, a DUAL=0 profile builds the second core all the same)"""
     if not dual:
         return
     text = path.read_text()
@@ -280,6 +281,7 @@ def generate(tree):
     key += f"companion {companion()}\n"
     key += f"host_bt {os.environ.get('OPT_HOST_BT') == '1'}\n"
     key += f"host_wifi {os.environ.get('OPT_HOST_WIFI') == '1'}\n"
+    key += f"host_dual {os.environ.get('OPT_HOST_DUAL') != '0'}\n"   # (OPT_HOST_DUAL=0: one core on the host, dualproof.py single)
     st = GEN / "stamp"
     outs = [out for _, out in GENERATORS] + ["felucca_config.h", "felucca_config_profile.h", "opt_dim.h"]
     if st.exists() and st.read_text() == key and all((GEN / out).exists() for out in outs):

@@ -12,7 +12,8 @@ the drums, the reverb's kept block, all five), with the reverb sends at 0 and at
   1. every split renders the same samples, 24-bit, as the render made them (core/opt_dual.c: integer sums, the order
      of the jobs does not matter; the per-core state, FM6's scratch on fm1_cnum, the LFOs' draws before the fork);
   2. the second core did the jobs it was given (c1jobs), and stayed up (c1up);
-  3. with `single`: the same profile with DUAL=0 (one core, fx.c's own mix_block) built and run too: the same samples
+  3. with `single`: the same profile built for one core on the host (OPT_HOST_DUAL=0: DUAL is retired on Optimist since
+     fm1-next 4864f79a, a DUAL=0 line builds the second core all the same; one core, fx.c's own mix_block) and run too: the same samples
      with the sends at 0; with them up, the reverb one mix block late on the dual build (fx.c REV_LATE, as on
      Optimist's own: docs/DUAL-CORE.md section 1): the sends' part of the output is one core's 32 frames later (what
      is left under -50 dB: the master's limiter on the sum), the rest the same. The build is
@@ -28,7 +29,6 @@ from pathlib import Path
 APP = Path(__file__).resolve().parent
 ROOT = APP.parent
 TEMPLATE = APP / "tests" / "dual.txt"
-PROFILE = APP / "profiles" / "dev-bt.config"
 SPLITS = [None, 0x1, 0x6, 0x8, 0x10, 0x1F]       # (bit p: part p, 3 the drums, 4 the reverb's kept block)
 SENDS = [0, 100]                                 # (0 first: the sends' part of the output is a take less the 0 one)
 CTL = 32                                         # (Optimist's mix block, frames: the reverb's lateness)
@@ -65,8 +65,11 @@ def wet_late(s0: list[int], s1: list[int], d0: list[int], d1: list[int]) -> floa
     return 10 * math.log10(e / p + 1e-30)
 
 
-def build(profile: Path | None) -> None:
+def build(profile: Path | None, one_core: bool = False) -> None:
     env = dict(os.environ, X0X_FONTSET="terminus")
+    env.pop("OPT_HOST_DUAL", None)
+    if one_core:
+        env["OPT_HOST_DUAL"] = "0"                 # (gen_optimist.py host_dual: one core on the host, the profile as it is)
     if profile is not None:
         env["OPT_PROFILE"] = str(profile)
     else:
@@ -99,13 +102,8 @@ def main() -> int:
             print(f"  ok {name}: {len(s) // 2} frames, the samples of the split by load")
         takes[rev] = ref
     if single:
-        cfg = APP / "build" / "dual-single.config"
-        text = PROFILE.read_text()
-        if "\nDUAL=2\n" not in text:
-            fail(f"{PROFILE.name}: no DUAL=2 line to turn off")
-        cfg.write_text(text.replace("\nDUAL=2\n", "\nDUAL=0\n"))
         try:
-            build(cfg)
+            build(None, one_core=True)
             one_exe = out / "single_host"
             shutil.copy2(exe, one_exe)
         finally:
