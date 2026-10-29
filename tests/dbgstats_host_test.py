@@ -71,10 +71,18 @@ def main():
     check("... crashes: 0 until the crash's own, 1", [r["crashes"] for r in recs] == [0, 0, 0, 0, 0, 1])
     check("... halves: about 172 a second of uptime", all(abs(r["halves"] - r["up"] * 44100 // 256) < 200
                                                           for r in recs))
-    check("... one build, the app block raw (the template has none): 13 zero bytes",
-          len({r["build"] for r in recs}) == 1 and all(r["app"] == {"raw": bytes(13)} for r in recs))
-    check("... every field there", all({"late", "maxus", "cpu", "gap", "t5late", "lock", "pass", "pstage", "prog",
-                                         "stage", "wdt", "cpu2", "bt", "wifi", "nested"} <= set(r) for r in recs))
+    check("... one build, the app block raw (the template has none): 7 zero bytes",
+          len({r["build"] for r in recs}) == 1 and all(r["app"] == {"raw": bytes(7)} for r in recs))
+    check("... every field there", all({"late", "maxus", "gap", "t5late", "lock", "pass", "pstage", "prog", "stage",
+                                         "wdt", "cpu2", "bt", "wifi", "nested", "stk", "ever"} <= set(r) for r in recs))
+    check("... the stacks: not measured until the script's 900 bytes left, then since the start and the least ever",
+          all(r["ever"] == {"main": -1, "irq": -1, "c1": -1} for r in recs[:5]) and
+          recs[5]["stk"] == {"main": 900, "irq": 6000} and recs[5]["ever"] == {"main": 900, "irq": 6000, "c1": -1})
+    crash, cend = R.parse_crash_frames(frames(raw, R.LH))
+    check("the crash history: one crash, its stacks' room (32-byte units) and the guard hit",
+          cend == 1 and len(crash) == 1 and crash[0]["stk"] == {"main": 896, "irq": 5984, "c1": -1, "guard": 1})
+    check("... format_crash says so", R.format_crash(crash[0])[-1] ==
+          "  stk main 896 irq 5984 c1 -1 bytes left, a stack ran into its guard")
     recs2, end2 = R.parse_stats_frames(ans[1][:-1])
     check("no end frame: end None (an answer lost), the records still read", end2 is None and len(recs2) == 6)
     line = R.format_stats(recs[5])
@@ -84,10 +92,12 @@ def main():
 
     # a power-on with the flash dumped after the six (the records are the flash's, not the simulator's RAM)
     script = out / "dbgstats_boot.txt"
-    script.write_text("expect stats 6\nexpect stats_on 0\nexpect stats_pending 0\n")
+    script.write_text("expect stats 6\nexpect stats_on 0\nexpect stats_pending 0\nexpect stk_ever_main 900\n"
+                      "expect stk_ever_irq 6000\n")
     r = subprocess.run([str(exe), str(script), str(out)], capture_output=True, text=True,
                        env={"FM1B_FLASH": str(out / "dbgstats_flash.bin"), "PATH": "/usr/bin:/bin"})
-    check("power-on with the dumped flash: the six records there", r.returncode == 0 and "FAIL" not in r.stdout)
+    check("power-on with the dumped flash: the six records there, the least ever from them",
+          r.returncode == 0 and "FAIL" not in r.stdout)
     print("all ok" if not FAILS else f"FAIL: {len(FAILS)}")
     return 1 if FAILS else 0
 

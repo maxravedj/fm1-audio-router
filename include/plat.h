@@ -727,7 +727,15 @@ uint32_t plat_core(void);
  *                    snapshot waits for it up to 4 minutes, then is written anyway (one 64-byte page); without it a
  *                    snapshot is written at once
  * The host simulator keeps them too (its flash dump has the sector) */
-#define PLAT_STATS_APP 13u
+#define PLAT_STATS_APP 7u
+/* The stacks' room (device/stacks.c): CPU0's main and interrupt stacks are painted at every start, the second core's
+ * marked by felucca-bsp; the bytes never used. plat_stack_left: since this start (-1: not measured, the second core
+ * off or not built). plat_stack_least_ever: the least ever seen, across restarts (.noinit) and power-offs (the debug
+ * stats' newest record in flash, and the crash records' room at each crash); -1 not known yet. Main loop. Each crash
+ * record keeps every stack's room at the crash (F0 7D 4C 48 F7's "stk" line) */
+enum { PLAT_STK_MAIN, PLAT_STK_IRQ, PLAT_STK_C1 };
+int32_t plat_stack_left(int k);
+int32_t plat_stack_least_ever(int k);
 void plat_stats_enable(int on);        /* the snapshots every 5 minutes on (1) or off (0) */
 int plat_stats_on(void);
 void app_stats(uint8_t out[PLAT_STATS_APP]);

@@ -45,16 +45,21 @@ The crash history's frames, for a program (parse_crash_frames reads them):
   F0 7D 4C 48 F7                  asks; the answer, one frame a record, the oldest first, F0 7D 4C 48 <ASCII> F7:
     crash I/N n COUNT vec HEX pc HEX rets HEX sp HEX ms DEC emu HEX dbg HEX psr HEX build HEX seq DEC
     regs I/N r0 HEX .. r15 HEX usp HEX ssp HEX        (when the record has the registers)
+    stk I/N main DEC irq DEC c1 DEC guard 0|1         (when it has the stacks' room at the crash: bytes left, a
+                                                      multiple of 32, -1 not known; guard 1: a stack ran into its
+                                                      guard, EMU_MSG bit 3 or DBG_MSG bit 13)
   then "end N" (N records: none is "end 0", no end is an answer lost)
   F0 7D 4C 48 43 4C 52 F7         ("LHCLR") erases it; the answer "cleared" or "clear failed".
 
 The debug stats' frames (device/dbgstats.c, the record's layout there; parse_stats_frames reads them):
-  F0 7D 4C 53 F7                  asks; the answer, two frames a record, the oldest first, F0 7D 4C 53 <ASCII> F7:
+  F0 7D 4C 53 F7                  asks; the answer, three frames a record, the oldest first, F0 7D 4C 53 <ASCII> F7:
     stat I/N seq DEC up DEC build HEX flags HEX boots DEC crashes DEC halves DEC nested DEC late DEC maxus DEC
-      cpu DEC gap DEC t5late DEC lock DEC pass DEC pstage DEC prog DEC stage DEC wdt DEC cpu2 HEX bt HEX wifi DEC
-    app I/N NAME DEC ...          (the app's fields, by its APP_STATS_LAYOUT) or app I/N raw HEX (26 digits)
-  then "end N"; up in seconds, the times in us, cpu in 1/4096 of a half; flags 1 periodic, 2 a crash's, 4 written
-  while playing, 8 the switch on
+      gap DEC t5late DEC lock DEC pass DEC pstage DEC prog DEC stage DEC wdt DEC cpu2 HEX bt HEX wifi DEC
+    stk I/N main DEC irq DEC ever main DEC irq DEC c1 DEC   (bytes left: since the start, then the least ever, across
+                                                      restarts, power-offs and crashes; -1 not known)
+    app I/N NAME DEC ...          (the app's fields, by its APP_STATS_LAYOUT) or app I/N raw HEX (14 digits)
+  then "end N"; up in seconds, the times in us; flags 1 periodic, 2 a crash's, 4 written while playing, 8 the
+  switch on
   F0 7D 4C 53 43 4C 52 F7         ("LSCLR") erases them; the answer "cleared" or "clear failed" (an update staged)."""
 import struct
 import sys
@@ -107,14 +112,19 @@ def parse_crash_frames(texts):
                 r["n"] = n
             else:
                 r["regs"] = {k: int(v, 16) for k, v in kv.items()}
+        elif w[0] == "stk" and len(w) == 10:              # stk I/N main N irq N c1 N guard G
+            i, n = (int(x) for x in w[1].split("/"))
+            kv = dict(zip(w[2::2], w[3::2]))
+            recs.setdefault(i, {"i": i, "n": n})["stk"] = {k: int(v) for k, v in kv.items()}
     return [recs[i] for i in sorted(recs)], end
 
 
 def parse_stats_frames(texts):
     """the stats' answer (each frame's text after F0 7D 4C 53) into (records, end): records a list of dicts, the oldest
-    first (i, n, seq, up, build, flags, boots, crashes, halves, nested, late, maxus, cpu, gap, t5late, lock, pass,
-    pstage, prog, stage, wdt, cpu2, bt, wifi; app: the app's fields by name, or {"raw": bytes}), end the "end N" count,
-    None when the end frame never came (an answer lost: not the same as none)"""
+    first (i, n, seq, up, build, flags, boots, crashes, halves, nested, late, maxus, gap, t5late, lock, pass, pstage,
+    prog, stage, wdt, cpu2, bt, wifi; stk: {main, irq} since the start and ever: {main, irq, c1}, bytes, -1 not known;
+    app: the app's fields by name, or {"raw": bytes}), end the "end N" count, None when the end frame never came (an
+    answer lost: not the same as none)"""
     recs, end = {}, None
     for t in texts:
         t = t.decode("latin1") if isinstance(t, (bytes, bytearray)) else t
@@ -123,6 +133,11 @@ def parse_stats_frames(texts):
             continue
         if w[0] == "end" and len(w) == 2:
             end = int(w[1])
+        elif w[0] == "stk" and len(w) == 13 and w[6] == "ever":   # stk I/N main N irq N ever main N irq N c1 N
+            i, n = (int(x) for x in w[1].split("/"))
+            r = recs.setdefault(i, {"i": i, "n": n})
+            r["stk"] = {w[2]: int(w[3]), w[4]: int(w[5])}
+            r["ever"] = {w[7]: int(w[8]), w[9]: int(w[10]), w[11]: int(w[12])}
         elif w[0] in ("stat", "app") and len(w) >= 2 and len(w) % 2 == 0:
             i, n = (int(x) for x in w[1].split("/"))
             r = recs.setdefault(i, {"i": i, "n": n})
@@ -143,10 +158,13 @@ def format_stats(r):
     h, m = divmod(r.get("up", 0) // 60, 60)
     app = r.get("app", {})
     app_s = app["raw"].hex() if "raw" in app else " ".join(f"{k} {v}" for k, v in app.items())
+    stk, ever = r.get("stk", {}), r.get("ever", {})
+    stk_s = (f"stk main {stk.get('main', -1)} irq {stk.get('irq', -1)} ever main {ever.get('main', -1)} irq "
+             f"{ever.get('irq', -1)} c1 {ever.get('c1', -1)}")
     return (f"stat {r['i']}/{r['n']} seq {r.get('seq')} up {h}:{m:02d} [{fl}] boots {r.get('boots')} crashes "
-            f"{r.get('crashes')} late {r.get('late')} maxus {r.get('maxus')} cpu {r.get('cpu', 0) * 100 // 4096}% gap "
-            f"{r.get('gap')} lock {r.get('lock')} pass {r.get('pass')} prog {r.get('prog')} cpu2 {r.get('cpu2', 0):02X} "
-            f"bt {r.get('bt', 0):02X} wifi {r.get('wifi')} | {app_s}")
+            f"{r.get('crashes')} late {r.get('late')} maxus {r.get('maxus')} gap {r.get('gap')} lock {r.get('lock')} "
+            f"pass {r.get('pass')} prog {r.get('prog')} cpu2 {r.get('cpu2', 0):02X} bt {r.get('bt', 0):02X} wifi "
+            f"{r.get('wifi')} | {stk_s} | {app_s}")
 
 
 class ElfSymbols:
@@ -215,6 +233,10 @@ def format_crash(r, elf=None):
         rs = [f"r{k} {regs[f'r{k}']:08X}" for k in range(16)]
         lines += ["  " + " ".join(rs[k:k + 8]) for k in (0, 8)]
         lines.append(f"  usp {regs['usp']:08X} ssp {regs['ssp']:08X}")
+    stk = r.get("stk")
+    if stk:
+        lines.append(f"  stk main {stk['main']} irq {stk['irq']} c1 {stk['c1']} bytes left"
+                     + (", a stack ran into its guard" if stk.get("guard") else ""))
     return lines
 
 

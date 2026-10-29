@@ -16,7 +16,7 @@
 #define FM1B_BUILD 0xABCD1234u
 #define DS_NOINIT
 #define DS_LAYOUT ds_layout
-static const char *ds_layout = "c10 1 c60 1 drops 2 left 2 sram 4";
+static const char *ds_layout = "c10 1 c60 1 drops 2 sram 4";
 static uint8_t nor[0x100000];
 static int prog_left = -1;                     /* power cut: programs still allowed (-1: no limit) */
 static int erase_cut;                          /* 1: the next erase stops half way (half the sector erased) */
@@ -90,11 +90,13 @@ static void ds_fill(ds_rec_t *r)               /* the platform's counters and th
 {
     fill_n++;
     r->up_s = now_ms / 1000u, r->halves = now_ms / 6u, r->nested = 7, r->late = 3, r->max_us = 4321;
-    r->cpu_q12 = 2048, r->gap_us = 120, r->t5_late = 1, r->lock_us = 55, r->boots = 2, r->crashes = 0;
-    r->stage = 5 | 3 << 4, r->cpu2 = 1, r->bt = 2, r->wifi = 0;
-    r->app[0] = 41, r->app[1] = 77, r->app[2] = 0x34, r->app[3] = 0x12, r->app[4] = 0x00, r->app[5] = 0x04;
-    r->app[6] = 0x78, r->app[7] = 0x56, r->app[8] = 0x34, r->app[9] = 0x12;
+    r->gap_us = 120, r->t5_late = 1, r->lock_us = 55, r->boots = 2, r->crashes = 0;
+    r->stage = 5 | 3 << 4, r->cpu2 = 1, r->radio = 2 | 4 << 4;
+    r->app[0] = 41, r->app[1] = 77, r->app[2] = 0x34, r->app[3] = 0x12;
+    r->app[4] = 0x78, r->app[5] = 0x56, r->app[6] = 0x34;
 }
+static int32_t tstk[3] = {20000, 7000, -1};    /* the stacks' room now (stacks.c plat_stack_left), as a run uses them */
+static int32_t ds_stack(int k) { return tstk[k]; }
 
 static int bad;
 static void check(const char *what, int ok)
@@ -186,13 +188,15 @@ int main(void)
     n = listed(&a, &b);
     check("... 25, 30, 35, 40, 45: five, in order", n == 5 && a == 1 && b == 5 && ordered());
     request("");
-    check("... the readout: 5 records x 2 frames, then \"end 5\"", nsent == 11 && !strcmp(sent[10], "end 5"));
+    check("... the readout: 5 records x 3 frames, then \"end 5\"", nsent == 16 && !strcmp(sent[15], "end 5"));
     check("... the stat line's fixed form",
           !strcmp(sent[0], "stat 1/5 seq 1 up 1500 build ABCD1234 flags 09 boots 2 crashes 0 halves 250000 nested 7 "
-                           "late 3 maxus 4321 cpu 2048 gap 120 t5late 1 lock 55 pass 900 pstage 5 prog 0 stage 5 "
-                           "wdt 3 cpu2 01 bt 02 wifi 0"));
-    check("... the app line by the layout (u8 u8 u16 u16 u32)",
-          !strcmp(sent[1], "app 1/5 c10 41 c60 77 drops 4660 left 1024 sram 305419896"));
+                           "late 3 maxus 4321 gap 120 t5late 1 lock 55 pass 900 pstage 5 prog 0 stage 5 "
+                           "wdt 3 cpu2 01 bt 02 wifi 4"));
+    check("... the stk line: since the start, the least ever (-1: not known)",
+          !strcmp(sent[1], "stk 1/5 main 20000 irq 7000 ever main 20000 irq 7000 c1 -1"));
+    check("... the app line by the layout (u8 u8 u16 u32: the 4-byte one cut at the block's end)",
+          !strcmp(sent[2], "app 1/5 c10 41 c60 77 drops 4660 sram 3430008"));
     ds_enable(0);
     run_to(70u * 60000u);
     check("switched off again: no more", listed(&a, &b) == 5);
@@ -226,7 +230,7 @@ int main(void)
             check("... a power-off: the queue lost, nothing made up", ds_ni.nq == 0 && listed(&a, &b) == na && ordered());
         } else {
             restart();
-            check("... a restart: the boot writes the queued one", ds_boot(0) == 0 && listed(&a, &b) == na + 1u &&
+            check("... a restart: the boot writes the queued one", ds_boot(0, 0) == 0 && listed(&a, &b) == na + 1u &&
                   ordered());
             ds_enable(1);
         }
@@ -243,7 +247,7 @@ int main(void)
     run_to_due();
     check("the wrap's erase cut short: the record still queued", ds_pending() >= 0 && ds_last_rc == -1);
     restart();
-    check("... a restart: the boot erases again, writes back, writes it", ds_boot(0) == 0 && ds_pending() < 0);
+    check("... a restart: the boot erases again, writes back, writes it", ds_boot(0, 0) == 0 && ds_pending() < 0);
     n = listed(&a, &b);
     check("... 3 back + it, in order, after the newest before", n == 4 && ordered() && b == a + 3u);
     ds_enable(1);
@@ -258,7 +262,7 @@ int main(void)
     check("the write-back cut: one back, the record queued", n == 1 && ds_pending() >= 0 && ds_last_rc == -5);
     restart();
     check("... a restart: the record written after it (past the cut slot, its seq after the queue's)",
-          ds_boot(0) == 0 && listed(&a, &b) == 2 && b == a + 3u);
+          ds_boot(0, 0) == 0 && listed(&a, &b) == 2 && b == a + 3u);
     ds_enable(1);
 
     /* a staged update: no write, no clear; the record waits and goes once the area is the stats' again */
@@ -309,7 +313,7 @@ int main(void)
     run_to(now_ms + 4321u);
     restart();
     n = listed(&a, &b);
-    check("a crash (count 1): its snapshot written at the boot", ds_boot(1) == 1 && listed(&a, &b) == n + 1u);
+    check("a crash (count 1): its snapshot written at the boot", ds_boot(1, 0) == 1 && listed(&a, &b) == n + 1u);
     {
         uint8_t at[DS_SLOTS];
         ds_rec_t r;
@@ -318,22 +322,58 @@ int main(void)
               !(r.flags & DS_PERIODIC) && r.crashes == 1);
     }
     restart();
-    check("... a restart, the same crash: not again", ds_boot(1) == 0 && listed(&a, &b) == n + 1u);
+    check("... a restart, the same crash: not again", ds_boot(1, 0) == 0 && listed(&a, &b) == n + 1u);
     ds_enable(0);
     run_to(3000u);
     restart();
-    check("crash 2, the switch off: its snapshot all the same", ds_boot(2) == 1 && listed(&a, &b) == n + 2u);
+    check("crash 2, the switch off: its snapshot all the same", ds_boot(2, 0) == 1 && listed(&a, &b) == n + 2u);
     ds_ni.busy = 1;                            /* the boot's save of crash 3 struck by a crash */
-    check("a save cut short: the next boot keeps nothing", ds_boot(3) < 0 && !ds_ni.busy && listed(&a, &b) == n + 2u);
-    check("... nor the one after", ds_boot(3) == 0 && listed(&a, &b) == n + 2u);
+    check("a save cut short: the next boot keeps nothing", ds_boot(3, 0) < 0 && !ds_ni.busy && listed(&a, &b) == n + 2u);
+    check("... nor the one after", ds_boot(3, 0) == 0 && listed(&a, &b) == n + 2u);
     power();
-    check("a power-on after a crash: no snapshot taken, none written", ds_boot(4) == 0 && listed(&a, &b) == n + 2u);
+    check("a power-on after a crash: no snapshot taken, none written", ds_boot(4, 0) == 0 && listed(&a, &b) == n + 2u);
 
-    /* the readout's frames: 2 a record, the end; the clear */
+    /* the stacks' least room ever: once a second, kept by a restart, from the flash after a power-on, the crash's */
+    {
+        ds_rec_t r;
+        uint8_t at[DS_SLOTS];
+        uint32_t m;
+        ds_enable(1);
+        tstk[0] = 3000, tstk[2] = 900;         /* (a deep pass: then back up) */
+        run_to(now_ms + 1500u);
+        tstk[0] = 20000, tstk[2] = 1800;
+        run_to(now_ms + 1500u);
+        check("the least ever: the deep second kept, the room now higher", ds_least_ever(PLAT_STK_MAIN) == 3000 &&
+              ds_least_ever(PLAT_STK_C1) == 900 && ds_least_ever(PLAT_STK_IRQ) == 7000);
+        run_to_due();
+        m = ds_list(at);
+        check("... in the next record (since the start: the room now)", ds_slot(at[m - 1u], &r) == 1 &&
+              r.ever[0] == 3000 && r.ever[2] == 900 && r.stk_main == 20000);
+        restart();
+        check("... a restart keeps it", ds_boot(0, 0) == 0 && ds_least_ever(PLAT_STK_MAIN) == 3000);
+        power();
+        check("... a power-off loses the queue's", ds_ni.ever[0] == -1);
+        check("... the boot takes the newest record's", ds_boot(0, 0) == 0 && ds_least_ever(PLAT_STK_MAIN) == 3000 &&
+              ds_least_ever(PLAT_STK_C1) == 900);
+        {
+            const int32_t left[3] = {1500, 6000, -1};   /* (a crash with the main stack this deep: stacks.c) */
+            run_to(now_ms + 1500u);
+            restart();
+            check("a crash 1500 bytes from the main stack's bottom: the least ever 1500", ds_boot(9, left) == 1 &&
+                  ds_least_ever(PLAT_STK_MAIN) == 1500 && ds_least_ever(PLAT_STK_IRQ) == 6000 &&
+                  ds_least_ever(PLAT_STK_C1) == 900);
+            m = ds_list(at);
+            check("... its snapshot carries it", ds_slot(at[m - 1u], &r) == 1 && r.flags & DS_CRASH && r.ever[0] == 1500);
+            power();
+            check("... and after a power-off, the flash's", ds_boot(0, 0) == 0 && ds_least_ever(PLAT_STK_MAIN) == 1500);
+        }
+    }
+
+    /* the readout's frames: 3 a record, the end; the clear */
     request("");
     n = listed(&a, &b);
-    check("the readout: all, two frames each, oldest first, \"end N\"", nsent == (int)(2u * n + 1u) &&
-          !strncmp(sent[0], "stat 1/", 7) && !strncmp(sent[2u * n - 2u], "stat ", 5) && atoi(sent[2u * n] + 4) == (int)n);
+    check("the readout: all, three frames each, oldest first, \"end N\"", nsent == (int)(3u * n + 1u) &&
+          !strncmp(sent[0], "stat 1/", 7) && !strncmp(sent[3u * n - 3u], "stat ", 5) && atoi(sent[3u * n] + 4) == (int)n);
     request("X");
     check("LS with other bytes: nothing sent, nothing erased", nsent == 0 && listed(&a, &b) == n);
     request("CLR");

@@ -35,20 +35,27 @@
  *   8  build  u32  FM1B_BUILD                        12 up_s    u32  uptime, seconds
  *   16 halves u32  audio halves rendered (fm1b_dbg)  20 nested  u32  TIMER5 ticks inside a render
  *   24 late   u16  halves the DMA overran            26 max_us  u16  the longest render, us
- *   28 cpu_q12 u16 the render's load, 1/4096         30 gap_us  u16  the longest TIMER5 gap, us
- *   32 t5_late u16 TIMER5 gaps over 300 us           34 lock_us u16  the longest the app held the interrupts, us
- *   36 pass_us u16 the longest main-loop pass, us    38 prog_us u16  the longest page program of these records, us
- *   40 boots  u8   starts since power-on             41 crashes u8   fm1_crash.count
- *   42 flags  u8   DS_PERIODIC 1, DS_CRASH 2, DS_LOUD 4 (written while the app was not quiet), DS_ON 8 (the switch);
+ *   28 gap_us u16  the longest TIMER5 gap, us        30 lock_us u16  the longest the app held the interrupts, us
+ *   32 pass_us u16 the longest main-loop pass, us    34 prog_us u16  the longest page program of these records, us
+ *   36 stk_main u16, 38 stk_irq u16                  the main and interrupt stacks' least room since the start, bytes
+ *   40 ever_main u16, 42 ever_irq u16, 44 ever_c1 u16  each stack's least room ever (plat_stack_least_ever: across
+ *                  restarts and power-offs, the crashes' too; the second core's jobs' stack too), bytes
+ *   46 t5_late u8  TIMER5 gaps over 300 us           47 boots   u8   starts since power-on
+ *   48 crashes u8  fm1_crash.count
+ *   49 flags  u8   DS_PERIODIC 1, DS_CRASH 2, DS_LOUD 4 (written while the app was not quiet), DS_ON 8 (the switch);
  *                  bits 4..7: the stage the longest pass ended in
- *   43 stage  u8   the main loop's step now (fm1b_dbg.stage), bits 4..7 the last watchdog reset's (wdt_stage)
- *   44 cpu2   u8   bit 0 it takes jobs, 1 barred, 2..4 why it gave up (plat_cpu2_gave_up), 5..7 failed boots
- *   45 bt     u8   plat_ble_state, bit 2 a central listening, bit 3 linked
- *   46 wifi   u8   plat_wifi_state (0: none in the build)
- *   47 app    13 bytes, the app's (APP_STATS: app_stats; APP_STATS_LAYOUT names them)
+ *   50 stage  u8   the main loop's step now (fm1b_dbg.stage), bits 4..7 the last watchdog reset's (wdt_stage)
+ *   51 cpu2   u8   bit 0 it takes jobs, 1 barred, 2..4 why it gave up (plat_cpu2_gave_up), 5..7 failed boots
+ *   52 radio  u8   bits 0..3 Bluetooth (plat_ble_state, bit 2 a central listening, bit 3 linked), 4..7 plat_wifi_state
+ *   53 app    7 bytes, the app's (APP_STATS: app_stats; APP_STATS_LAYOUT names them)
  *   60 crc    u32  CRC-32 (zlib's) of bytes 4..59
- * Counters saturate (u8 255, u16 65535). The maxima (max_us, gap_us, lock_us) are since the start or the log readout's
- * clear (F0 7D 4C 47 F7 reads and clears them); pass_us and prog_us are since the record before.
+ * Counters saturate (u8 255, u16 65535); a stack's 65535: not known (not measured, the second core off). The maxima
+ * (max_us, gap_us, lock_us) are since the start or the log readout's clear (F0 7D 4C 47 F7 reads and clears them);
+ * pass_us and prog_us are since the record before.
+ *
+ * The least room ever (ds_ni.ever): each stack's room read once a second (ds_stack: plat_stack_left), the least kept in
+ * the queue's .noinit (a restart keeps it); at a power-on taken from the newest record in the flash, then lowered by
+ * the crash's room (crash_keep's, the crash record's CL_STK); written into every record as it goes to the flash.
  *
  * Hooks from the platform (device/main_fm1.c, host/plat_host.c, tests/dbgstats_test.c):
  *   ds_read(off, dst, n)   ds_erase(off) (4 KiB)   ds_prog(off, src, n) (bits 1 to 0, within a 256-byte page)
@@ -56,15 +63,17 @@
  *   ds_staged()            1: an update is staged (no write, no clear)
  *   ds_fill(r)             r's counters and app block (up_s .. app; the rest is set here)
  *   ds_quiet()             1: a write now disturbs nothing (the app's transport stopped)
+ *   ds_stack(k)            stack k's room now (plat_stack_left: PLAT_STK_MAIN, _IRQ, _C1), bytes, -1 not known
  *   DS_LAYOUT              the app block's fields, "name width ..." (APP_STATS_LAYOUT), or 0: printed raw
  *   DS_NOINIT              the queue's section attribute (.noinit on the device) */
-#define DS_MAGIC 0x31535344u                        /* "DSS1" */
+#define DS_MAGIC 0x32535344u                        /* "DSS2" (DSS1's layout, without the stacks, reads as absent) */
 #define DS_LO 0x000E4000u                           /* the staging area's 5th and last sector */
 #define DS_REC 64u                                  /* bytes a record: four to a 256-byte page, never across one */
 #define DS_SLOTS (0xF00u / DS_REC)                  /* 60: 0xF00..0xFFF erased (the update's record, its scan) */
 #define DS_Q 4u                                     /* the .noinit queue: the newest records, in the flash or not yet */
 #define DS_KEEP 3u                                  /* written back after a wrap's erase */
-#define DS_APP 13u                                  /* the app's bytes in a record (plat.h PLAT_STATS_APP) */
+#define DS_APP 7u                                   /* the app's bytes in a record (plat.h PLAT_STATS_APP) */
+#define DS_STK_NONE 0xFFFFu                         /* a stack's room not known */
 #define DS_PERIOD_MS 300000u                        /* a snapshot every 5 minutes of uptime */
 #define DS_FORCE_MS 240000u                         /* not quiet this long after: written anyway (before the next) */
 #define DS_RETRY_MS 1000u                           /* a write that failed (staged, the flash): tried again this much later */
@@ -84,12 +93,14 @@ _Static_assert(DS_KEEP < DS_Q && DS_KEEP < DS_SLOTS, "the debug stats: the write
 
 typedef struct {
     uint32_t magic, seq, build, up_s, halves, nested;
-    uint16_t late, max_us, cpu_q12, gap_us, t5_late, lock_us, pass_us, prog_us;
-    uint8_t boots, crashes, flags, stage, cpu2, bt, wifi;
+    uint16_t late, max_us, gap_us, lock_us, pass_us, prog_us;
+    uint16_t stk_main, stk_irq, ever[3];            /* bytes; DS_STK_NONE not known (ever: main, irq, c1) */
+    uint8_t t5_late, boots, crashes, flags, stage, cpu2, radio;
     uint8_t app[DS_APP];
     uint32_t crc;                                   /* CRC-32 of seq .. app */
 } ds_rec_t;
-_Static_assert(sizeof(ds_rec_t) == DS_REC && __builtin_offsetof(ds_rec_t, app) == 47u &&
+_Static_assert(sizeof(ds_rec_t) == DS_REC && __builtin_offsetof(ds_rec_t, stk_main) == 36u &&
+               __builtin_offsetof(ds_rec_t, t5_late) == 46u && __builtin_offsetof(ds_rec_t, app) == 53u &&
                __builtin_offsetof(ds_rec_t, crc) == 60u, "a debug stats record: 64 bytes, as documented above");
 
 typedef struct {                                    /* the queue, kept across a restart (lost at a power-off) */
@@ -99,6 +110,7 @@ typedef struct {                                    /* the queue, kept across a 
     ds_rec_t now;                                   /* the snapshot of the last second (a crash's: ds_boot) */
     ds_rec_t q[DS_Q];                               /* seq 0: not in the flash yet (its crc then over seq 0) */
     uint32_t qms[DS_Q];                             /* when each was queued (the uptime's ms) */
+    int32_t ever[3];                                /* each stack's least room ever, bytes; -1 not known */
 } ds_ni_t;
 static ds_ni_t ds_ni DS_NOINIT;
 static uint8_t ds_on;                               /* the switch (plat_stats_enable), off at every start */
@@ -115,6 +127,8 @@ static int ds_send(const uint8_t *f, uint32_t n);
 static int ds_staged(void);
 static void ds_fill(ds_rec_t *r);
 static int ds_quiet(void);
+static int32_t ds_stack(int k);
+static void ds_ever_put(ds_rec_t *r);
 
 static uint32_t ds_crc(const void *p, uint32_t n)  /* zlib's CRC-32, a bit at a time (no table: 56 bytes a second) */
 {
@@ -187,6 +201,7 @@ static int ds_write(uint32_t k)
                 return -5;
     }
     r->seq = seq + 1u;
+    ds_ever_put(r);                                 /* (the least ever as it is now: with every record) */
     r->crc = ds_rcrc(r);
     if (ds_put(next, r)) {
         r->seq = 0, r->crc = ds_rcrc(r);            /* (not kept: still to write) */
@@ -219,10 +234,25 @@ static int ds_pending(void)                         /* the oldest queued not in 
             return (int)j;
     return -1;
 }
+static void ds_ever_note(uint32_t k, int32_t v)     /* stack k had v bytes left: the least ever lowered */
+{
+    if (v >= 0 && (ds_ni.ever[k] < 0 || v < ds_ni.ever[k]))
+        ds_ni.ever[k] = v;
+}
+static uint16_t ds_stk16(int32_t v) { return v < 0 ? (uint16_t)DS_STK_NONE : (uint16_t)(v < 65534 ? v : 65534); }
+static void ds_ever_put(ds_rec_t *r)                /* the least ever into r (as it goes to the flash) */
+{
+    uint32_t k;
+    for (k = 0; k < 3u; k++)
+        r->ever[k] = ds_stk16(ds_ni.ever[k]);
+}
 static void ds_snap(ds_rec_t *r, uint32_t flags)    /* a snapshot now (seq, magic, crc set when it is written) */
 {
     memset(r, 0, sizeof *r);
     ds_fill(r);
+    r->stk_main = ds_stk16(ds_stack(PLAT_STK_MAIN));
+    r->stk_irq = ds_stk16(ds_stack(PLAT_STK_IRQ));
+    ds_ever_put(r);
     r->build = FM1B_BUILD;
     r->pass_us = ds_pass_us, r->prog_us = ds_prog_us;
     r->flags = (uint8_t)(flags | (ds_on ? DS_ON : 0u) | (uint32_t)(ds_pass_stage & 15u) << 4);
@@ -236,6 +266,7 @@ static void ds_init(void)
     if (ds_ni.magic != DS_NI_MAGIC || ds_ni.nq > DS_Q) {
         memset(&ds_ni, 0, sizeof ds_ni);
         ds_ni.magic = DS_NI_MAGIC;
+        ds_ni.ever[0] = ds_ni.ever[1] = ds_ni.ever[2] = -1;   /* (a power-on: ds_boot takes the flash's) */
     }
     for (j = 0; j < ds_ni.nq; j++)
         if (ds_ni.q[j].crc == ds_rcrc(&ds_ni.q[j])) {
@@ -248,9 +279,32 @@ static void ds_init(void)
 /* the boot, after ds_init (no sound yet: quiet): what the queue still holds into the flash, then, after a crash the
  * flash has no snapshot of (count: fm1_crash.count, 0 none), the second before it, flagged DS_CRASH. A save a crash
  * cut short is not tried again (busy), nor the crash it caused. 1 = a crash's snapshot kept, 0 = none new, < 0 not */
-static int ds_boot(uint32_t count)
+static void ds_ever_boot(const int32_t *crash_left)   /* the least ever: the newest record's, the crash's room */
+{
+    ds_rec_t r;
+    uint32_t i, k, seq = 0;
+    int32_t ev[3] = {-1, -1, -1};
+    for (i = 0; i < DS_SLOTS; i++)
+        if (ds_slot(i, &r) == 1 && r.seq > seq)
+            for (seq = r.seq, k = 0; k < 3u; k++)
+                ev[k] = r.ever[k] == DS_STK_NONE ? -1 : (int32_t)r.ever[k];
+    for (k = 0; k < 3u; k++) {
+        ds_ever_note(k, ev[k]);                     /* (after a power-on the flash's; after a restart no higher) */
+        if (crash_left)
+            ds_ever_note(k, crash_left[k]);
+    }
+}
+/* the least ever of stack k (plat_stack_least_ever): the kept one or the room now, the less; -1 not known */
+static int32_t ds_least_ever(int k)
+{
+    int32_t now = ds_stack(k), e = k >= 0 && k < 3 ? ds_ni.ever[k] : -1;
+    return now >= 0 && (e < 0 || now < e) ? now : e;
+}
+/* crash_left: the crash's stacks' room (stacks.c pst_crash, as the crash record keeps them), 0 none */
+static int ds_boot(uint32_t count, const int32_t *crash_left)
 {
     int k, rc = 0;
+    ds_ever_boot(count && count != ds_ni.crash_seen ? crash_left : 0);
     if (ds_ni.busy) {
         ds_ni.busy = 0;
         ds_ni.crash_seen = count;
@@ -287,7 +341,10 @@ static void ds_poll(uint32_t ms, uint32_t pass_us, uint32_t stage)
     if (pass_us > ds_pass_us)
         ds_pass_us = (uint16_t)(pass_us < 0xFFFFu ? pass_us : 0xFFFFu), ds_pass_stage = (uint8_t)stage;
     if (ms - ds_now_ms >= 1000u || !ds_now_ms) {
+        uint32_t s;
         ds_now_ms = ms ? ms : 1u;
+        for (s = 0; s < 3u; s++)
+            ds_ever_note(s, ds_stack((int)s));      /* (the least ever, once a second) */
         ds_snap(&ds_ni.now, 0);
         ds_ni.now.magic = DS_MAGIC;                 /* (taken: the crash's snapshot, ds_boot) */
         ds_ni.now.crc = ds_rcrc(&ds_ni.now);
@@ -365,29 +422,42 @@ static void ds_frame(uint8_t *f, char *end)        /* f: F0 7D 4C 53 then the te
     *end = (char)0xF7;
     ds_send(f, (uint32_t)((uint8_t *)end - f) + 1u);
 }
-/* a record's two lines, after "stat I/N" and "app I/N":
+/* a record's three lines, after "stat I/N", "stk I/N" and "app I/N":
  *   stat I/N seq DEC up DEC build HEX8 flags HEX2 boots DEC crashes DEC halves DEC nested DEC late DEC maxus DEC
- *        cpu DEC gap DEC t5late DEC lock DEC pass DEC pstage DEC prog DEC stage DEC wdt DEC cpu2 HEX2 bt HEX2 wifi DEC
- *   app I/N NAME DEC ... (DS_LAYOUT's fields, little-endian, in order) or app I/N raw HEX26 (no layout) */
+ *        gap DEC t5late DEC lock DEC pass DEC pstage DEC prog DEC stage DEC wdt DEC cpu2 HEX2 bt HEX2 wifi DEC
+ *   stk I/N main DEC irq DEC ever main DEC irq DEC c1 DEC   (bytes left: since the start, then the least ever; -1 not
+ *        known)
+ *   app I/N NAME DEC ... (DS_LAYOUT's fields, little-endian, in order) or app I/N raw HEX14 (no layout) */
+static char *ds_stk(char *q, const char *lab, uint32_t v)   /* " lab N", N -1 when not known */
+{
+    q = ds_str(q, lab);
+    return v == DS_STK_NONE ? ds_str(q, "-1") : ds_dec(q, v);
+}
+static char *ds_head(uint8_t *f, const char *h, uint32_t k, uint32_t n)   /* "h I/N" at f + 4: its end */
+{
+    char *q = ds_dec(ds_str((char *)f + 4, h), k + 1u);
+    *q++ = '/';
+    return ds_dec(q, n);
+}
 static __attribute__((noinline)) void ds_line(const ds_rec_t *r, uint32_t k, uint32_t n)
 {
-    static const char *const L[20] = {" seq ", " up ", " build ", " flags ", " boots ", " crashes ", " halves ",
-                                      " nested ", " late ", " maxus ", " cpu ", " gap ", " t5late ", " lock ",
-                                      " pass ", " pstage ", " prog ", " stage ", " wdt ", " cpu2 "};
-    const uint32_t v[20] = {r->seq, r->up_s, r->build, r->flags & 15u, r->boots, r->crashes, r->halves, r->nested,
-                            r->late, r->max_us, r->cpu_q12, r->gap_us, r->t5_late, r->lock_us, r->pass_us,
-                            (uint32_t)r->flags >> 4, r->prog_us, r->stage & 15u, (uint32_t)r->stage >> 4, r->cpu2};
+    static const char *const L[21] = {" seq ", " up ", " build ", " flags ", " boots ", " crashes ", " halves ",
+                                      " nested ", " late ", " maxus ", " gap ", " t5late ", " lock ", " pass ",
+                                      " pstage ", " prog ", " stage ", " wdt ", " cpu2 ", " bt ", " wifi "};
+    const uint32_t v[21] = {r->seq, r->up_s, r->build, r->flags & 15u, r->boots, r->crashes, r->halves, r->nested,
+                            r->late, r->max_us, r->gap_us, r->t5_late, r->lock_us, r->pass_us, (uint32_t)r->flags >> 4,
+                            r->prog_us, r->stage & 15u, (uint32_t)r->stage >> 4, r->cpu2, r->radio & 15u,
+                            (uint32_t)r->radio >> 4};
     uint8_t f[4u + 320u];                           /* (the stat line: 300 characters at most, then F7) */
-    char *q = ds_dec(ds_str((char *)f + 4, "stat "), k + 1u);
+    char *q = ds_head(f, "stat ", k, n);
     uint32_t j;
-    *q++ = '/';
-    q = ds_dec(q, n);
-    for (j = 0; j < 20u; j++) {
+    for (j = 0; j < 21u; j++) {
         q = ds_str(q, L[j]);
-        q = j == 2u ? ds_hex(q, v[j], 8u) : j == 3u || j == 19u ? ds_hex(q, v[j], 2u) : ds_dec(q, v[j]);
+        q = j == 2u ? ds_hex(q, v[j], 8u) : j == 3u || j == 18u || j == 19u ? ds_hex(q, v[j], 2u) : ds_dec(q, v[j]);
     }
-    q = ds_hex(ds_str(q, " bt "), r->bt, 2u);
-    q = ds_dec(ds_str(q, " wifi "), r->wifi);
+    ds_frame(f, q);
+    q = ds_stk(ds_stk(ds_head(f, "stk ", k, n), " main ", r->stk_main), " irq ", r->stk_irq);
+    q = ds_stk(ds_stk(ds_stk(q, " ever main ", r->ever[0]), " irq ", r->ever[1]), " c1 ", r->ever[2]);
     ds_frame(f, q);
     q = ds_dec(ds_str((char *)f + 4, "app "), k + 1u);
     *q++ = '/';
@@ -421,7 +491,7 @@ static __attribute__((noinline)) void ds_line(const ds_rec_t *r, uint32_t k, uin
     }
     ds_frame(f, q);
 }
-static uint32_t ds_print(void)                      /* every record, oldest first, two frames each; their number */
+static uint32_t ds_print(void)                      /* every record, oldest first, three frames each; their number */
 {
     uint8_t at[DS_SLOTS];
     uint32_t n = ds_list(at), k;

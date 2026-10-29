@@ -52,6 +52,10 @@
  *                                the last boot's save, 1 kept, 0 nothing new, < 0 not kept; the history over "sysex
  *                                F0 7D 4C 48 F7", cleared with "sysex F0 7D 4C 48 43 4C 52 F7"); the debug stats' queue
  *                                lost too (device/dbgstats.c: "crash" and "reboot" keep it)
+ *   stack MAIN IRQ C1            the stacks' marks used down to these bytes left in this run (device/stacks.c; -1 not
+ *                                measured; every boot starts from -1): a "crash" keeps them in its record ("stk" line),
+ *                                the stats' least ever goes down with them (expect stk_ever_main / _irq / _c1)
+ *   stack_guard 1                the next "crash" ran a stack into its guard (EMU_MSG bit 3: "guard 1")
  *   stats_switch 1|0             the debug stats on / off (plat_stats_enable, as an app's setting does; expect stats:
  *                                the records in the flash, stats_pending: queued, stats_on, stats_rc: the last write's;
  *                                read over "sysex F0 7D 4C 53 F7", cleared with "sysex F0 7D 4C 53 43 4C 52 F7")
@@ -1149,7 +1153,14 @@ static struct {                                     /* the device's .noinit: fm1
     uint32_t magic, count, vec, pc, rets, sp, uptime_ms;
     uint32_t r[16], usp;
     uint32_t kept, busy;
+    uint32_t emu;                                   /* (EMU_MSG: bit 3 with "stack_guard 1", a stack in its guard) */
+    int32_t left[3];                                /* the stacks' room at the crash (stacks.c pst_crash) */
 } hcr;
+/* the stacks' room in this run (stacks.c plat_stack_left), as the script says the painted marks were used down to
+ * ("stack MAIN IRQ C1", bytes left, -1 not measured; each boot starts from -1: a new paint) */
+static int32_t hst_left[3] = {-1, -1, -1};
+static uint32_t hst_guard;                          /* the next crash ran into a guard ("stack_guard 1") */
+int32_t plat_stack_left(int k) { return k >= 0 && k < 3 ? hst_left[k] : -1; }
 static uint32_t hcr_boot_ms;                        /* (now_ms at the last boot: the crash's uptime) */
 static int hcr_rc;                                  /* the last boot's cl_boot: 1 kept, 0 nothing new, < 0 not kept */
 static void hcr_crash(uint32_t pc, uint32_t vec, int in_save)   /* a fault, as fm1_fault_c records it */
@@ -1162,6 +1173,10 @@ static void hcr_crash(uint32_t pc, uint32_t vec, int in_save)   /* a fault, as f
     for (i = 0; i < 16u; i++)
         hcr.r[i] = 0x11111111u * i ^ hcr.count;
     hcr.usp = hcr.sp + 0x100u;
+    hcr.emu = hst_guard ? 1u << 3 : 0u;             /* (EMU_MSG bit 3: sp out of the stacks' window) */
+    hst_guard = 0;
+    for (i = 0; i < 3u; i++)
+        hcr.left[i] = hst_left[i];                  /* (main_fm1.c fm1_fault: stacks.c pst_at_crash) */
     if (in_save)
         hcr.busy = 1;                               /* (crash_in_save: the boot's save under way when it struck) */
 }
@@ -1175,6 +1190,9 @@ static void hcr_boot(void)                          /* main_fm1.c fm1_main's: a 
     memset(&r, 0, sizeof r);
     r.count = hcr.count, r.vec = hcr.vec, r.pc = hcr.pc, r.rets = hcr.rets, r.sp = hcr.sp, r.uptime_ms = hcr.uptime_ms;
     r.build = FM1B_BUILD, r.flags = CL_CTX, r.usp = hcr.usp, r.ssp = hcr.usp - 0x800u;
+    if (hcr.left[0] >= 0 || hcr.left[1] >= 0 || hcr.left[2] >= 0)
+        r.flags |= cl_stk_pack(hcr.left);           /* (the stacks' room, when the script said: "stack") */
+    r.emu = hcr.emu;
     memcpy(r.r, hcr.r, sizeof r.r);
     hcr_rc = cl_boot(&r, &hcr.kept, &hcr.busy);
 }
@@ -1234,15 +1252,20 @@ static int ds_quiet(void)
     return 1;
 #endif
 }
+static int32_t ds_stack(int k) { return plat_stack_left(k); }
 void plat_stats_enable(int on) { ds_enable(on); }
 int plat_stats_on(void) { return ds_on; }
+int32_t plat_stack_least_ever(int k) { return ds_least_ever(k); }
 static uint32_t hds_boots, hds_halves;              /* starts since the power-on (fm1b_dbg.boots), halves since the boot */
-static void hds_boot(void)                          /* main_fm1.c stats_keep: the queue, a crash's snapshot */
+static void hds_boot(void)                          /* main_fm1.c stats_keep: the queue, a crash's snapshot, the least
+                                                     * ever; then a new paint (stacks.c pst_boot) */
 {
+    int on = hcr.magic == HCR_MAGIC;
     hds_boots++;
     hds_halves = 0;
     ds_init();
-    (void)ds_boot(hcr.magic == HCR_MAGIC ? hcr.count : 0u);
+    (void)ds_boot(on ? hcr.count : 0u, on ? hcr.left : 0);
+    hst_left[0] = hst_left[1] = hst_left[2] = -1;
 }
 #if FM1B_SD
 /* the SD card (plat.h plat_sd_*): an image file, its 512-byte blocks read and written in place (FM1B_SD=FILE in the
@@ -1623,7 +1646,6 @@ uint32_t plat_cpu_pct(void) { return cpu_pct; }
 static void ds_fill(ds_rec_t *r)                    /* what the simulator has of main_fm1.c's counters (the rest 0) */
 {
     r->up_s = (now_ms - hcr_boot_ms) / 1000u, r->halves = hds_halves;
-    r->cpu_q12 = (uint16_t)(cpu_pct < 1599u ? cpu_pct * 4096u / 100u : 65535u);
     r->boots = (uint8_t)(hds_boots < 255u ? hds_boots : 255u);
     r->crashes = hcr.magic == HCR_MAGIC ? (uint8_t)(hcr.count < 255u ? hcr.count : 255u) : 0u;
 #ifdef APP_STATS
@@ -2375,6 +2397,12 @@ static int expect(const char *what, const char *val)
             got += !ds_ni.q[j].seq;
     } else if (!strcmp(what, "stats_on"))          /* the switch (plat_stats_enable) */
         got = ds_on;
+    else if (!strcmp(what, "stk_ever_main"))       /* plat_stack_least_ever: the least room ever, bytes (-1 not known) */
+        got = plat_stack_least_ever(PLAT_STK_MAIN);
+    else if (!strcmp(what, "stk_ever_irq"))
+        got = plat_stack_least_ever(PLAT_STK_IRQ);
+    else if (!strcmp(what, "stk_ever_c1"))
+        got = plat_stack_least_ever(PLAT_STK_C1);
     else if (!strcmp(what, "stats_rc"))            /* the last write's: 0 kept, < 0 not (-7: an update staged) */
         got = ds_last_rc;
     else if (!strcmp(what, "crashes")) {           /* the flash history's records, as a readout lists them (at most 8) */
@@ -2970,6 +2998,13 @@ int main(int argc, char **argv)
                    hcr.magic == HCR_MAGIC ? hcr.count : 0u, hcr_rc);
         } else if (!strcmp(cmd, "stats_switch")) {   /* stats_switch 1|0: plat_stats_enable, as an app's setting */
             plat_stats_enable(atoi(a));
+        } else if (!strcmp(cmd, "stack")) {         /* stack MAIN IRQ C1: the marks used down to these bytes left */
+            if (a[0] && b[0] && c[0])
+                hst_left[0] = atoi(a), hst_left[1] = atoi(b), hst_left[2] = atoi(c);
+            else
+                printf("stack: MAIN IRQ C1 (bytes left, -1 not measured)\n");
+        } else if (!strcmp(cmd, "stack_guard")) {   /* stack_guard 1: the next crash is a stack in its guard */
+            hst_guard = (uint32_t)(atoi(a) != 0);
         } else if (!strcmp(cmd, "ota_stage") || !strcmp(cmd, "ota_unstage")) {
             data_init();                        /* (ota.c: a loader's first word at 0xE0000; its unstage: all 5) */
             if (cmd[4] == 's')

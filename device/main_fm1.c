@@ -299,6 +299,8 @@ static void hexs(char *b, uint32_t v)
     b[8] = 0;
 }
 
+#include "stacks.c"                                 /* the stacks' room: painted at the start, read at a crash */
+
 /* the crash history in flash (crashlog.c: the staging area's 0xE2000..0xE3FFF), the boot's save and the readouts */
 #ifndef FM1B_BUILD
 #define FM1B_BUILD 0u                               /* (tools/build.py's build_id) */
@@ -343,6 +345,8 @@ static void crash_keep(void)                        /* the boot: a crash since t
             r.r[i] = x->r[i];
         r.usp = x->usp, r.ssp = x->ssp;
     }
+    if (pst_crash.count == fm1_crash.count)         /* (the stacks' room fm1_fault read at this crash: stacks.c) */
+        r.flags |= cl_stk_pack(pst_crash.left);
     (void)cl_boot(&r, &fm1b_dbg.crash_kept, &fm1b_dbg.crash_saving);
 }
 
@@ -414,18 +418,18 @@ static void ds_fill(ds_rec_t *r)
           ((uint32_t)plat_cpu2_gave_up() & 7u) << 2;
 #endif
     r->up_s = fm1_ms / 1000u, r->halves = fm1b_dbg.halves, r->nested = fm1b_dbg.nested;
-    r->late = ds_u16(fm1b_dbg.late), r->max_us = ds_u16(fm1b_dbg.max_us), r->cpu_q12 = ds_u16(fm1b_dbg.cpu_q12);
-    r->gap_us = ds_u16(t5_gap_max), r->t5_late = ds_u16(t5_late), r->lock_us = ds_u16(lock_max);
+    r->late = ds_u16(fm1b_dbg.late), r->max_us = ds_u16(fm1b_dbg.max_us);
+    r->gap_us = ds_u16(t5_gap_max), r->t5_late = ds_u8(t5_late), r->lock_us = ds_u16(lock_max);
     r->boots = ds_u8(fm1b_dbg.boots);
     r->crashes = fm1_crash.magic == FM1_CRASH_MAGIC ? ds_u8(fm1_crash.count) : 0u;
     r->stage = (uint8_t)((fm1b_dbg.stage & 15u) | (wdt_stage & 15u) << 4);
     r->cpu2 = (uint8_t)c2;
 #if FM1B_BLE
-    r->bt = (uint8_t)(((uint32_t)plat_ble_state() & 3u) | (uint32_t)(plat_ble_connected() != 0) << 2 |
-                      (uint32_t)(plat_ble_linked() != 0) << 3);
+    r->radio = (uint8_t)(((uint32_t)plat_ble_state() & 3u) | (uint32_t)(plat_ble_connected() != 0) << 2 |
+                         (uint32_t)(plat_ble_linked() != 0) << 3);
 #endif
 #if FM1B_WIFI
-    r->wifi = (uint8_t)plat_wifi_state();
+    r->radio |= (uint8_t)(((uint32_t)plat_wifi_state() & 15u) << 4);
 #endif
 #ifdef APP_STATS
     app_stats(r->app);
@@ -439,13 +443,17 @@ static int ds_quiet(void)
     return 1;
 #endif
 }
+static int32_t ds_stack(int k) { return plat_stack_left(k); }
 void plat_stats_enable(int on) { ds_enable(on); }
 int plat_stats_on(void) { return ds_on; }
-static void stats_keep(void)                        /* the boot: the queue's left, a crash's snapshot (dbgstats.c) */
+int32_t plat_stack_least_ever(int k) { return ds_least_ever(k); }
+static void stats_keep(void)                        /* the boot: the queue's left, a crash's snapshot (dbgstats.c), the
+                                                     * stacks' least ever (the flash's, the crash's room) */
 {
+    uint32_t count = fm1_crash.magic == FM1_CRASH_MAGIC ? fm1_crash.count : 0u;
     ds_init();
     if (flash_ok)
-        (void)ds_boot(fm1_crash.magic == FM1_CRASH_MAGIC ? fm1_crash.count : 0u);
+        (void)ds_boot(count, count && pst_crash.count == count ? pst_crash.left : 0);
 }
 #if FM1B_BLE
 static char *log_dec(char *b, uint32_t v)            /* v in decimal at b; the end */
@@ -470,13 +478,16 @@ static char *log_dec(char *b, uint32_t v)            /* v in decimal at b; the e
  * The crash history alone, for a program: F0 7D 4C 48 F7 ("LH") asks; one frame a record, F0 7D 4C 48 <ASCII> F7,
  *   crash I/N n COUNT vec HEX pc HEX rets HEX sp HEX ms DEC emu HEX dbg HEX psr HEX build HEX seq DEC
  *   regs I/N r0 HEX .. r15 HEX usp HEX ssp HEX (when the record has the registers)
+ *   stk I/N main DEC irq DEC c1 DEC guard 0|1 (each stack's bytes left at the crash, -1 not known; guard: EMU_MSG bit 3
+ *     or DBG_MSG bit 13, a stack into its guard; crashlog.c)
  * the oldest first (I of N, at most 8), then "end N". F0 7D 4C 48 43 4C 52 F7 ("LHCLR") erases it and answers
  * "cleared" (or "clear failed"); a boot never clears it (an install does: the update's staging, crashlog.c).
  * The debug stats (dbgstats.c: every 5 minutes while the app has them on, and one with every crash; the record's
- * layout there): F0 7D 4C 53 F7 ("LS") asks; two frames a record, F0 7D 4C 53 <ASCII> F7, the oldest first (at most 60),
+ * layout there): F0 7D 4C 53 F7 ("LS") asks; three frames a record, F0 7D 4C 53 <ASCII> F7, the oldest first (at most 60),
  *   stat I/N seq DEC up DEC build HEX flags HEX boots DEC crashes DEC halves DEC nested DEC late DEC maxus DEC
- *     cpu DEC gap DEC t5late DEC lock DEC pass DEC pstage DEC prog DEC stage DEC wdt DEC cpu2 HEX bt HEX wifi DEC
- *   app I/N NAME DEC ... (the app's fields, APP_STATS_LAYOUT) or app I/N raw HEX (26 digits)
+ *     gap DEC t5late DEC lock DEC pass DEC pstage DEC prog DEC stage DEC wdt DEC cpu2 HEX bt HEX wifi DEC
+ *   stk I/N main DEC irq DEC ever main DEC irq DEC c1 DEC (bytes left since the start, then the least ever)
+ *   app I/N NAME DEC ... (the app's fields, APP_STATS_LAYOUT) or app I/N raw HEX (14 digits)
  * then "end N". F0 7D 4C 53 43 4C 52 F7 ("LSCLR") erases them: "cleared", or "clear failed" (an update staged). Up and
  * the times in seconds and microseconds; flags 1 periodic, 2 a crash's, 4 written while playing, 8 the switch on.
  * Both answer in safe mode too */
@@ -1080,6 +1091,7 @@ static void fm1_fault(const fm1_crash_t *c)
 {
     char b[12];
     uint32_t t0;
+    pst_at_crash(c->count);                         /* the stacks' room before anything here draws on one (stacks.c) */
 #ifdef APP_FAULT
     app_fault(c);                                   /* the app's first (its second core: given up, or this is it) */
 #endif
@@ -1218,6 +1230,8 @@ static void fm1_main(void)
     uint32_t last_frame = 0;
     {
         uint32_t f = irq_save();
+        pst_boot(&knob);                            /* the stacks painted below what is live (stacks.c: the room a crash
+                                                     * finds; the last run's marks were read at its fault, if any) */
         rails_boot[0] = fm1_p33_read(FM1_P3_ANA_CON6);
         rails_boot[1] = fm1_p33_read(FM1_P3_ANA_CON9);
         for (rails_tries = 1; ; rails_tries++) {

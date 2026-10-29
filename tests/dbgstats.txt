@@ -28,18 +28,35 @@ expect stats 4
 stats_switch 1
 wait 300100
 expect stats 5
-# a crash at 5:20: the boot writes the second before it
+# the main stack's marks used down to 900 bytes left (then a guard hit): a crash at 5:20, the boot writes the second
+# before it; the crash record keeps the stacks' room, the least ever goes down to it
+expect stk_ever_main -1
+stack 900 6000 -1
+stack_guard 1
 wait 20000
+expect stk_ever_main 900
 crash 02011000 3
 expect stats 6
 expect stats_on 0
-# a power-off: the flash kept, the switch off
+expect crashes 1
+expect stk_ever_main 900
+expect stk_ever_irq 6000
+expect stk_ever_c1 -1
+# a restart: kept (.noinit); this run's own stack: not measured yet
+reboot
+expect stk_ever_main 900
+# a power-off: the flash kept, the switch off; the least ever from the newest record
 power
 expect stats 6
+expect stk_ever_main 900
 sysex F0 7D 4C 53 F7
 wait 50
 # "end 6"
 expect_sysex F0 7D 4C 53 65 6E 64 20 36 F7
+sysex_out
+# the crash history: the crash's stacks' room and the guard ("stk 1/1 main 896 irq 5984 c1 -1 guard 1")
+sysex F0 7D 4C 48 F7
+wait 50
 sysex_out
 flash_dump out:dbgstats_flash.bin
 # an update staged: the 5:00 snapshot waits, the clear is refused
