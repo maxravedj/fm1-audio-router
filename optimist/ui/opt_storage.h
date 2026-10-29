@@ -43,6 +43,7 @@ static uint32_t fl_jedec_ram(void)              /* the part Optimist expects: pl
 {
     return plat_data(PLAT_DATA_LO) ? 0x856014u : 0u;
 }
+static void dev_uid_read(void) {}               /* (persist_boot: the flash ID for the name FM1-XXXX; fm1-base reads it itself: plat_chip_uid, plat_dev_id) */
 static void fl_plain_window_init(void) {}       /* (fm1-base's start-up maps the data area as plaintext: main_fm1.c) */
 #define fl_inval(off, len) ((void)(off), (void)(len))   /* (nbank.c's CZ store: felucca-bsp's driver drops the
                                                  * cache lines itself, after each erase and program) */
