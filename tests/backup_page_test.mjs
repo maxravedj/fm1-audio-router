@@ -272,7 +272,7 @@ const resealed = (b) => {                                      // its CRCs right
 }
 {
   // an FM-1 under the name of a firmware of the family (Optimist, SLOOP, Melodee, LOOM-8) is asked by itself
-  for (const name of ["Optimist", "SLOOP 2.4", "Melodee", "LOOM-8"]) {
+  for (const name of ["FM1-1A2B", "Optimist", "SLOOP 2.4", "Melodee", "LOOM-8"]) {
     const dev = new FakeFM1(img);
     const port = (n) => ({ name: n, state: "connected", open: async () => {} });
     const acc = { inputs: new Map([["i", port("Launchkey Mini")], ["j", port(name)]]), outputs: new Map([["o", port("Launchkey Mini")], ["p", port(name)]]) };

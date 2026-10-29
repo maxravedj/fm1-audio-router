@@ -9,6 +9,7 @@ a few register and RAM ranges). Needs mido with python-rtmidi.
   fm1_debug.py poke ADDR VALUE        write a word, print it before and after
   fm1_debug.py clock [ITERATIONS]     time a fixed loop against the 24 MHz timer (IRQs off)
 """
+import re
 import sys
 import time
 
@@ -26,8 +27,15 @@ def r35(b, i):
     return sum(b[i + k] << (7 * k) for k in range(5)) & 0xFFFFFFFF
 
 
+def fm1_ports(names):
+    """the USB-MIDI ports of an FM-1 among names: "FM1-XXXX" (four hex digits: Optimist's name since 2026-10-29), "Optimist"
+    (a device on older firmware), or "FM-1" in it (the stock names), or "X0X"; never a Bluetooth port, never other gear"""
+    return [n for n in names if "bluetooth" not in n.lower() and
+            (re.search(r"FM1-[0-9A-Fa-f]{4}", n) or "FM-1" in n or "optimist" in n.lower() or "X0X" in n)]
+
+
 def ask(cmd, args, timeout=3.0):
-    name = next((n for n in mido.get_output_names() if "FM-1" in n or "X0X" in n), None)
+    name = next(iter(fm1_ports(mido.get_output_names())), None)
     if not name:
         sys.exit("fm1_debug: no FM-1 MIDI port")
     with mido.open_input(name) as i, mido.open_output(name) as o:

@@ -33,7 +33,8 @@ FINISH_CHECK, FINISH_WRITE = 0xE0000000, 0xF0000000
 MAXDATA = 512
 BLOCKS, BLK, KEEP = 20, 0x30, 0x2F
 LOADER_MARK = b"FELUCCA-LOADER-1"
-# the ports probed without --port: the FM-1's usual names, and the names FM-1 firmwares give their own port (Optimist,
+# the ports probed without --port: the FM-1's usual names, and the names FM-1 firmwares give their own port (FM1-XXXX: Optimist's
+# since 2026-10-29, "Optimist" before it,
 # SLOOP, Melodee, LOOM-8: an FM-1 running one of them shows as that name alone); never other gear
 PORT_RE = re.compile(r"fm-?1|felucca|ota|composite|sinco|usb-midi|optimist|sloop|melodee|loom-?8", re.I)
 

@@ -47,7 +47,11 @@ run usb-audio sh -c "$CC -std=c11 -O1 -Wall -Wextra -Werror -Wno-unused-function
     -Ibsp/chip -DTEST_FB=1 -DTEST_O24=1 -o $OUT/uac_test_fb bsp/tests/uac_test.c -lm && $OUT/uac_test_fb && \
     $CC -std=c11 -O1 -Wall -Wextra -Werror -Wno-unused-function -Wno-unused-variable -Wno-missing-field-initializers \
     -Ibsp/chip -DTEST_SPLIT=1 -DTEST_NAMES=1 -DTEST_FB=1 -DTEST_O24=1 -DTEST_HC=1 -DTEST_CH=4 -DTEST_24=1 \
-    -o $OUT/uac_test_split bsp/tests/uac_test.c -lm && $OUT/uac_test_split"
+    -o $OUT/uac_test_split bsp/tests/uac_test.c -lm && $OUT/uac_test_split && \
+    $CC -std=c11 -O1 -Wall -Wextra -Werror -Wno-unused-function -Wno-unused-variable -Wno-missing-field-initializers \
+    -Ibsp/chip -DTEST_SPLIT=1 -DTEST_NAMEFN=1 -o $OUT/uac_test_namefn bsp/tests/uac_test.c -lm && $OUT/uac_test_namefn"
+# "FM1-XXXX": the four hex digits from the flash's unique ID (plat_uid.h), the name built from them
+run dev-name sh -c "$CC -std=c11 -Wall -Wextra -Werror -O1 -o $OUT/dev_name_test tests/dev_name_test.c && $OUT/dev_name_test"
 # the cache RAM (felucca-bsp's chip/fm1_cache_ram.h, fm1.toml cache_ram_ways) on a model of the cache's registers, tags and
 # ways: 2, 4 and 7 ways set, tested and zeroed; 0 and 8 nothing; a cache that never idles, masks not taken, a stuck bit
 # in each way: all put back, 0 bytes
@@ -63,6 +67,8 @@ run storage-bounce sh -c "$CC -O2 -w -DAPP_STORE_BOUNCE=1 -o $OUT/storage_bounce
     cmp $OUT/storage_plain.txt $OUT/storage_bounce.txt"
 run fastmath sh -c "$CC -O2 -w -o $OUT/fastmath_test tests/fastmath_test.c -lm && $OUT/fastmath_test"
 run installer "$PY" tests/install_test.py
+# the tools that find the FM-1 by its port name (fm1_remote.py, fm1_debug.py): FM1-XXXX, the old Optimist, not other gear
+run fm1-ports "$PY" tests/fm1_ports_test.py
 # the check on an app's RAM code (tools/ramcode.py, plat.h PLAT_RAM_CODE): RAM -> RAM passes, into XIP fails
 run ramcode "$PY" tests/ramcode_test.py
 # the build's check that a function is in the RAM code run, _rt_start.._rt_end wherever app.ld puts it (tools/ram_run.py)

@@ -31,7 +31,7 @@ function port(name, answers) {
 }
 const midi = (ports) => ({ inputs: new Map(ports.map((p, k) => ["i" + k, p.input])), outputs: new Map(ports.map((p, k) => ["o" + k, p.output])) });
 
-for (const name of ["Optimist", "SLOOP 2.4", "Melodee", "LOOM-8", "Loom8"]) {
+for (const name of ["FM1-1A2B", "Optimist", "SLOOP 2.4", "Melodee", "LOOM-8", "Loom8"]) {   // (FM1-XXXX: Optimist's since 2026-10-29)
   const fm = port(name, true), gear = port("Launchkey Mini", false);
   const dev = await new Updater(midi([gear, fm])).find(null);
   check(dev && dev.name === name && gear.sent === 0, `an FM-1 on "${name}" is found, other gear is not asked`);

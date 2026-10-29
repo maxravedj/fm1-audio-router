@@ -61,6 +61,7 @@ The debug stats' frames (device/dbgstats.c, the record's layout there; parse_sta
   then "end N"; up in seconds, the times in us; flags 1 periodic, 2 a crash's, 4 written while playing, 8 the
   switch on
   F0 7D 4C 53 43 4C 52 F7         ("LSCLR") erases them; the answer "cleared" or "clear failed" (an update staged)."""
+import re
 import struct
 import sys
 import time
@@ -240,15 +241,22 @@ def format_crash(r, elf=None):
     return lines
 
 
+def fm1_ports(names):
+    """the USB-MIDI ports of an FM-1 among names: "FM1-XXXX" (four hex digits: Optimist's name since 2026-10-29), "Optimist"
+    (a device on older firmware), or "FM-1" in it (the stock names); never a Bluetooth port, never other gear"""
+    return [n for n in names if "bluetooth" not in n.lower() and
+            (re.search(r"FM1-[0-9A-Fa-f]{4}", n) or "FM-1" in n or "optimist" in n.lower())]
+
+
 class FM1:
     def __init__(self, elf=None):
         import importlib
         self.mido = importlib.import_module("mido")   # (here: the parser above needs no MIDI)
-        names = [n for n in self.mido.get_output_names() if "FM-1" in n]
+        names = fm1_ports(self.mido.get_output_names())
         if not names:
             raise SystemExit("no FM-1 on USB-MIDI")
         self.out = self.mido.open_output(names[0])
-        self.inp = self.mido.open_input([n for n in self.mido.get_input_names() if "FM-1" in n][0])
+        self.inp = self.mido.open_input(fm1_ports(self.mido.get_input_names())[0])
         self.btn = self.keys = 0
         self.listening = False
         self.elf = ElfSymbols(elf) if elf else None
