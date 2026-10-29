@@ -109,6 +109,12 @@ APP_DIR holds the app (app.h, app.c, its sources) and its fm1.toml:
   cpu2_stack = 4096          its jobs' stack, bytes (FM1_CPU1_USTACK_BYTES: default 2816, the lowest 256 a guard the
                              core's stack limit traps in), a multiple of 8, 1024..16384: an app whose jobs go deeper
                              (plat_cpu2_stack reads how deep they went)
+  cache_ram_ways = 2         2, 4 or 7 of the data cache's 8 ways of 4 KiB used as RAM at 0x01F28000 (FM1B_CACHE_RAM:
+                             felucca-bsp's chip/fm1_cache_ram.h, plat_cache_ram in plat.h): set and tested at the start,
+                             before anything uses them; a failed test puts the cache back and gives 0 bytes. The ways
+                             kept are the flash's data cache: fewer of them make big flash reads slower (7 as RAM: 57x
+                             over 16 KiB on an FM-1; 2 in daily use there). The host: a buffer of that size stands in.
+                             An app's own objects in section .cache_ram come first (the build checks they fit)
   emu = ["midi", "data"]     the browser emulator's optional parts (--web): web/emu/parts/NAME.js on the page and
                              NAME_worklet.js in the worklet, each file saying what it does; a part's own needs come
                              with it; FM1B_EMU_NAME=1 for the C. FM1B_EMU="midi data" in the environment instead (""
@@ -694,6 +700,16 @@ def usb_audio_names():
     return flags
 
 
+def cache_ram_ways():
+    """fm1.toml cache_ram_ways: the data cache's ways used as RAM, 0 (none: off), 2, 4 or 7 (FM1B_CACHE_RAM=N in the
+    environment over it)"""
+    v = os.environ.get("FM1B_CACHE_RAM")
+    n = int(v) if v is not None and v.isdigit() else CONF.get("cache_ram_ways", 0)
+    if not isinstance(n, int) or isinstance(n, bool) or n not in (0, 2, 4, 7):
+        raise SystemExit(f"fm1.toml cache_ram_ways {n!r}: 0, 2, 4 or 7 (of the data cache's 8 ways)")
+    return n
+
+
 def cpu2_stack_flags():
     """fm1.toml cpu2_stack: the second core's job stack, for its entry's unit and the platform's (none: felucca-bsp's
     2816 B, the build as before)"""
@@ -1056,6 +1072,12 @@ def check(img, syms, dis, rt):
         else:
             notes.append("own WiFi stack: nothing of JieLi's linked, the frame DMA's buffers at "
                          f"{sym('wifi_txb'):#x} / {sym('wifi_rxb'):#x} (below 0x01C20000)" + (", Ableton Link (GPL-3.0-only)" if LINK else ""))
+    cr_ways, cr_used = cache_ram_ways(), sym("_cr_end") - sym("_cr_start")   # the cache RAM's own objects (.cache_ram)
+    if cr_used > cr_ways * 4096:
+        errors.append(f".cache_ram {cr_used} B in {cr_ways} cache ways ({cr_ways * 4096} B; fm1.toml cache_ram_ways)")
+    elif cr_ways:
+        notes.append(f"cache RAM: {cr_ways} data-cache ways ({cr_ways * 4096} B), {cr_used} B of objects in .cache_ram, "
+                     f"{cr_ways * 4096 - cr_used} B for the app (plat_cache_ram, after its test at the start)")
     if os.environ.get("FM1B_POOL_SPARE", "").isdigit():   # an app's own build for itself (a demo build with mirror)
         spare = int(os.environ["FM1B_POOL_SPARE"])
     if "SRAM" in LAYOUT:                          # device/app.ld: one packed region, one budget
@@ -1206,6 +1228,8 @@ def opt_flags():
                                                  # the device's build passes it anyway: the same define twice)
     if "-DFM1B_COMPANION=1" in flags and "-DFM1B_BACKUP=1" in flags:
         flags.append(f'-DFM1B_BACKUP_EXT="{CONF.get("backup_ext", "bak")}"')   # (the capability query tells the backup's extension)
+    if cache_ram_ways():
+        flags.append(f"-DFM1B_CACHE_RAM={cache_ram_ways()}")   # (the host and the web: plat_cache_ram's stand-in)
     return flags + slot_flags()
 
 
