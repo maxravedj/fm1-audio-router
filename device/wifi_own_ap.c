@@ -243,7 +243,6 @@ static void wa_rx(const uint8_t *f, uint32_t len, int8_t rssi, int64_t now)
     uint32_t tx_len = 0, hl, el;
     const uint8_t *e;
     int s;
-    (void)rssi;
     wl.n_rx++;
     if (len < 24u)
         return;
@@ -256,6 +255,8 @@ static void wa_rx(const uint8_t *f, uint32_t len, int8_t rssi, int64_t now)
     wa.n.data++;
     hl = (f[0] & 0x80u) ? 26u : 24u;
     s = wa_slot_of(f + 10);
+    if (s >= 0)
+        oq_signal((uint32_t)s + 1u, rssi);        /* (a client's signal, while measured) */
     e = wifi_ap_unwrap_eapol(&wa.ap, f, len, &el);
     if (e) {
         if (s >= 0)

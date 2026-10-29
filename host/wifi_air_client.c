@@ -26,6 +26,8 @@ static struct lk_node cli_lk;
 
 static void cli_queue(const uint8_t *f, uint32_t n)   /* a frame the client sends, to the FM-1 if it listens there */
 {
+    if (n && n <= AIR_FRAME && fm1_fake_ch == cli.ch && air.qw - air.qr >= AIR_Q)
+        fm1_fake_rx_over++;                       /* (the receive queue full: the MAC's overflow count) */
     if (!n || n > AIR_FRAME || air.qw - air.qr >= AIR_Q || fm1_fake_ch != cli.ch)
         return;
     memcpy(air.q[air.qw % AIR_Q].f, f, n);

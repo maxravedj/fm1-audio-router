@@ -25,7 +25,10 @@ or by a program (an agent). Needs mido with python-rtmidi.
     release-all                             every button and key up, MASTER the pot's own
     wifi on | wifi off | wifi scan          WiFi (a firmware with wifi = true): on, off, look for networks
     wifi status | wifi found | wifi saved   its state, network, address and signal; the networks the scan found;
-                                            the networks kept
+                                            the networks kept. The own stack, joined: a second status line,
+                                            "q RSSI dBm RATEk tx N retried N lost N rxover N in Ss": the link over
+                                            the last S seconds (10 at most); the first status starts the measuring,
+                                            so ask again 10 s later ("wifi status wait 11000 wifi status")
     wifi join SSID [PASSWORD]               join a network (kept once joined); no password: a kept one's, or none
     wifi forget N                           forget the network kept at N (0 = the most recent)
     bta on | bta off | bta scan             Bluetooth audio (ble_stack = "own" with bt_audio = true): on, off, look

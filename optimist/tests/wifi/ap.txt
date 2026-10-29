@@ -56,6 +56,16 @@ wait 2000
 cells
 expect link_peers 1
 expect client_peers 1
+# reception in numbers (plat_wifi_quality): the page asks while it shows MODE AP up with a client; the client's signal
+wifi_air rssi -58
+wait 11000
+expect wifi_q_on 1
+expect wifi_q_ok 1
+expect wifi_q_secs 10
+expect wifi_q_rssi -58
+expect wifi_q_tx >5
+expect wifi_q_lost_pct 0
+wifi_air rssi -45
 client_peer play 1
 wait 4000
 expect playing 1

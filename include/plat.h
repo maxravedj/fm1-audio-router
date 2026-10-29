@@ -381,6 +381,21 @@ void plat_net_udp_close(uint16_t port);
 int plat_net_udp_send(uint16_t src_port, uint32_t ip, uint16_t port, const void *p, uint32_t n);   /* ip host order;
                                         * 512 B at most; 0 sent, -1 no address yet / no way there */
 void plat_net_join(uint32_t group);    /* the multicast group (host order, 0 none) whose datagrams the ports get */
+/* How well the link works, for a page or a log (the own stack). Measured only while asked: the first call starts it,
+ * each call keeps it on, and it stops 15 s after the last (a call a frame from a page, or one per stats snapshot). The
+ * counts are the MAC's own (Ralink's TX_STA_CNT0 / 1, RX_STA_CNT2 at 0x170C / 0x1710 / 0x1708, read and cleared once
+ * a second while on) over the last 10 s: secs says how many of them are in (0..10: a fresh start has fewer) */
+struct plat_wifi_quality {
+    int16_t rssi;                      /* dBm, a running mean of the joined AP's frames (MODE AP: of the strongest client
+                                        * heard); 0: none heard in the last 3 s */
+    uint16_t tx_kbps;                  /* the rate frames go out at (the own stack: 1000, 1 Mb/s, every frame) */
+    uint16_t tx;                       /* frames the MAC sent in the window (MODE AP's beacons, which wait for no ACK, count
+                                        * as sent at once) */
+    uint16_t retried, lost;            /* .. of them: acknowledged only after a retry; never acknowledged (the MAC gave up) */
+    uint16_t rx_over;                  /* frames the receiver dropped, its queue full (the main loop did not take them in time) */
+    uint8_t secs;                      /* seconds in the window, 0..10 */
+};
+int plat_wifi_quality(struct plat_wifi_quality *q);   /* 1: joined (or MODE AP up) and q filled; 0: q zeroed */
 
 /* MODE AP (fm1.toml wifi_ap = true, with wifi_stack = "own": FM1B_WIFI_AP 1; device/wifi_own_ap.c): the FM-1 is a
  * WPA2-PSK access point (CCMP) for up to 4 clients (a phone, a laptop), on channel 1..13 (6 by default), at 192.168.4.1,
