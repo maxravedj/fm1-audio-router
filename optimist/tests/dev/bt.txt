@@ -15,9 +15,8 @@ spin SELECT 2
 wait 100
 spin SELECT 1
 wait 100
-spin SELECT 2
-wait 100
-# BT MIDI MODE MAN (SYSTEM: DEBUG, General, USB, METERS, KEYS, then BLUETOOTH): the radio starts, advertises
+# BT MIDI MODE MAN (SYSTEM: DEBUG, General, USB, METERS, then BLUETOOTH; the KEYS page is gone, fm1-next b9a394bc): the radio
+# starts, advertises
 spin K1 1
 wait 1500
 cells
@@ -46,6 +45,18 @@ out
 blesx F07D464C6A01F7
 wait 300
 expect_out BLE F0 7D 46
+out
+# INFO over Bluetooth (the Mirror app asks it there when the port's name is not one it knows: opti_mirbt_1), answered there
+# (its version string's first packet: 4C 01 'F'), not over USB; then the mirror's request answered (on, version 2, 240 x 240)
+blesx F07D464C01F7
+wait 300
+expect_out BLE 4C 01 46
+expect_no_out USB 4C 01 46
+out
+blesx F07D464C6A03F7
+wait 300
+expect_out BLE 4C 6A 01
+expect_out BLE 02 70 01
 out
 # a clock from the computer: START, then 100 BPM (25 ms a tick), followed
 midi BLE FA
