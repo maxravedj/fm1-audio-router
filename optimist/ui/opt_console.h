@@ -180,6 +180,7 @@ static void con_dbg(void)
     }
     con_kv("usb_session", (int32_t)plat_usb_session());
     con_kv("battery_raw", plat_battery_raw());
+    con_kv("battery_charging", plat_battery_charging());   /* -1 not read, 0 on the cell, 1 5 V (no charge), 2 charging */
     con_kv("ticks24", (int32_t)plat_ticks24());
     stk_report(con_kv, con_kx);                  /* the stacks: their bottom, size, room never used (system/stackmark.h) */
 #if FELUCCA_BLE
@@ -211,6 +212,7 @@ static void con_keys(void)
     con_kx("keys", plat_keys());
     con_kv("master", (int32_t)plat_master());
     con_kv("battery_raw", plat_battery_raw());
+    con_kv("battery_charging", plat_battery_charging());   /* -1 not read, 0 on the cell, 1 5 V (no charge), 2 charging */
     con_kx("matrix_buttons", fm1_in.buttons);               /* (the ids Optimist's UI sees: opt_panel.h) */
     con_kx("matrix_keys", oin_keys);
 }

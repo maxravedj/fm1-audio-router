@@ -239,6 +239,9 @@ void opt_ui_frame(void)
     opt_in_scan();
     fm1_ms = plat_ms();
     song.batt_raw = opt_batt_raw();               /* SYSTEM > BATTERY, the header's icon (main.c: its own reading) */
+    {   int chg = plat_battery_charging();
+        song.batt_chg = (uint8_t)(chg > 0 ? chg : 0);   /* INFO's header: 5 V / charging (-1: not read) */
+    }
     song.cpu_q8 = plat_cpu_pct() * 256u / 100u;   /* SYSTEM > INFO's CPU LOAD (audio.c's cpu_q8: fm1-base's, the same
                                                    * smoothing over the whole render, USB audio's work in it) */
     opt_bt_poll();                               /* Bluetooth: the audio's view, the devices list, the mirror's frames out */
