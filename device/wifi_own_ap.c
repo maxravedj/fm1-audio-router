@@ -21,7 +21,9 @@
  *   - a ping to the access point is answered (wifi_ip.c, as an access point only).
  * The access point is 192.168.4.1, its clients 192.168.4.2 to .5. Its network (the name, the channel, the WPA2 key made
  * from the password, never the password) is the record's (wifi_nets.h struct wn_apcfg), kept with the networks:
- *   MODE AP      (WIFI_MODE_AP, "AP AUTO") runs whenever a key is kept, from power-on
+ * The password is the typed one (the record keeps its key), else the default one, a function of the name alone
+ * (wifi_ap_default_key: another Optimist that hears the name knows it); forgetting the typed one gives the default back.
+ *   MODE AP      (WIFI_MODE_AP, "AP AUTO") runs from power-on
  *   MODE AP_MAN  (WIFI_MODE_AP_MAN, "AP MAN") the same, but started by plat_wifi_ap_run(1) or a password set, and off at
  *                power-on
  * plat_wifi_ap_start runs one that is not kept, with MODE OFF. The station's manager rests in either AP mode. */
@@ -339,14 +341,24 @@ static uint32_t wa_channel(void) { return wn_st.ap.ch ? wn_st.ap.ch : WA_CH_DEFA
                                                                                           * still be on the one before) */
 static int wa_mode_ap(void) { return wn_st.mode == WN_MODE_AP || wn_st.mode == WN_MODE_AP_MAN; }
 static int wa_wanted(void) { return wn_st.mode == WN_MODE_AP || (wn_st.mode == WN_MODE_AP_MAN && wa.user_on); }
+static void wa_pmk_start(const char *pass, uint32_t pl);
 static void wa_begin_mode(void)                         /* the record's network: no key job, the radio next */
 {
     wa.by_mode = 1;
     wa.save_key = 0;
     wa.ssid_len = (uint8_t)wa_name(wa.ssid);
     wa.ch = (uint8_t)wa_channel();
-    memcpy(wa.pmk, wn_st.ap.pmk, 32);
-    wa.st = WA_RADIO;
+    if (wn_st.ap.set == 1u) {                           /* a typed password: its key is kept */
+        memcpy(wa.pmk, wn_st.ap.pmk, 32);
+        wa.st = WA_RADIO;
+        return;
+    }
+    {                                                   /* none typed: the default one, a function of the name (not kept) */
+        char k[WIFI_AP_KEY_LEN + 1u];
+        wifi_ap_default_key(wa.ssid, wa.ssid_len, k);
+        wa_pmk_start(k, WIFI_AP_KEY_LEN);
+        memset(k, 0, sizeof k);
+    }
 }
 static void wa_pmk_start(const char *pass, uint32_t pl)   /* the key from the password, a slice a pass */
 {
@@ -393,7 +405,7 @@ static void wa_poll(void)                               /* once a main-loop pass
     }
     switch (wa.st) {
     case WA_OFF:
-        if (wa_wanted() && wn_st.ap.set == 1u)
+        if (wa_wanted())
             wa_begin_mode();
         break;
     case WA_PMK:
@@ -446,8 +458,6 @@ int plat_wifi_ap_state(void)
         return WIFI_AP_STARTING;
     if (!wa_mode_ap())
         return WIFI_AP_OFF;
-    if (wa.st == WA_OFF && wn_st.ap.set != 1u)
-        return WIFI_AP_NOKEY;
     if (wa.st == WA_OFF && !wa_wanted())
         return WIFI_AP_STOPPED;
     return WIFI_AP_STARTING;
@@ -499,6 +509,15 @@ int plat_wifi_ap_name(char *name)
     return (int)n;
 }
 int plat_wifi_ap_has_key(void) { own_store_load(); return wn_st.ap.set == 1u; }
+int plat_wifi_ap_default_key(char *out)
+{
+    uint8_t b[WN_SSID_MAX];
+    uint32_t n;
+    own_store_load();
+    n = wa.st != WA_OFF && !wa.by_mode ? wa.ssid_len : wa_name(b);
+    wifi_ap_default_key(wa.st != WA_OFF && !wa.by_mode ? wa.ssid : b, n, out);
+    return wn_st.ap.set != 1u;
+}
 void plat_wifi_ap_forget(void)
 {
     own_store_load();
@@ -512,8 +531,6 @@ int plat_wifi_ap_run(int on)
     own_store_load();
     if (wn_st.mode != WN_MODE_AP_MAN)
         return -1;
-    if (on && wn_st.ap.set != 1u)
-        return -2;
     wa.user_on = (uint8_t)(on != 0);
     return 0;
 }

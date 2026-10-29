@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Optimist's MODE AP in the trial on fm1-base's own Wi-Fi stack (device/wifi_own_ap.c), in the host simulator with
 # the simulator's client of the FM-1's access point as a phone (host/wifi_air_client.c; OPT_HOST_BT=1 OPT_HOST_WIFI=1
-# with profiles/dev-wifi.config: optimist/run.sh's wifi-ap run; ui/opt_wifi.h). SYSTEM > WI-FI: MODE AP AUTO, no key
-# (STATE says so), the password (as the page's entry or the web editor's op 5 give it: plat_wifi_ap_set), the access
-# point up under its automatic name; the phone joins, gets 192.168.4.2 and is a Link peer: STATE alternates the clients
+# with profiles/dev-wifi.config: optimist/run.sh's wifi-ap run; ui/opt_wifi.h). SYSTEM > WI-FI: MODE AP AUTO with no
+# typed key: the access point comes up by itself under its automatic name with the default password, a function of the
+# name (wifi_ap_default_key: nothing kept); the phone joins with it; a restart keeps it; a typed password (as the page's
+# entry or the web editor's op 5 give it: plat_wifi_ap_set) replaces it; CLEAR KEY gives the default one back. The phone joins, gets 192.168.4.2 and is a Link peer: STATE alternates the clients
 # and the Link peers; the session's start followed as the clock; CHANNEL turned on the page (the access point moves,
 # the phone joins again); a restart (AP AUTO kept: up again); AP MAN (off, SAVE starts it); CLEAR KEY
 wait 1500
@@ -23,7 +24,7 @@ spin SELECT 1
 wait 100
 spin SELECT 2                                           # (METERS, KEYS, then WI-FI)
 wait 100
-# MODE AP AUTO (OFF, MAN, AUTO, AP MAN, AP AUTO): no key yet
+# MODE AP AUTO (OFF, MAN, AUTO, AP MAN, AP AUTO): no typed key
 spin K1 1
 wait 100
 spin K1 1
@@ -34,16 +35,16 @@ spin K1 1
 wait 3500
 cells
 expect wifi_mode 3
-expect ap_state 1
 expect wifi_step 0
-wifi ap auto password1
 wait 2500
 cells
 expect ap_state 3
-expect ap_key 1
+expect ap_key 0
+expect ap_key_default 1
+expect ap_key_sum KEYSUM
 expect ap_channel 6
 client_peer 120
-wifi_client auto password1
+wifi_client auto default
 wait 3000
 expect ap_clients 1
 expect client_ip_last 2
@@ -75,6 +76,7 @@ reboot
 wait 9000
 expect wifi_mode 3
 expect ap_state 3
+expect ap_key_sum KEYSUM
 expect ap_channel 11
 expect ap_clients 1
 expect link_peers 1
@@ -98,7 +100,13 @@ expect ap_clients 1
 tap SAVE
 wait 300
 expect ap_state 5
-# SAVE held: CLEAR KEY, YES (SAVE): no password, the access point cannot start
+# a typed password replaces the default one (it is not shown: KEY TYPED)
+wifi ap auto password1
+wait 3500
+expect ap_key 1
+expect ap_key_default 0
+expect ap_state 3
+# SAVE held: CLEAR KEY, YES (SAVE): the default password again, the access point up on it
 press SAVE
 wait 1500
 release SAVE
@@ -107,8 +115,12 @@ cells
 tap SAVE
 wait 300
 cells
+wait 3500
+cells
 expect ap_key 0
-expect ap_state 1
+expect ap_key_default 1
+expect ap_key_sum KEYSUM
+expect ap_state 3
 # MODE AUTO again: the access point gone, the station manager back
 spin K1 -1
 wait 500

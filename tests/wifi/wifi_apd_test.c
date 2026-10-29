@@ -251,11 +251,32 @@ int main(void)
     wc_pmk(PW, NAME, sizeof NAME, pmk);
     wc_pmk("not-the-one", NAME, sizeof NAME, pmk_other);
 
-    /* 1. MODE AP with no key: nothing runs */
+    /* 0. the default password: a function of the name (fixed vectors; the same name, the same key; another name, another) */
+    {
+        char k1[16], k2[16], k3[16];
+        wifi_ap_default_key((const uint8_t *)"FM1-0000", 8, k1);
+        wifi_ap_default_key((const uint8_t *)"FM1-A1B2", 8, k2);
+        wifi_ap_default_key((const uint8_t *)"FM1-A1B3", 8, k3);
+        check(!strcmp(k1, "rxrm2jd2") && !strcmp(k2, "9kd4ctcd") && !strcmp(k3, "9fd3wpch"), "default key: the fixed vectors FM1-0000 / A1B2 / A1B3");
+        check(strcmp(k2, k3) != 0 && strlen(k1) == 8u, "two names, two keys; 8 characters");
+        wifi_ap_default_key((const uint8_t *)"FM1-A1B2", 8, k3);
+        check(!strcmp(k2, k3), "the same name, the same key");
+        wifi_ap_default_key((const uint8_t *)"", 0, k1);
+        check(!strcmp(k1, "7jc84apt") && strpbrk(k1, "01oli") == 0, "an empty name has one too; no 0 1 o l i");
+    }
+
+    /* 1. MODE AP with no typed key: the default password (a function of the name) is made and used, nothing is kept */
     plat_wifi_mode(WIFI_MODE_AP);
     wifi_poll();
-    tick(100);
-    check(wa.st == WA_OFF && plat_wifi_ap_state() == WIFI_AP_NOKEY && ntx == 0 && !fm1_fake_up, "no key: nothing started, state NOKEY");
+    check(wa.st == WA_PMK && plat_wifi_ap_state() == WIFI_AP_STARTING && wn_st.ap.set == 0u && !plat_wifi_ap_has_key(), "no typed key: the default key job starts, nothing kept");
+    run_until_up();
+    {
+        char k[16];
+        uint8_t p[32];
+        wifi_ap_default_key(wa.ssid, wa.ssid_len, k);
+        wc_pmk(k, wa.ssid, wa.ssid_len, p);
+        check(wa.st == WA_UP && memcmp(p, wa.pmk, 32) == 0 && wn_st.ap.set == 0u && plat_wifi_ap_default_key(k) == 1, "... up on the key made from the name's default password, none stored");
+    }
     check(plat_wifi_step() == WIFI_STEP_OFF, "the station's manager rests in MODE AP");
     plat_wifi_mode(WIFI_MODE_OFF);
     check(plat_wifi_ap_state() == WIFI_AP_OFF, "MODE not AP: state OFF");
@@ -431,12 +452,13 @@ int main(void)
     run_until_up();
     check(wa.st == WA_UP && wa.ch == 11u, "MODE AP again: the network kept comes up with no key job");
 
-    /* 13. the key forgotten: the AP stops; the automatic name */
+    /* 13. the typed key forgotten: the AP starts again on the default password; the automatic name */
+    check(plat_wifi_ap_default_key((char[16]){0}) == 0, "a typed key is kept: it replaces the default one");
     plat_wifi_ap_forget();
     wifi_poll();
-    check(wn_st.ap.set == 0u && wa.st == WA_OFF && plat_wifi_ap_state() == WIFI_AP_NOKEY && wn_st.ap.ch == 11u, "forget: off, NOKEY, the channel kept");
-    tick(200);
-    check(wa.st == WA_OFF, "and it stays off");
+    check(wn_st.ap.set == 0u && wn_st.ap.ch == 11u && plat_wifi_ap_default_key((char[16]){0}) == 1, "forget: no typed key, the channel kept");
+    run_until_up();
+    check(wa.st == WA_UP, "and it is up again on the default password");
     check(plat_wifi_ap_set(0, 0, PW) == 0, "a new password with the automatic name");
     run_until_up();
     check(wa.st == WA_UP && wa.ssid_len == 8u && memcmp(wa.ssid, "FM1-4455", 8) == 0 && wn_st.ap.ssid_len == 0u,
@@ -480,7 +502,7 @@ int main(void)
     wifi_poll();
     check(wa.st == WA_OFF && plat_wifi_ap_state() == WIFI_AP_STOPPED, "back in AP MAN: still stopped");
     wn_ap_forget(&wn_st);
-    check(plat_wifi_ap_run(1) == -2 && plat_wifi_ap_state() == WIFI_AP_NOKEY, "no key kept: plat_wifi_ap_run(1) refused (-2), NOKEY");
+    check(plat_wifi_ap_run(1) == 0 && plat_wifi_ap_state() == WIFI_AP_STARTING, "no typed key: plat_wifi_ap_run(1) starts it on the default one");
     check(plat_wifi_ap_set(0, 0, PW) == 0 && wa.user_on == 1, "a typed password in AP MAN starts it");
     run_until_up();
     check(wa.st == WA_UP && wn_st.ap.set == 1u, "... the key made and kept, the AP up");

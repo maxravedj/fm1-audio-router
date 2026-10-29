@@ -131,6 +131,7 @@ static int wa_set_pass(const uint8_t *ssid, uint32_t len, const char *pass) { re
 static void wa_set_channel(uint32_t ch) { (void)plat_wifi_ap_set_channel((int)ch); }
 static void wa_forget_key(void) { plat_wifi_ap_forget(); }
 static int wa_run(int on) { return plat_wifi_ap_run(on); }
+static int wa_default_key(char *out) { return plat_wifi_ap_default_key(out); }   /* 9 bytes; 1: in use, 0: a typed one replaces it */
 #endif
 
 /* ---- Link: the session as MIDI clock (Optimist's wifi_link.c wl_clock, wl_push_own, wl_midi_poll) */

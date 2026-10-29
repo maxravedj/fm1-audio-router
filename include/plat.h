@@ -387,14 +387,14 @@ void plat_net_join(uint32_t group);    /* the multicast group (host order, 0 non
  * its clients 192.168.4.2.. by DHCP; a ping to it is answered; the app's UDP ports and Link run on it as on a network
  * joined (plat_wifi_addr is 192.168.4.1). Its network is kept in the record with the networks: the name (none: FM1- and
  * the last four digits of the radio's address), the channel and the WPA2 key made from the password (never the
- * password). WIFI_MODE_AP runs it whenever a key is kept, from power-on; WIFI_MODE_AP_MAN only once started
+ * password). WIFI_MODE_AP runs it from power-on (the password: the typed one, else wifi_ap_default_key's); WIFI_MODE_AP_MAN only once started
  * (plat_wifi_ap_run, or a password set), off again at power-on. The station's manager rests meanwhile. No web server,
  * no internet behind it. (Declared in every build; defined only with wifi_ap = true.) */
 #ifndef FM1B_WIFI_AP
 #define FM1B_WIFI_AP 0
 #endif
 enum { WIFI_AP_OFF, WIFI_AP_NOKEY, WIFI_AP_STARTING, WIFI_AP_UP, WIFI_AP_FAILED, WIFI_AP_STOPPED };   /* OFF: not an AP
-                                        * mode; NOKEY: no key kept (no access point runs without one); STARTING: the
+                                        * mode; NOKEY: unused (the default password is always there); STARTING: the
                                         * key being made, the radio starting; FAILED: the radio did not start;
                                         * STOPPED: AP_MAN, not started */
 int plat_wifi_ap_state(void);
@@ -405,9 +405,10 @@ int plat_wifi_ap_set(const uint8_t *ssid, uint32_t len, const char *pass);   /* 
 int plat_wifi_ap_set_channel(int ch);  /* 1..13, kept; a running access point moves once it has rested 1.2 s. 0 / -1 */
 int plat_wifi_ap_channel(void);        /* the channel (kept, or the one plat_wifi_ap_start runs) */
 int plat_wifi_ap_name(char *name);     /* the network's name (33 bytes, may be 0): its length */
-int plat_wifi_ap_has_key(void);        /* a key is kept */
-void plat_wifi_ap_forget(void);        /* the key goes (the name and channel stay): the access point stops */
-int plat_wifi_ap_run(int on);          /* AP_MAN: start / stop. 0, -1 not AP_MAN, -2 no key kept */
+int plat_wifi_ap_has_key(void);        /* a typed password's key is kept */
+int plat_wifi_ap_default_key(char *out);   /* the default password of the current name (wifi_ap_default_key, 9 bytes): 1 when it is the one in use (none typed), 0 a typed one replaces it */
+void plat_wifi_ap_forget(void);        /* the typed key goes (the name and channel stay): the default password again, the access point starts again on it */
+int plat_wifi_ap_run(int on);          /* AP_MAN: start / stop. 0, -1 not AP_MAN */
 int plat_wifi_ap_start(const uint8_t *ssid, uint32_t len, const char *pass, int ch);   /* one not kept, with MODE OFF
                                         * (until a mode is chosen): 0, -1 not MODE OFF or a bad name / password / channel */
 void plat_wifi_ap_stop(void);          /* .. stopped (the clients told) */
