@@ -132,6 +132,10 @@ static void (*fm1_fake_bbp_wr)(uint32_t w, uint32_t e, uint32_t v);
 static int (*fm1_fake_flash)(uint32_t off, uint8_t *dst, uint32_t n);
 static uint32_t fm1_fake_agc = FM1_WIFI_AGC_START, fm1_fake_cal_calls;
 static const uint8_t *fm1_fake_cal_last;
+static inline int fm1_fake_flash_rd(uint32_t off, uint8_t *dst, uint32_t n)
+{
+    return fm1_fake_flash ? fm1_fake_flash(off, dst, n) : -1;
+}
 static inline void fm1_bbp_win_wr(uint32_t w, uint32_t e, uint32_t v)
 {
     if (w == FM1_WIFI_AGC_WIN && e == FM1_WIFI_AGC_ENTRY)

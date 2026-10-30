@@ -58,7 +58,7 @@ static int wt_rate_on(void)              /* (f) applies: joined, or the access p
 static int wt_flash(void *ctx, uint32_t off, uint8_t *dst, uint32_t n)
 {
     (void)ctx;
-    return fm1_fake_flash ? fm1_fake_flash(off, dst, n) : -1;
+    return fm1_fake_flash_rd(off, dst, n);
 }
 #else
 static int wt_flash(void *ctx, uint32_t off, uint8_t *dst, uint32_t n)   /* SPI reads (st_read), as own_mac's */
