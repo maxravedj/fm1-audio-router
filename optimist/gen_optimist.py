@@ -151,15 +151,26 @@ def dim_header(flags, path):
 
 
 SD_APP_END = 0xCE000                           # the SD card mode's slot (LAYOUT 1): fm1-base's app_end, OBJ_PANEL above it
+S0_APP_END = 0xB5000                           # MEMORY no user samples (LAYOUT 3, Optimist's tools/flash_layout.py STEPS):
+                                               # the same end as the classic build, OBJ_PANEL kept at 0xD8000; not built
+                                               # until fm1-base's update loader and app_end take the steps' table
+                                               # (Optimist's docs/SD-MODE-DESIGN.md 9.4: fm1-base's pr/app-end-table)
+APP_ENDS = {0: 0x93000, 1: SD_APP_END, 3: S0_APP_END}
 
 
 def slot_check(layout, prof):
     """the build's app slot as the profile's flash layout needs it: Optimist's SD card mode (LAYOUT 1: its code past
     0x93000, its store from 0xD0000) on fm1-base's bigger slot, FM1B_APP_END=0xCE000 in the environment (app.h puts
-    OBJ_PANEL at 0xCE000 then); the normal layout on the normal slot"""
+    OBJ_PANEL at 0xCE000 then); the normal layout on the normal slot. LAYOUT 3 (no user samples) is refused: its end
+    is set (S0_APP_END), fm1-base's loader cannot switch to it safely yet"""
+    if layout not in APP_ENDS:
+        raise SystemExit(f"gen_optimist: {prof.name}: LAYOUT {layout} has no app end here ({sorted(APP_ENDS)})")
+    if layout == 3:
+        raise SystemExit(f"gen_optimist: {prof.name}: LAYOUT 3 (MEMORY no user samples, app end {S0_APP_END:#x}) is not "
+                         "built for fm1-base yet: its update loader's slot switch does not take the MEMORY steps' table")
     v = os.environ.get("FM1B_APP_END", "")
     end = int(v, 0) if v else 0x93000
-    want = SD_APP_END if layout == 1 else 0x93000
+    want = APP_ENDS[layout]
     if end != want:
         raise SystemExit(f"gen_optimist: {prof.name} (LAYOUT {layout}) needs FM1B_APP_END={want:#x}"
                          f" in the environment, not {end:#x}")
