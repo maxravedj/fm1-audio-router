@@ -343,7 +343,8 @@ def ram_code_allow(flags):
 def conf():
     """--conf (fm1.toml conf_gen, run by tools/build.py before the build): fm1.toml's ble and bt_audio from the chosen
     configuration's BLE and BT_AUDIO (a profile with neither builds without the stack; OPT_PROFILE=none: neither),
-    bt_audio_mem = "app" with an arena (ARENA: Bluetooth audio's buffers lent by it), and
+    bt_audio_mem = "app" and wifi_mem = "app" with an arena (ARENA: Bluetooth audio's buffers, Link's node and the access
+    point's state lent by it), and
     ble_central from its BLE_CENTRAL, usb_host from its USB_HOST, cache_ram_ways from its CACHE_RAM"""
     prof = profile()
     flags = {}
@@ -375,6 +376,9 @@ def conf():
         print("wifi = true", 'wifi_stack = "own"', "link = true", sep="\n")
         if flags.get("FELUCCA_WIFI_AP", 0):
             print("wifi_ap = true")                     # MODE AP: fm1-base's (device/wifi_own_ap.c, Optimist's wifi_apd.c moved)
+        if flags.get("FELUCCA_ARENA_KB", 0):
+            print('wifi_mem = "app"')                 # (Link's node and the access point's state lent by the arena while
+                                                         # Wi-Fi is on: core/opt_lend.h L_LINK, L_AP; else static)
     if flags.get("FELUCCA_USB_HOST", 0):
         # the USB MIDI host (USB_HOST): fm1-base's (felucca-bsp's chip/usb_host.c), SYSTEM > USB's MODE HOST (ui/opt_usbh.h)
         print("usb_host = true")

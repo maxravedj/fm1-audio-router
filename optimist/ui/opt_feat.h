@@ -10,18 +10,121 @@
  *   WI-FI AP   running, no client
  *   EDITOR     no editor or Mirror request for EDITOR_IDLE_MS
  *   USB HOST   on, no device enumerated
- * Only BT AUDIO's buffers are lendable (of_bytes): the others are never offered. The pause of a YES to PACK: the
+ *   MIRROR     never idle while on (a client mirrors over Bluetooth, or asked something in the last 3 s)
+ * Only the blocks of core/opt_lend.h are lendable (of_bytes: BT AUDIO's buffers, the mirror's Bluetooth ring): the
+ * others are never offered. The pause of a YES to PACK: the
  * transport stopped (what sounds is faded out by feat_mem.c), the parts quiet before the pack (fx_arena.c part_quiet); UNLOAD: the PROJECT page's SAVE into the open project once stopped (op_edits.c
  * prj_save_go), then a NEW project; none open yet: nothing saved, said (SAVE FIRST) and the setting back off */
 #pragma once
-#if FELUCCA_BTA_LEND
+#if FMEM_NLEND
 #define EDITOR_IDLE_MS 60000u
-static uint32_t of_bytes(uint32_t f) { return f == OF_BTA ? plat_bta_mem_bytes() : 0u; }
+static uint32_t of_bytes(uint32_t f)
+{
+#if OPT_LEND_BTA
+    if (f == OF_BTA)
+        return plat_bta_mem_bytes();
+#endif
+#if MIR_LEND
+    if (f == OF_MIR)
+        return MIR_BLE_RING;
+#endif
+#if OPT_LEND_LINK
+    if (f == OF_WIFI)
+        return plat_link_mem_bytes();
+#endif
+#if OPT_LEND_AP
+    if (f == OF_AP)
+        return plat_wifi_ap_mem_bytes();
+#endif
+    (void)f;
+    return 0u;
+}
+#if OPT_LEND_LINK || OPT_LEND_AP
+/* Link's node and the access point's state (plat.h plat_link_mem, plat_wifi_ap_mem): wanted while a Wi-Fi MODE (a MODE
+ * AP) is chosen, and after it while fm1-base still runs them (its plat_*_mem(0) refuses), then given back. Link starts
+ * and the access point comes up only once lent (fm1-base waits for them) */
+static uint8_t of_wl_lent;                       /* (a bit each: 1 Link's, 2 the access point's) */
+static int of_wl_want(uint32_t bit, int mode_on, int (*mem)(void *))
+{
+    if (mode_on)
+        return 1;
+    if ((of_wl_lent & bit) && mem(0) != 0)
+        return 1;                                /* (still running: let go first) */
+    of_wl_lent &= (uint8_t)~bit;
+    return 0;
+}
+static void of_wl_set(uint32_t bit, void *p, int (*mem)(void *))
+{
+    if (p)
+        of_wl_lent |= (uint8_t)(mem(p) == 0 ? bit : 0u);
+    else if (mem(0) == 0)
+        of_wl_lent &= (uint8_t)~bit;
+}
+#endif
+/* core/opt_lend.h's blocks by their index there: the size, wanted now, lent or taken back (core/arena_bufs.c) */
+static const uint8_t OF_LENT[] = {
+#if OPT_LEND_BTA
+    OF_BTA,
+#endif
+#if MIR_LEND
+    OF_MIR,
+#endif
+#if OPT_LEND_LINK
+    OF_WIFI,
+#endif
+#if OPT_LEND_AP
+    OF_AP,
+#endif
+};
+static uint32_t of_lend_bytes(uint32_t i) { return of_bytes(OF_LENT[i]); }
+static int of_lend_want(uint32_t i)
+{
+#if OPT_LEND_BTA
+    if (i == L_BTA)
+        return bta_lend_want();
+#endif
+#if MIR_LEND
+    if (i == L_MIR)
+        return mir_lend_want();
+#endif
+#if OPT_LEND_LINK
+    if (i == L_LINK)
+        return of_wl_want(1u, plat_wifi_get_mode() != WIFI_MODE_OFF, plat_link_mem);
+#endif
+#if OPT_LEND_AP
+    if (i == L_AP)
+        return of_wl_want(2u, plat_wifi_get_mode() == WIFI_MODE_AP || plat_wifi_get_mode() == WIFI_MODE_AP_MAN ||
+                                  plat_wifi_ap_state() == WIFI_AP_STARTING || plat_wifi_ap_state() == WIFI_AP_UP,
+                          plat_wifi_ap_mem);
+#endif
+    return 0;
+}
+static void of_lend_set(uint32_t i, void *p)    /* (the interrupts off: arb_set) */
+{
+#if OPT_LEND_BTA
+    if (i == L_BTA)
+        bta_lend(p);
+#endif
+#if MIR_LEND
+    if (i == L_MIR)
+        mir_lend(p);
+#endif
+#if OPT_LEND_LINK
+    if (i == L_LINK)
+        of_wl_set(1u, p, plat_link_mem);
+#endif
+#if OPT_LEND_AP
+    if (i == L_AP)
+        of_wl_set(2u, p, plat_wifi_ap_mem);
+#endif
+}
+#if OPT_LEND_BTA
 static int of_bta_busy(void)
 {
     uint32_t s = bta_state();
     return s == BTA_S_SCANNING || s == BTA_S_PAGING || s == BTA_S_LINKED || s == BTA_S_SETUP || s == BTA_S_STREAMING;
 }
+#endif
 static int of_editor_idle(void)
 {
 #if FELUCCA_EDITOR && FELUCCA_ED_MIRROR
@@ -33,8 +136,14 @@ static int of_editor_idle(void)
 static int of_on(uint32_t f)
 {
     switch (f) {
+#if OPT_LEND_BTA
     case OF_BTA:
         return bta.mode != BTA_OFF;
+#endif
+#if MIR_LEND
+    case OF_MIR:
+        return mir_lend_on();
+#endif
 #if FELUCCA_BLE
     case OF_BLE:
         return ble_on != 0;
@@ -68,8 +177,10 @@ static int of_idle(uint32_t f)
     if (!of_on(f))
         return 0;
     switch (f) {
+#if OPT_LEND_BTA
     case OF_BTA:
         return !of_bta_busy();
+#endif
 #if FELUCCA_BLE
     case OF_BLE:
         return !plat_ble_connected() && plat_ble_device() != BLE_DEV_READY;
@@ -101,13 +212,28 @@ static int of_idle(uint32_t f)
 }
 static void of_off(uint32_t f)                   /* (only the lendable ones are ever switched off here) */
 {
+#if MIR_LEND
+    if (f == OF_MIR) {
+        mir_lend_off();                          /* (the Bluetooth mirror ends; asked again once the central has gone) */
+        return;
+    }
+#endif
+#if OPT_LEND_LINK || OPT_LEND_AP
+    if ((f == OF_WIFI || f == OF_AP) && of_on(f)) {
+        plat_wifi_mode(WIFI_MODE_OFF);           /* (as MODE OFF on SYSTEM > WI-FI, kept: their blocks go back by themselves) */
+        return;
+    }
+#endif
+#if OPT_LEND_BTA
     if (f != OF_BTA || !of_on(f))
         return;
     bt_enter(BT_AUD, BT_OFF);                    /* (as MODE OFF on SYSTEM > BT: its block goes back by itself) */
     sys_dirty = 1;
     settings_later = 1;                          /* (kept: the settings record, once quiet) */
+#endif
+    (void)f;
 }
-static uint8_t of_unload_st;                     /* UNLOAD asked: 1 waiting for the transport to stop */
+static uint8_t of_unload_st;                     /* UNLOAD asked for feature n - 1: waiting for the transport to stop */
 static int of_playing(void) { return song.playing || transport_req == 1u; }
 static void of_pause(void)                       /* (the voices: feat_mem.c fmem_hush, after) */
 {
@@ -123,27 +249,34 @@ static int of_quiet(void)
             return 0;
     return 1;
 }
-static void of_unload(void)
+static void of_unload(uint32_t f)
 {
     if (prj_cur < 0) {
         ui_message("SAVE FIRST");                /* (no open project to save into: nothing unloaded) */
-        of_off(OF_BTA);
+        of_off(f);
         return;
     }
     if (song.playing || transport_req == 1u)
         transport_req = 2;
-    of_unload_st = 1;
+    of_unload_st = (uint8_t)(f + 1u);
 }
-static void of_say_full(uint32_t f) { (void)f; ui_message("MEM FULL BT AUDIO"); }
+static void of_say_full(uint32_t f)
+{
+    char b[24];
+    str_cpy(b, "MEM FULL ", sizeof b);
+    str_app(b, FMEM[f].name, sizeof b);
+    ui_message(b);
+}
 /* every main loop pass (opt_bt_poll): an UNLOAD once stopped: saved, then a NEW project; the block placed by itself
  * (arb_poll) once the new project's parts have switched */
 static void of_poll(void)
 {
+    uint32_t f = of_unload_st - 1u;
     if (!of_unload_st || song.playing || transport_req)
         return;
     of_unload_st = 0;
     if (prj_save_go((uint32_t)prj_cur)) {
-        of_off(OF_BTA);                          /* (not saved: nothing unloaded, the setting back off) */
+        of_off(f);                               /* (not saved: nothing unloaded, the setting back off) */
         return;
     }
     op_project_new();

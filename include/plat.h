@@ -488,6 +488,21 @@ void plat_link_set_tempo(int32_t mpb); /* the beat now kept; also the tempo a ne
 void plat_link_set_playing(int play);  /* from the beat now */
 int64_t plat_link_now(void);           /* Link's clock (us) */
 uint32_t plat_link_t24(int64_t us);    /* plat_ticks24 at a Link time within a minute of now */
+/* the Wi-Fi's big state in the app's memory (fm1.toml wifi_mem = "app": FM1B_WIFI_MEM 1): Link's node and the access
+ * point's (its clients, their handshakes, the DHCP leases), which only a running Link or access point uses, are blocks
+ * the app lends, not static RAM: Link starts only once its node is lent, the access point comes up only once its block
+ * is (a password's key is made without it). Without FM1B_WIFI_MEM they are static and these say so.
+ *   plat_link_mem_bytes(), plat_wifi_ap_mem_bytes()   the block's size (4-aligned), 0: static
+ *   plat_link_mem(p), plat_wifi_ap_mem(p)             p (zeroed): lent -> 0; 0: taken back -> 0 done, -1 still running (Link:
+ *                                                     until plat_link_enable(0) or the address goes; the access
+ *                                                     point: until it is no longer up) */
+#ifndef FM1B_WIFI_MEM
+#define FM1B_WIFI_MEM 0
+#endif
+uint32_t plat_link_mem_bytes(void);
+int plat_link_mem(void *p);
+uint32_t plat_wifi_ap_mem_bytes(void);
+int plat_wifi_ap_mem(void *p);
 
 /* the 1 kHz tick (app_tick, an app with APP_TICK) runs in the timer interrupt: the main loop locks it out around
  * what they share. It nests, and plat_unlock takes what its plat_lock returned: the outermost unlock switches the

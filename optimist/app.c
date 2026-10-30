@@ -118,16 +118,20 @@ void opt_lcd_sync(void) { lcd_sync(); }
 #if FM1B_BOOT_PACK
 /* the start's copies into RAM (fm1.toml boot_pack: boot_pack.py, Optimist's tools/lzb.py): .data's initial values, then
  * the RAM code, decoded from the image by Optimist's own boot decoder (system/lzb.h: no global, from the flash, its
- * 6.5 KB model on the start's stack and gone after: not inlined into fm1_cstart, which never returns), as Optimist's
- * main.c fm1_cstart decodes its own boot stream */
+ * 6.5 KB model at the top of the free SRAM, under the stacks' first guard band: nothing is there yet at the start (the
+ * arena and the undo ring take it later) and the build keeps at least 8 KiB of it free (tools/build.py's SRAM
+ * headroom), so the model is not on the main stack, whose deepest path it was (tools/stack_depth.py: 7,220 B of it,
+ * the UI's 4,832 next), as Optimist's main.c fm1_cstart decodes its own boot stream */
 #include "system/lzb.h"
 extern uint32_t _data_start[], _data_end[], _rt_start[], _rt_end[];
+extern char _guard0[];                         /* (felucca-bsp chip/fm1_guard.h declares it so) */
+_Static_assert(sizeof(lzb_t) <= 8192u, "app.c: the boot model in the SRAM's spare 8 KiB (tools/build.py headroom)");
 __attribute__((noinline)) void app_boot_unpack(const uint8_t *src)
 {
-    lzb_t z;
-    lzb_init(&z, src);
-    lzb_expand(&z, (uint8_t *)_data_start, (uint8_t *)_data_end);
-    lzb_expand(&z, (uint8_t *)_rt_start, (uint8_t *)_rt_end);
+    lzb_t *z = (lzb_t *)(((uintptr_t)_guard0 - sizeof(lzb_t)) & ~(uintptr_t)3u);
+    lzb_init(z, src);
+    lzb_expand(z, (uint8_t *)_data_start, (uint8_t *)_data_end);
+    lzb_expand(z, (uint8_t *)_rt_start, (uint8_t *)_rt_end);
 }
 #endif
 

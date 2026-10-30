@@ -32,6 +32,7 @@ run lock sh -c "$CC -std=c99 -Wall -Wextra -Werror -O2 -Idevice -o $OUT/lock_tes
 run shim_lock sh -c "$CC -std=c99 -Wall -Wextra -Werror -O2 -Idevice -o $OUT/shim_lock_test tests/shim_lock_test.c && $OUT/shim_lock_test"
 # the packed SRAM (device/app.ld) as tools/build.py reads it: one region, RAM code first, then data, bss, the pool
 run layout "$PY" tests/layout_test.py
+run stack_depth "$PY" tests/stack_depth_test.py
 # USB audio (felucca-bsp's chip/usb.c, tests/uac_test.c) as fm1-base builds it: the default (its descriptors byte for
 # byte as before an app's own channels), an app's 4 channels in 24-bit with the output, and the input on the
 # computer's clock (usb_audio_in_host_clock: minutes of a model host and crystal), and the output with its feedback
