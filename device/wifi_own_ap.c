@@ -60,7 +60,7 @@ static struct {
 
 static void wa_tx(uint32_t len, uint32_t wcid, uint32_t ack)   /* wifi_txb's frame out at that WCID */
 {
-    fm1_wifi_tx_prepare(wifi_txb, len, wcid, ack);
+    wt_prepare(len, wcid, ack);                         /* (the tuning's rate: client data at (f)'s, the rest at 1 Mb/s) */
     if (fm1_wifi_tx(wifi_txb) == 0)
         wa.n.tx++;
     else

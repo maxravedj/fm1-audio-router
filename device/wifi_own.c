@@ -27,6 +27,7 @@
 #include "wifi_sta.c"
 #include "wifi_ip.c"
 #include "wifi_nets.c"
+#include "wifi_tune.c"                   /* the tuning's pure part (device/wifi_own_tune.c: the radio's) */
 #if defined(PLAT_HOST) || FM1B_WIFI_AP
 #include "wifi_ap.c"                         /* (MODE AP: wifi_own_ap.c; the host: its simulated access point too, host/wifi_air.c) */
 #include "wifi_ap_dhcp.c"
@@ -135,6 +136,9 @@ static void own_store_poll(void)                 /* a change saved from the main
 }
 
 /* ---- the radio */
+static void wt_prepare(uint32_t len, uint32_t wcid, uint32_t ack);   /* (wifi_own_tune.c: a frame at the tuning's rate) */
+static void wt_radio_up(void);
+static void wt_heard(int8_t rssi);
 static int own_radio_started(void) { return fm1_wifi_is_up(); }
 /* the Wi-Fi side up: 1 now (or already), 0 not yet (Bluetooth still starting), -1 it cannot (no radio in this build) */
 static int own_radio_up(void)
@@ -148,11 +152,12 @@ static int own_radio_up(void)
         return plat_ble_state() == BLE_FAILED ? -1 : 0;
 #endif
     fm1_wifi_up();
+    wt_radio_up();                                /* (the tuning's radio side: wifi_own_tune.c) */
     return 1;
 }
 static void own_tx(uint32_t len, uint32_t wcid, uint32_t ack)   /* wifi_txb's frame out */
 {
-    fm1_wifi_tx_prepare(wifi_txb, len, wcid, ack);
+    wt_prepare(len, wcid, ack);
     (void)fm1_wifi_tx(wifi_txb);
 }
 static uint8_t *own_frame(void) { return (uint8_t *)wifi_txb + FM1_WIFI_TX_HDR; }
@@ -221,7 +226,6 @@ static void own_rx_second(void)
 #define OQ_SLOTS 10u
 #define OQ_HOLD_MS 15000u                /* measuring stops this long after the last ask */
 #define OQ_STALE_MS 3000u                /* a signal not heard this long: none */
-#define OQ_TX_KBPS 1000u                 /* fm1_wifi_tx_prepare's TXWI (word 0 0xB0): 1 Mb/s CCK, every frame */
 #define OQ_RX_STA_CNT2 0x1708u           /* Ralink's: [31:16] frames lost to a full receive queue */
 #define OQ_TX_STA_CNT0 0x170Cu           /* [15:0] frames never acknowledged (the retries used up) */
 #define OQ_TX_STA_CNT1 0x1710u           /* [15:0] acknowledged at once, [31:16] acknowledged after a retry */
@@ -249,38 +253,23 @@ static void oq_signal(uint32_t peer, int8_t rssi)   /* a frame of peer p heard (
     oq.ema[peer] = (int16_t)(e < -2047 ? -2047 : e > -1 ? -1 : e);
     oq.t_heard[peer] = own_ms();
 }
-static void oq_poll(void)                 /* once a main-loop pass: a second's counts while measuring */
-{
-    uint32_t now = own_ms(), c0, c1;
-    if (!oq.on)
-        return;
-    if (now - oq.t_ask >= OQ_HOLD_MS) {
-        oq.on = 0;
-        return;
-    }
-    if (now - oq.t_sec < 1000u)
-        return;
-    oq.t_sec = now;
-    c0 = fm1_wifi_mac_rd(OQ_TX_STA_CNT0);
-    c1 = fm1_wifi_mac_rd(OQ_TX_STA_CNT1);
-    oq.ok[oq.k] = (uint16_t)c1;
-    oq.rty[oq.k] = (uint16_t)(c1 >> 16);
-    oq.fail[oq.k] = (uint16_t)c0;
-    oq.over[oq.k] = (uint16_t)(fm1_wifi_mac_rd(OQ_RX_STA_CNT2) >> 16);
-    oq.k = (uint8_t)((oq.k + 1u) % OQ_SLOTS);
-    if (oq.n < OQ_SLOTS)
-        oq.n++;
-}
+/* (the counters are read once a second by wifi_own_tune.c wt_cnt_poll, while measuring and while the tuning's rate watches) */
+static uint8_t wt_cnt_running(void);
+static void wt_cnt_read(uint32_t now);
+static uint32_t wt_kbps(void);
 static void oq_ask(void)                  /* measuring on (from now: the counters cleared, the ring empty) */
 {
     uint32_t now = own_ms();
     oq.t_ask = now;
     if (oq.on)
         return;
+    if (wt_cnt_running())
+        wt_cnt_read(now);                 /* (the tuning's rate takes what was counted so far: the ring starts from now) */
+    else
+        oq_clear_counters();
     memset(&oq, 0, sizeof oq);
     oq.on = 1;
     oq.t_ask = oq.t_sec = now;
-    oq_clear_counters();
 }
 static int16_t oq_rssi(uint32_t first, uint32_t last)   /* the strongest of peers first..last heard lately, dBm (0 none) */
 {
@@ -298,7 +287,7 @@ static void oq_fill(struct plat_wifi_quality *q, int ap)
         ok += oq.ok[i], r += oq.rty[i], f += oq.fail[i], o += oq.over[i];
     }
     q->rssi = ap ? oq_rssi(1, OQ_PEERS - 1u) : oq_rssi(0, 0);
-    q->tx_kbps = OQ_TX_KBPS;
+    q->tx_kbps = (uint16_t)wt_kbps();     /* (the unicast data's rate now: the tuning's (f), else 1 Mb/s) */
     q->tx = (uint16_t)(ok + r + f > 65535u ? 65535u : ok + r + f);
     q->retried = (uint16_t)(r > 65535u ? 65535u : r);
     q->lost = (uint16_t)(f > 65535u ? 65535u : f);
@@ -340,7 +329,7 @@ static void wl_send(uint32_t len)                 /* what wifi_txb's frame holds
         return;
     }
 #endif
-    fm1_wifi_tx_prepare(wifi_txb, len, 1u, 1u);   /* (WCID 1, the AP: the MAC encrypts what carries the Protected bit) */
+    wt_prepare(len, 1u, 1u);                      /* (WCID 1, the AP: the MAC encrypts what carries the Protected bit) */
     if (fm1_wifi_tx(wifi_txb) == 0)
         wl.n_tx++;
     else
@@ -385,6 +374,7 @@ static void wl_rx(const uint8_t *f, uint32_t len, int8_t rssi, int64_t now)   /*
     if (len >= 24u && !memcmp(f + 10, wl.sta.bssid, 6)) {   /* the AP: still there; told us to go? */
         wl.t_heard = own_ms();
         oq_signal(0, rssi);
+        wt_heard(rssi);
         if ((f[0] == 0xC0u || f[0] == 0xA0u) && !memcmp(f + 4, wl.sta.mac, 6))
             wl.lost = 1;
     }
@@ -500,6 +490,7 @@ static struct {
     char pass[64];
 } wc_req;
 static struct wn_scan wc_tab;                     /* the APs heard */
+#include "wifi_own_tune.c"                       /* the tuning on the radio (wifi/wifi_tune.h) */
 
 static int wc_auto(void) { return wn_st.mode == WN_MODE_AUTO || wn_st.mode == WN_MODE_JAM; }   /* (saved networks joined by themselves) */
 static int wc_mode_off(void) { return wn_st.mode == WN_MODE_OFF || wn_st.mode == WN_MODE_AP || wn_st.mode == WN_MODE_AP_MAN; }
@@ -516,7 +507,9 @@ static void wc_on_scan(const uint8_t *f, uint32_t len, int8_t rssi, int64_t now)
 static void wc_on_join(const uint8_t *f, uint32_t len, int8_t rssi, int64_t now)
 {
     uint32_t tx_len = 0;
-    (void)rssi, (void)now;
+    (void)now;
+    if (len >= 24u && !memcmp(f + 10, wc.ap.bssid, 6))
+        wt_heard(rssi);                           /* (the AP's signal from the handshake on: the tuning's AGC) */
     if (wc.sta.state == WIFI_STA_STATE_CONNECTED)
         return;                                   /* (joined: what follows, the AP's group key frame, is wl_poll's) */
     if (wifi_sta_rx_frame(&wc.sta, f, len, own_frame(), &tx_len) == 1 && tx_len)
@@ -898,7 +891,7 @@ static void wifi_poll(void)
 #endif
     wl_poll();
     own_rx_second();
-    oq_poll();
+    wt_poll();                                    /* (the tuning; the quality counters' second) */
     own_store_poll();
 }
 

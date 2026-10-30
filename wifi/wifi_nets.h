@@ -39,7 +39,7 @@ struct wn_apcfg {                        /* MODE AP's network: the name, the cha
     uint8_t pmk[32];
 };
 struct wn_store {
-    uint8_t mark, ver, mode, rsv;
+    uint8_t mark, ver, mode, rsv;        /* rsv: the own stack's tuning (wifi_tune.h: WT_KEPT | its switches; 0 the default) */
     struct wn_net n[WN_SLOTS];
     struct wn_apcfg ap;
 };

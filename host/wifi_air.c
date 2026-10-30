@@ -233,6 +233,8 @@ static void wifi_own_forget(void)
 #endif
     wn_stp = &own_store;
     fm1_fake_up = 0;
+    memset(&wt, 0, sizeof wt);                    /* (the tuning's radio side: as at power-on) */
+    fm1_fake_agc = FM1_WIFI_AGC_START;
 #if FM1B_LINK
     memset(&own_lk, 0, sizeof own_lk);
     lko.want = lko.on = 0;
@@ -258,6 +260,12 @@ static int air_cmd(const char *cmd, const char *a, const char *b, const char *c)
             fm1_fake_lost_pct = (uint32_t)atoi(b);
         else if (!strcmp(a, "retry"))
             fm1_fake_retry_pct = (uint32_t)atoi(b);
+        else if (!strcmp(a, "lost_fast"))      /* (frames sent faster than 1 Mb/s only: the tuning's (f)) */
+            fm1_fake_lost_fast_pct = (uint32_t)atoi(b);
+        return 1;
+    }
+    if (!strcmp(cmd, "wifi") && !strcmp(a, "tune")) {   /* wifi tune MASK: the tuning's switches (1 cal, 2 filter, 4 agc, 8 rate) */
+        plat_wifi_tune_set((uint32_t)atoi(b));
         return 1;
     }
     if (!strcmp(cmd, "wifi")) {                   /* wifi mode OFF|AUTO|MAN | wifi join NAME [PASS] | wifi leave | wifi scan */
@@ -341,6 +349,14 @@ static int air_expect(const char *what, int *got)
         *got = (int)air.frames_out;
     else if (!strcmp(what, "air_keyed"))
         *got = air.keyed;
+    else if (!strncmp(what, "wifi_t_", 7)) {      /* plat_wifi_tune_info: wifi_t_on, _cal, _cal_in, _filt, _agc, _slow, _kbps, _falls, _fast */
+        struct plat_wifi_tune t;
+        const char *k = what + 7;
+        (void)plat_wifi_tune_info(&t);
+        *got = !strcmp(k, "on") ? t.on : !strcmp(k, "cal") ? t.cal : !strcmp(k, "cal_in") ? t.cal_in : !strcmp(k, "filt") ? t.filt_sta :
+               !strcmp(k, "agc") ? t.agc_gain : !strcmp(k, "slow") ? t.rate_slow : !strcmp(k, "kbps") ? t.tx_kbps :
+               !strcmp(k, "falls") ? (int)t.falls : !strcmp(k, "fast") ? (int)t.fast : -9999;
+    }
     else if (!strcmp(what, "wifi_q_on"))          /* measuring now (someone asked in the last 15 s); asks nothing itself */
         *got = oq.on;
     else if (!strncmp(what, "wifi_q_", 7)) {      /* plat_wifi_quality: wifi_q_ok, _rssi, _kbps, _tx, _retry_pct, _lost_pct, _over, _secs */

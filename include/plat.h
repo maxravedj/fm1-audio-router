@@ -396,6 +396,27 @@ struct plat_wifi_quality {
     uint8_t secs;                      /* seconds in the window, 0..10 */
 };
 int plat_wifi_quality(struct plat_wifi_quality *q);   /* 1: joined (or MODE AP up) and q filled; 0: q zeroed */
+/* The own stack's tuning (wifi/wifi_tune.h: each switch, its JieLi reference), four switches for an A/B on the FM-1, each
+ * acting at once and kept in the Wi-Fi record: PLAT_WIFI_TUNE_CAL (a) the stored calibration (VM 187), _FILT (b) the
+ * station's receive filter, _AGC (c) the AGC's highest gain from the AP's signal, _RATE (f) unicast data at 2 Mb/s. The
+ * build's default when none was chosen: all four (FM1B_WIFI_TUNE) */
+#define PLAT_WIFI_TUNE_CAL 1u
+#define PLAT_WIFI_TUNE_FILT 2u
+#define PLAT_WIFI_TUNE_AGC 4u
+#define PLAT_WIFI_TUNE_RATE 8u
+struct plat_wifi_tune {
+    uint8_t on;                        /* the switches on (PLAT_WIFI_TUNE_*) */
+    uint8_t cal;                       /* (a) the VM: 0 not read yet (CAL never on with the radio up), 1 a valid 187, 2 none */
+    uint8_t cal_in;                    /* .. its fields are in the PHY now */
+    uint8_t filt_sta;                  /* (b) the station filter (0x17F97) is in now */
+    uint8_t agc_gain;                  /* (c) the AGC's highest gain now (66: the start's) */
+    uint8_t rate_slow;                 /* (f) fallen back: everything at 1 Mb/s for now */
+    uint16_t tx_kbps;                  /* unicast data's rate now */
+    uint32_t falls, fast;              /* (f) fallbacks since the start; frames sent at 2 Mb/s */
+};
+uint32_t plat_wifi_tune_get(void);     /* the switches on */
+void plat_wifi_tune_set(uint32_t mask);
+int plat_wifi_tune_info(struct plat_wifi_tune *t);   /* 1: the Wi-Fi side is up (t filled either way) */
 
 /* MODE AP (fm1.toml wifi_ap = true, with wifi_stack = "own": FM1B_WIFI_AP 1; device/wifi_own_ap.c): the FM-1 is a
  * WPA2-PSK access point (CCMP) for up to 4 clients (a phone, a laptop), on channel 1..13 (6 by default), at 192.168.4.1,

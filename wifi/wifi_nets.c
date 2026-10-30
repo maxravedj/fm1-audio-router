@@ -27,6 +27,7 @@ int wn_load(struct wn_store *s, const uint8_t raw[WN_STORE_SIZE])
     memcpy(&t, raw, sizeof t);
     if (t.mark != WN_MARK || t.ver < 1u || t.ver > WN_VER)
         return 0;
+    s->rsv = t.rsv & 0x80u ? t.rsv : 0u;               /* (the spare byte: the Wi-Fi tuning's switches, wifi_tune.h WT_KEPT) */
     s->mode = t.mode <= WN_MODE_MAN || ((t.mode == WN_MODE_AP || t.mode == WN_MODE_AP_MAN || t.mode == WN_MODE_JAM) && t.ver >= 2u) ? t.mode : WN_MODE_OFF;
     for (i = 0; i < WN_SLOTS; i++)
         if (wn_entry_ok(&t.n[i]))
