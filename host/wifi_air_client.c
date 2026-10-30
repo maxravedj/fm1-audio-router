@@ -266,7 +266,7 @@ static int cli_expect(const char *what, int *got)
     else if (!strcmp(what, "ap_client_ip_last"))  /* the first client's address, as the FM-1 gave it (192.168.4.N) */
         *got = plat_wifi_ap_client(0, mac, &ip) ? (int)(ip & 255u) : 0;
     else if (!strcmp(what, "ap_stray"))
-        *got = (int)wa.n.stray;
+        *got = wa.m ? (int)wa.m->n.stray : 0;
     else if (!strcmp(what, "client_state"))       /* 5 keyed, 6 with an address asked for / got */
         *got = cli.st;
     else if (!strcmp(what, "client_joins"))

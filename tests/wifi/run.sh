@@ -44,6 +44,7 @@ t wifi_nets wifi_nets_test.c          # the networks kept, the scan's table, the
 t wifi_wlc wifi_wlc_test.c            # felucca-bsp's coexistence table, word for word
 t wifi_tune wifi_tune_test.c -DPLAT_HOST -DFM1B_WIFI=1 -DFM1B_WIFI_OWN=1 -DFM1B_WIFI_AP=1 -DFM1B_BLE=1   # the tuning: (a) the stored calibration, (b) the RX filter, (c) the AGC, (f) the rate
 t wifi_apd wifi_apd_test.c -DPLAT_HOST -DFM1B_WIFI=1 -DFM1B_WIFI_OWN=1 -DFM1B_WIFI_AP=1 -DFM1B_BLE=1   # MODE AP (device/wifi_own_ap.c)
+t wifi_apd_mem wifi_apd_test.c -DPLAT_HOST -DFM1B_WIFI=1 -DFM1B_WIFI_OWN=1 -DFM1B_WIFI_AP=1 -DFM1B_BLE=1 -DFM1B_WIFI_MEM=1   # .. its state lent by the app (wifi_mem = "app")
 if "$PY" tests/wifi/remote_tune_test.py > "$OUT/remote_tune.log" 2>&1; then   # fm1_remote.py's 'wifi tune' letters
     echo "  ok   wifi/remote_tune"
 else
@@ -51,6 +52,7 @@ else
     FAIL=1
 fi
 t link link_test.c                    # Ableton Link (link/, GPL-3.0-only): wire format, join, tempo, phase, start / stop
+t link_mem link_mem_test.c -DPLAT_HOST -DFM1B_WIFI=1 -DFM1B_WIFI_OWN=1 -DFM1B_LINK=1 -DFM1B_BLE=1 -DFM1B_WIFI_MEM=1 -Ilink   # Link's node lent by the app
 # the Link example on its simulated network: join, DHCP, the session's tempo and phase, both ways, start / stop, the
 # network lost and back, a reboot
 if "$PY" tools/build.py examples/link --host > "$OUT/link_host_build.log" 2>&1 &&

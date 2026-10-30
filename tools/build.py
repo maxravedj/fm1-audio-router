@@ -171,6 +171,9 @@ app.h); the build prints what it has.
   wifi_ap = true             with wifi_stack = "own": MODE AP, the FM-1 as the access point (device/wifi_own_ap.c,
                              wifi/wifi_ap.c, wifi_ap_dhcp.c; FM1B_WIFI_AP, plat_wifi_ap_*): WPA2-PSK, up to 4 clients,
                              DHCP on 192.168.4.0/24, Link (with link) over it; WIFI_MODE_AP / WIFI_MODE_AP_MAN
+  wifi_mem = "app"          with wifi_stack = "own": Link's node (1.8 KB) and the access point's state (1.7 KB) lent by
+                             the app while they may run, not static RAM (FM1B_WIFI_MEM; plat.h plat_link_mem,
+                             plat_wifi_ap_mem): an app whose arena gets them back while Wi-Fi is off. Default "static"
   gen = ["tools/places.py --out {gen}/places.h"]   the app's generators, run before the build (relative to APP_DIR;
                              {gen} is the generated headers' directory, on the include path)
   asm = ["cpu1/entry.S"]     the app's own assembly units (relative to APP_DIR), assembled as felucca-bsp's are; an
@@ -768,6 +771,11 @@ def wifi_own_flags(host=False):
         f += ["-DFM1B_LINK=1", *inc(SRC / "link")]
     if WIFI_AP:
         f.append("-DFM1B_WIFI_AP=1")
+    v = CONF.get("wifi_mem", "static")
+    if v not in ("app", "static"):
+        raise SystemExit(f'build: fm1.toml wifi_mem = "{v}": "app" or "static"')
+    if v == "app":                                  # Link's node and the access point's state lent (plat.h plat_link_mem)
+        f.append("-DFM1B_WIFI_MEM=1")
     return f
 
 
