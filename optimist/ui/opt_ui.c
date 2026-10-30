@@ -114,6 +114,7 @@ static void cv_mirror(uint32_t x, uint32_t y) { mir_blit(x, y, cv_w, cv_h, cv_px
 #include "opt_console.h"                         /* its USB serial console on fm1-base's (USB_CONSOLE: after the editor) */
 #include "opt_stats.h"                           /* its part of fm1-base's debug stats (app.h APP_STATS: after the UI) */
 #include "opt_lg.h"                              /* its lines in fm1-base's LG readout (app.h APP_LOG: the memory) */
+#include "opt_feat.h"                            /* the switchable features' hooks (core/feat_mem.c: after the UI it reads) */
 
 /* ---- the boot screen (fm1-base's APP_SPLASH, app.c app_splash: before app_init): Optimist's own, the dinghy logo,
  * "OPTIMIST" and the version (ui/splash.c, always built in Optimist: main.c boot_splash), on this unit's canvas */

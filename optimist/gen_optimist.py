@@ -342,7 +342,8 @@ def ram_code_allow(flags):
 
 def conf():
     """--conf (fm1.toml conf_gen, run by tools/build.py before the build): fm1.toml's ble and bt_audio from the chosen
-    configuration's BLE and BT_AUDIO (a profile with neither builds without the stack; OPT_PROFILE=none: neither), and
+    configuration's BLE and BT_AUDIO (a profile with neither builds without the stack; OPT_PROFILE=none: neither),
+    bt_audio_mem = "app" with an arena (ARENA: Bluetooth audio's buffers lent by it), and
     ble_central from its BLE_CENTRAL, usb_host from its USB_HOST, cache_ram_ways from its CACHE_RAM"""
     prof = profile()
     flags = {}
@@ -355,6 +356,9 @@ def conf():
     ble = bool(flags.get("FELUCCA_BLE", 0)) or audio     # (fm1-base's Bluetooth audio rides on its BLE stack, which starts
                                                          # the radio; without BT MIDI it never advertises: ui/opt_bt.h)
     print(f"ble = {str(ble).lower()}\nbt_audio = {str(audio).lower()}")
+    if audio and flags.get("FELUCCA_ARENA_KB", 0):
+        print('bt_audio_mem = "app"')                  # (its queue and ring lent by the arena while an AUDIO mode is on:
+                                                         # core/arena_bufs.c ARB_BTA; without an arena, static as before)
     if flags.get("FELUCCA_BLE", 0) and flags.get("FELUCCA_BLE_CENTRAL", 0):
         # the devices the FM-1 connects to: fm1-base's central (ui/opt_bt_dev.h), at Optimist's level (3: no pairing)
         print("ble_central = 3" if flags["FELUCCA_BLE_CENTRAL"] == 3 else "ble_central = true")

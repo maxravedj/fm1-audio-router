@@ -111,6 +111,7 @@ static uint8_t live_save_off;
 #if FELUCCA_MACROS
 #include "core/macro.c"
 #endif
+#include "opt_feat_decl.h"                       /* the switchable features' table (core/feat_mem.c, in fx.c: ui/opt_feat.h) */
 #include "fx/fx.c"
 /* the MIDI rings (io/midi/midi_rings.c: the sequencer's in and out, the clock out), without Optimist's USB driver
  * (io/usb/usb.c): fm1-base's USB is the device's. The outputs are always open (midi_out_open): fm1-base routes what

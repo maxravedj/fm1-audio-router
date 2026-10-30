@@ -333,18 +333,43 @@ static void opt_bta_view(void)
     if (st == BTA_S_PAGING || (st >= BTA_S_LINKED && st <= BTA_S_STREAMING))
         bta.page_i = 0;                         /* (the one connecting or connected is the last one: fm1-base's) */
 }
-static void bta_start(uint32_t m)
+#if FM1B_BTA_MEM && !FMEM_ANY
+#error "opt_bt.h: fm1.toml bt_audio_mem = app without Optimist's arena (ARENA): nothing lends the buffers (gen_optimist.py --conf)"
+#endif
+#if FELUCCA_BTA_LEND
+/* the buffers lent (fm1.toml bt_audio_mem = "app"): Optimist's arena holds them while an AUDIO mode is on (core/
+ * arena_bufs.c ARB_BTA, core/feat_mem.c): bta_start sets the mode, the arena places the block at its next pass
+ * (bta_lend), and the radio starts once it is lent (opt_bta_go, opt_bt_poll); no room: the question (feat_mem.c), the
+ * radio not started. Off: the radio let go (its run ends a moment later: bta_lend_want holds the block until fm1-base
+ * gives it back, plat_bta_mem), then the arena has it again */
+#define OPT_BTA_ON() (bta.mode != BTA_OFF)
+#include "opt_bta_lend.h"
+#endif
+static void opt_bta_go(void)                    /* the radio up for the mode set (bta_start) */
 {
-    bta.mode = (uint8_t)m;
     plat_bta_on(1);                             /* (the radio up: fm1-base starts it, and BLE with it) */
     if (!ble_on)
         plat_ble_enable(0);                     /* (BT MIDI OFF, or not built: no advertising, the radio for the audio
                                                  * alone) */
     opt_bta_view();
 }
+static void bta_start(uint32_t m)
+{
+    bta.mode = (uint8_t)m;
+#if FELUCCA_BTA_LEND
+    if (!opt_bta_lent) {
+        opt_bta_pend = 1;                       /* (started once the arena lends the block: opt_bt_poll) */
+        return;
+    }
+#endif
+    opt_bta_go();
+}
 static void bta_stop(void)
 {
     bta.mode = BTA_OFF;
+#if FELUCCA_BTA_LEND
+    opt_bta_pend = 0;
+#endif
     plat_bta_on(0);
 }
 static void bta_hangup(void) { plat_bta_hangup(); }
@@ -443,11 +468,19 @@ static void mir_ble_flush(void);
 static const struct plat_ble_stream OPT_MIR_STREAM = {mir_ble_peek, mir_ble_pop, mir_ble_mid};
 static uint8_t opt_mir_stream;
 #endif
+static void of_poll(void);                      /* (ui/opt_feat.h: a feature's UNLOAD once stopped) */
 static void opt_bt_poll(void)
 {
 #if FELUCCA_BT_AUDIO
+#if FELUCCA_BTA_LEND
+    if (opt_bta_pend && opt_bta_lent && bta.mode != BTA_OFF) {
+        opt_bta_pend = 0;
+        opt_bta_go();
+    }
+#endif
     opt_bta_view();
 #endif
+    of_poll();
 #if FELUCCA_BLE
 #if BLE_CENTRAL
     opt_ble_dev_poll();                         /* (the list's scan once the radio is up: ui/opt_bt_dev.h) */
