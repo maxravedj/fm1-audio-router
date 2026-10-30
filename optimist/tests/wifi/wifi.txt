@@ -34,6 +34,20 @@ expect wifi_ip_last 2
 expect wifi_saved 1
 expect link_peers 1
 expect link_bpm_x10 1330
+# reception in numbers on the page (fm1-base's plat_wifi_quality, measured only while the page asks): the STATE line takes
+# turns with the signal and rate, RETRY and LOST over the last 10 s (the air: -63 dBm, a fifth of the frames retried)
+wifi_air rssi -63
+wifi_air retry 20
+wait 11000
+expect wifi_q_on 1
+expect wifi_q_secs 10
+expect wifi_q_rssi -63
+expect wifi_q_retry_pct >14
+expect wifi_q_retry_pct <26
+expect wifi_q_lost_pct 0
+cells
+wifi_air retry 0
+wifi_air rssi -45
 # the session plays: Optimist starts with it at the bar
 link_peer play 1
 wait 4000
@@ -47,6 +61,7 @@ expect playing 0
 wait 3000
 reboot
 wait 15000
+expect wifi_q_on 0
 expect wifi_mode 1
 expect wifi_saved 1
 expect wifi_state 5

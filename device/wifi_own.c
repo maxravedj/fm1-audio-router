@@ -216,6 +216,96 @@ static void own_rx_second(void)
     own_rx_rssi_sum = 0;
 }
 
+/* ---- how well the link works (plat_wifi_quality): measured only while asked for, then the MAC's counters once a second
+ * into a ring of 10, and a running mean of the signal of the frames that matter (the AP's; MODE AP: each client's) */
+#define OQ_SLOTS 10u
+#define OQ_HOLD_MS 15000u                /* measuring stops this long after the last ask */
+#define OQ_STALE_MS 3000u                /* a signal not heard this long: none */
+#define OQ_TX_KBPS 1000u                 /* fm1_wifi_tx_prepare's TXWI (word 0 0xB0): 1 Mb/s CCK, every frame */
+#define OQ_RX_STA_CNT2 0x1708u           /* Ralink's: [31:16] frames lost to a full receive queue */
+#define OQ_TX_STA_CNT0 0x170Cu           /* [15:0] frames never acknowledged (the retries used up) */
+#define OQ_TX_STA_CNT1 0x1710u           /* [15:0] acknowledged at once, [31:16] acknowledged after a retry */
+#define OQ_PEERS 5u                      /* the AP (station), or MODE AP's clients 1..4 */
+static struct {
+    uint8_t on, n, k;                     /* measuring; seconds in the ring; the next slot */
+    uint32_t t_ask, t_sec;
+    uint16_t ok[OQ_SLOTS], rty[OQ_SLOTS], fail[OQ_SLOTS], over[OQ_SLOTS];
+    int16_t ema[OQ_PEERS];                /* the signal, 1/16 dBm (0: none yet) */
+    uint32_t t_heard[OQ_PEERS];
+} oq;
+static void oq_clear_counters(void)       /* (they clear when read) */
+{
+    (void)fm1_wifi_mac_rd(OQ_RX_STA_CNT2);
+    (void)fm1_wifi_mac_rd(OQ_TX_STA_CNT0);
+    (void)fm1_wifi_mac_rd(OQ_TX_STA_CNT1);
+}
+static void oq_signal(uint32_t peer, int8_t rssi)   /* a frame of peer p heard (only while measuring) */
+{
+    int32_t e;
+    if (!oq.on || peer >= OQ_PEERS || rssi >= 0)
+        return;
+    e = oq.ema[peer];
+    e = e ? e + ((int32_t)rssi * 16 - e) / 8 : (int32_t)rssi * 16;   /* (a mean over the last ~8 frames) */
+    oq.ema[peer] = (int16_t)(e < -2047 ? -2047 : e > -1 ? -1 : e);
+    oq.t_heard[peer] = own_ms();
+}
+static void oq_poll(void)                 /* once a main-loop pass: a second's counts while measuring */
+{
+    uint32_t now = own_ms(), c0, c1;
+    if (!oq.on)
+        return;
+    if (now - oq.t_ask >= OQ_HOLD_MS) {
+        oq.on = 0;
+        return;
+    }
+    if (now - oq.t_sec < 1000u)
+        return;
+    oq.t_sec = now;
+    c0 = fm1_wifi_mac_rd(OQ_TX_STA_CNT0);
+    c1 = fm1_wifi_mac_rd(OQ_TX_STA_CNT1);
+    oq.ok[oq.k] = (uint16_t)c1;
+    oq.rty[oq.k] = (uint16_t)(c1 >> 16);
+    oq.fail[oq.k] = (uint16_t)c0;
+    oq.over[oq.k] = (uint16_t)(fm1_wifi_mac_rd(OQ_RX_STA_CNT2) >> 16);
+    oq.k = (uint8_t)((oq.k + 1u) % OQ_SLOTS);
+    if (oq.n < OQ_SLOTS)
+        oq.n++;
+}
+static void oq_ask(void)                  /* measuring on (from now: the counters cleared, the ring empty) */
+{
+    uint32_t now = own_ms();
+    oq.t_ask = now;
+    if (oq.on)
+        return;
+    memset(&oq, 0, sizeof oq);
+    oq.on = 1;
+    oq.t_ask = oq.t_sec = now;
+    oq_clear_counters();
+}
+static int16_t oq_rssi(uint32_t first, uint32_t last)   /* the strongest of peers first..last heard lately, dBm (0 none) */
+{
+    uint32_t i, now = own_ms();
+    int32_t best = 0;
+    for (i = first; i <= last && i < OQ_PEERS; i++)
+        if (oq.ema[i] && now - oq.t_heard[i] < OQ_STALE_MS && (!best || oq.ema[i] > best))
+            best = oq.ema[i];
+    return (int16_t)(best ? (best - 8) / 16 : 0);     /* (rounded: -1000 / 16ths is -62.5 -> -63) */
+}
+static void oq_fill(struct plat_wifi_quality *q, int ap)
+{
+    uint32_t i, ok = 0, r = 0, f = 0, o = 0;
+    for (i = 0; i < oq.n; i++) {
+        ok += oq.ok[i], r += oq.rty[i], f += oq.fail[i], o += oq.over[i];
+    }
+    q->rssi = ap ? oq_rssi(1, OQ_PEERS - 1u) : oq_rssi(0, 0);
+    q->tx_kbps = OQ_TX_KBPS;
+    q->tx = (uint16_t)(ok + r + f > 65535u ? 65535u : ok + r + f);
+    q->retried = (uint16_t)(r > 65535u ? 65535u : r);
+    q->lost = (uint16_t)(f > 65535u ? 65535u : f);
+    q->rx_over = (uint16_t)(o > 65535u ? 65535u : o);
+    q->secs = oq.n;
+}
+
 /* ---- the service once joined: the IP layer and the app's UDP ports */
 #define OWN_SOCKS 4u
 static struct {
@@ -291,10 +381,10 @@ static void wl_rx(const uint8_t *f, uint32_t len, int8_t rssi, int64_t now)   /*
     uint32_t tx_len = 0, hl;
     uint8_t *txf = own_frame();
     int r;
-    (void)rssi;
     wl.n_rx++;
     if (len >= 24u && !memcmp(f + 10, wl.sta.bssid, 6)) {   /* the AP: still there; told us to go? */
         wl.t_heard = own_ms();
+        oq_signal(0, rssi);
         if ((f[0] == 0xC0u || f[0] == 0xA0u) && !memcmp(f + 4, wl.sta.mac, 6))
             wl.lost = 1;
     }
@@ -808,6 +898,7 @@ static void wifi_poll(void)
 #endif
     wl_poll();
     own_rx_second();
+    oq_poll();
     own_store_poll();
 }
 
@@ -969,6 +1060,19 @@ void plat_wifi_rx(uint32_t *frames, int *rssi)
         *rssi = own_rx_rssi;
 }
 int plat_net_task(void (*fn)(void *), void *arg, const char *name) { (void)fn, (void)arg, (void)name; return -1; }
+int plat_wifi_quality(struct plat_wifi_quality *q)
+{
+    int ap = 0;
+    memset(q, 0, sizeof *q);
+#if FM1B_WIFI_AP
+    ap = wl.ap && wl.on;
+#endif
+    if (!ap && wc.st != WC_UP)
+        return 0;
+    oq_ask();
+    oq_fill(q, ap);
+    return 1;
+}
 
 /* UDP for the app (main loop): its ports' datagrams to rx with their arrival (plat_wifi_us), sent from a port */
 int plat_net_udp_open(uint16_t port, void (*rx)(void *ctx, uint32_t src_ip, uint16_t src_port, const uint8_t *p,

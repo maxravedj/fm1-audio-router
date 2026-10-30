@@ -39,14 +39,48 @@ static inline void fm1_wifi_tx_prepare(uint32_t *buf, uint32_t mpdu_len, uint32_
     buf[3] = (ack & 1u) | 13u << 2 | (wcid & 0xFFu) << 8 | (mpdu_len & 0xFFFu) << 16;
     buf[4] = buf[5] = 0;
 }
+/* the MAC's frame counters as Ralink's (clear when read): every frame sent with ACK counts once, as acknowledged at
+ * once, after a retry (fm1_fake_retry_pct of them) or never (fm1_fake_lost_pct: the frame is not delivered); the
+ * receive queue's overflows (fm1_fake_rx_over, the simulated network's queue full) */
+static uint32_t fm1_fake_ok, fm1_fake_rty, fm1_fake_fail, fm1_fake_rx_over, fm1_fake_retry_pct, fm1_fake_lost_pct, fm1_fake_n;
 static inline int fm1_wifi_tx(uint32_t *buf)
 {
-    uint32_t len = buf[3] >> 16 & 0xFFFu;
+    uint32_t len = buf[3] >> 16 & 0xFFFu, k;
+    if (buf[3] & 1u) {                            /* (an even spread over each 100 frames: n * pct crosses a whole) */
+        k = fm1_fake_n++ % 100u;
+        if ((k + 1u) * fm1_fake_lost_pct / 100u != k * fm1_fake_lost_pct / 100u) {
+            fm1_fake_fail++;
+            return 0;                             /* (sent; the retries used up, nobody heard it) */
+        }
+        if ((k + 1u) * fm1_fake_retry_pct / 100u != k * fm1_fake_retry_pct / 100u)
+            fm1_fake_rty++;
+        else
+            fm1_fake_ok++;
+    } else {
+        fm1_fake_ok++;
+    }
     return fm1_fake_tx ? fm1_fake_tx((const uint8_t *)buf + FM1_WIFI_TX_HDR, len, buf[3] >> 8 & 0xFFu, buf[3] & 1u) : 0;
 }
 static inline uint32_t fm1_wifi_rx_mpdu_len(const uint8_t *f) { return (uint32_t)(f[2] | f[3] << 8) & 0xFFFu; }
 static inline int32_t fm1_wifi_rx_rssi(const uint8_t *f) { return (int8_t)f[8]; }
-static inline uint32_t fm1_wifi_mac_rd(uint32_t r) { (void)r; return 0; }
+static inline uint32_t fm1_fake_take(uint32_t *c)
+{
+    uint32_t v = *c > 0xFFFFu ? 0xFFFFu : *c;
+    *c = 0;
+    return v;
+}
+static inline uint32_t fm1_wifi_mac_rd(uint32_t r)
+{
+    if (r == 0x1708u)                             /* RX_STA_CNT2 [31:16] */
+        return fm1_fake_take(&fm1_fake_rx_over) << 16;
+    if (r == 0x170Cu)                             /* TX_STA_CNT0 [15:0] */
+        return fm1_fake_take(&fm1_fake_fail);
+    if (r == 0x1710u) {                           /* TX_STA_CNT1 [15:0] at once, [31:16] after a retry */
+        uint32_t ok = fm1_fake_take(&fm1_fake_ok);
+        return ok | fm1_fake_take(&fm1_fake_rty) << 16;
+    }
+    return 0;
+}
 static inline void fm1_wifi_mac_wr(uint32_t r, uint32_t v)
 {
     if (fm1_fake_mac_wr)

@@ -1063,7 +1063,14 @@ def check(img, syms, dis, rt):
               if re.search(r"\s" + n + r"$", syms, re.M)]
         if jl:
             errors.append(f"wifi_stack = own links JieLi's WiFi code: {jl}")
-        bad = [n for n in ("wifi_txb", "wifi_rxb") if not 0x01C00000 <= sym(n) < 0x01C20000 - 4096]
+        def sym_size(name):         # (objdump -t: ... SECTION<TAB>SIZE NAME)
+            mm = re.search(r"^[0-9a-f]+ .*\s([0-9a-f]{8})\s+" + name + r"$", syms, re.M)
+            return int(mm.group(1), 16) if mm else 0
+        # each buffer whole in main RAM below the frame DMA's top (either compiler may move them: the 10-28 fix, TX in
+        # main RAM, not the pool), and in .bss / .data, never the pool's section
+        bad = [n for n in ("wifi_txb", "wifi_rxb") if not 0x01C00000 <= sym(n) or not sym_size(n) or
+               sym(n) + sym_size(n) > 0x01C20000 or
+               not re.search(r"^[0-9a-f]+ .*\s\.(bss|data)\s+[0-9a-f]{8}\s+" + n + r"$", syms, re.M)]
         if bad:
             errors.append(f"the Wi-Fi frame DMA's buffers must sit below 0x01C20000 (main RAM): {bad} at "
                           f"{', '.join(hex(sym(n)) for n in bad)}")

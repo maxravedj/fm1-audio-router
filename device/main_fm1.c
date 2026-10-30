@@ -1044,6 +1044,23 @@ static int wifi_frame(const uint8_t *p, uint32_t n)
         q = wifi_cat(q, " ", e);
         wifi_cat(q, plat_wifi_why(), e);
         wifi_line(b);
+#if FM1B_WIFI_OWN
+        {   /* joined: how well the link works (plat_wifi_quality), a second line: the first ask starts the measuring, so
+             * a status 10 s later has the whole window ("10s") */
+            struct plat_wifi_quality wq;
+            static const char *const W[] = {"q ", " dBm ", "k tx ", " retried ", " lost ", " rxover ", " in ", "s"};
+            if (plat_wifi_quality(&wq)) {
+                const int32_t v[7] = {wq.rssi, wq.tx_kbps, wq.tx, wq.retried, wq.lost, wq.rx_over, wq.secs};
+                q = b;
+                for (i = 0; i < 7; i++) {
+                    q = wifi_cat(q, W[i], e);
+                    q = wifi_num(q, v[i], e);
+                }
+                wifi_cat(q, W[7], e);
+                wifi_line(b);
+            }
+        }
+#endif
         break;
     }
     case 5:
