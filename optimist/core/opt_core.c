@@ -217,14 +217,17 @@ uint32_t opt_core_block(void) { return CTL; }
 /* Optimist renders Q15 (fx.c mix_finish, MASTER inside: song.master_q12) and shifts it to 24 bit (core/audio.c
  * audio_block, OUT_SHIFT 7: -6 dBFS ceiling); fm1-base's render takes 24 bit with MASTER as master_q12 (APP_GAIN) */
 #define OUT_SHIFT 7
-/* the output as Optimist's main loop reads it (core/audio.c): the two I2S halves (abuf, 24 bit), the one rendered last
- * (fm1_audio_free_half) and a count of them (audio_halves): the mixer's meters (ui/meters.c). A copy here: fm1-base's
- * render writes its own buffer (APP_BLOCK = HALF_FRAMES frames a call) */
+/* the output as Optimist's main loop reads it (core/audio.c): the two I2S halves' largest |sample| (the master meter's
+ * only use of them: opt_half_peak.h, AUDIO_HALF_PEAK), the one rendered last (fm1_audio_free_half) and a count of them
+ * (audio_halves): the mixer's meters (ui/meters.c). fm1-base's render writes its own buffer (APP_BLOCK = HALF_FRAMES
+ * frames a call) */
 /* MASTER as the mirror's client sets it (editor cmd 108 kind 3, ed_mirror.c mir_master): its q12 + 1, 0 the pot's
  * (fm1-base's master_q12). Set by the main loop (ui/opt_editor.h opt_ed_master), read by the render */
 static volatile uint32_t opt_master_q12;
 #define HALF_WORDS (HALF_FRAMES * 2u)
-static int32_t abuf[2u * HALF_WORDS];
+#include "opt_half_peak.h"
+static int32_t opt_half_pk[2];                   /* the two halves' largest |sample| (the meter's: was a 4 KB copy of them) */
+#define AUDIO_HALF_PEAK(h) opt_half_pk[(h) & 1u]  /* (ui/meters.c meter_tap) */
 static volatile uint32_t audio_halves;
 static uint32_t fm1_audio_free_half(void) { return (audio_halves + 1u) & 1u; }   /* (the half written last) */
 
@@ -347,9 +350,7 @@ void opt_core_render(int32_t *lr, uint32_t n, uint32_t master_q12, uint32_t keys
     for (i = 2u * f; i < 2u * n; i++)                /* (n not a multiple of CTL: app.h's APP_BLOCK is) */
         lr[i] = 0;
     for (f = 0; f < n; f += HALF_FRAMES) {           /* (the halves the meters scan) */
-        int32_t *h = &abuf[(audio_halves & 1u) * HALF_WORDS];
-        for (i = 0; i < HALF_WORDS; i++)
-            h[i] = f * 2u + i < 2u * n ? lr[f * 2u + i] : 0;
+        opt_half_pk[audio_halves & 1u] = opt_half_peak(lr, f, n, HALF_WORDS);
         audio_halves++;
 #if FELUCCA_DUAL >= 2
         dual_load_half();                            /* CPU1's load, once a half (core/opt_dual.c, dual_load.h) */
