@@ -43,6 +43,12 @@ cpu2 = true
 cpu2_fallback = true
 cpu2_stack = 4096              # (felucca-bsp's 2,816 B less its 256 B guard: under the 2.5 KB an engine's job reaches; 4096
                                # leaves Optimist's own room, 3,840 B: tools/build.py CPU1_STACK_ROOM there)
+main_stack = 6656               # CPU0's stacks, from the static check (stack_check: tools/stack_depth.py, the deepest path's
+irq_stack = 6400                # frames, the interrupts nested at their worst, the fault path on top) and its margin (25 %
+                               # or 1 KiB, the larger); were 24,320 and 7,936 (measured high-water 3 KB and 2.3 KB)
+stack_check = true
+stack_bounds = ["f6_width=7", "f6_place=7", "ph_put=7"]   # Optimist's recursions: op_fm6draw.c (depth < 6, from 0),
+                               # ph_blob.c (PH_PAIR's nesting: tools/gen_param_help.py PH_DEPTH_MAX checks it)
 app_end = 0x93000              # the normal slot, said: the update loader compares slots before an install (fm1-base's
                                # LDR_SLOT_SWITCH), so a normal build over the SD card mode's erases its code above
                                # 0x93000. The SD card mode (its profile copy: LAYOUT 1) builds with FM1B_APP_END=0xCE000
