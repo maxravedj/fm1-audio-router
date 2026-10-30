@@ -13,7 +13,8 @@ audio path), with the flash on; it may call, but only code that is in RAM too, s
   - fm1.toml ram_code_allow = ["fn", ...] names the RAM functions whose calls out of RAM, or through a pointer, the
     app vouches for (a cold path, a pointer that only ever holds RAM code): each is printed with every build, and a
     name that matches no function in RAM is an error (the list stays what the code is). "fn?" names one an app's
-    switch may leave out: absent it is said in a note, present it must be RAM code as any other.
+    switch may leave out, or a build may place in XIP (its RAM placement switched off): absent or in XIP it is said in a
+    note (XIP code makes no call out of RAM to vouch for); a plain "fn" must be RAM code.
 
 Constants are not checked: .app_ram code may read .rodata in XIP, so it does not run with the flash off (nothing
 but the flash driver does: its windows hold the interrupts off).
@@ -133,13 +134,19 @@ def check(syms, dis, allow=()):
             errors.append(f"RAM code calls through a pointer: {' > '.join(path)} at {at(ptr)}"
                           + (f"; it takes the address of XIP code {', '.join(xf)}" if xf else "; the target is not known")
                           + " (fm1.toml ram_code_allow if it is RAM code)")
+    in_xip = []
     for n in allow:
         if n not in by_name or not in_ram(starts[by_name[n]]):
-            errors.append(f"fm1.toml ram_code_allow: {n} is no function in RAM code")
+            if n in optional and n in by_name:
+                in_xip.append(n)                    # ("fn?" built in XIP here: nothing out of RAM to vouch for)
+            else:
+                errors.append(f"fm1.toml ram_code_allow: {n} is no function in RAM code")
     allowed = f"; calls out of RAM or through a pointer allowed in {', '.join(sorted(used))} (ram_code_allow)" \
         if used else ""
     notes = [f"app RAM code (.app_ram): {ar[1] - ar[0]} B, {len(roots)} functions, {len(seen)} with the RAM code they "
              f"call (.ram_text {rt[1] - rt[0]} B in all){allowed}"]
     if absent:
         notes.append(f"ram_code_allow: not in this build: {', '.join(absent)}")
+    if in_xip:
+        notes.append(f"ram_code_allow: in XIP in this build (not RAM code): {', '.join(sorted(in_xip))}")
     return errors, notes

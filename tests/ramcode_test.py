@@ -103,8 +103,11 @@ ok(len(errs) == 2 and all("is no function in RAM code" in e for e in errs), f"a 
 errs, notes = run(PTR, allow=["render?", "nothing?"])
 ok(errs == [] and any("allowed in render" in n for n in notes) and any("not in this build: nothing" in n for n in notes),
    f"an optional name: allowed when built, said when not ({errs}, {notes})")
-errs, _ = run(RAM_TO_RAM, allow=["xip_helper?"])
-ok(len(errs) == 1 and "xip_helper is no function in RAM code" in errs[0], f"an optional name built in XIP fails ({errs})")
+errs, notes = run(RAM_TO_RAM, allow=["xip_helper?"])
+ok(errs == [] and any("in XIP in this build (not RAM code): xip_helper" in n for n in notes),
+   f"an optional name built in XIP (its RAM placement off in this build) is said in a note, not an error ({errs}, {notes})")
+errs, _ = run(RAM_TO_RAM, allow=["xip_helper"])
+ok(len(errs) == 1 and "xip_helper is no function in RAM code" in errs[0], f"a plain name built in XIP still fails ({errs})")
 
 # the flash driver's .ram_text is no root: its code is only followed when RAM code calls it
 errs, notes = run(RAM_TO_RAM, ar_end=0x1c00020)
