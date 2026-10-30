@@ -1,8 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # The SD card layout's engine switches (optimist/run.sh, the sd run: profiles/sd-console.config): each part takes several
-# engines in turn, a key plays each; none of the switches is refused (the arena's part_mem_reserve) and no half is late.
-# (OVERLAY, which that profile also has, is defined for the FM-1's code only: its slots load when a part's engine
-# changes, which only a device build runs)
+# engines in turn, a key plays each; none of the switches is refused (the arena's part_mem_reserve) and no half is late
 wait 800
 expect blocks >100
 engine 0 STRINGS

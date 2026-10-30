@@ -45,7 +45,7 @@ run_sd() {
         cp $H/sd/card0.img $H/sd/card.img
         FM1B_SD=$H/sd/card.img $H/optimist_host optimist/tests/sd/card.txt $H
         "$PY" optimist/sdcard.py check $H/sd/card.img
-        # the same layout with the serial console on (profiles/sd-console.config; OVERLAY too, which only the FM-1's code defines):
+        # the same layout with the serial console on (profiles/sd-console.config):
         # the parts switch engines (tests/sd/engines.txt), the console reads the card (tests/sd/console.txt, a fresh card image)
         echo "optimist/run.sh: profile sd-console (tests/sd/engines.txt, console.txt)"
         export OPT_PROFILE=profiles/sd-console.config

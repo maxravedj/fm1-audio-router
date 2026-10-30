@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # The serial console's card commands (run.sh's sd run: profiles/sd-console.config, USB_CONSOLE on the SD card layout; the card
 # optimist/build/host/sd/card.img): SERIAL on and a restart, then the card's state, a folder, a file and a raw sector
-# through Optimist's card code and plat_sd_read. (The overlays' command, ovl, is the device build's: OVERLAY is only
-# defined for the FM-1's code, never on the host)
+# through Optimist's card code and plat_sd_read
 #   FM1B_SD=optimist/build/host/sd/card.img optimist/build/host/optimist_host optimist/tests/sd/console.txt OUT
 wait 2000
 tap GLO
@@ -19,7 +18,6 @@ reboot
 wait 2000
 console help
 expect_console sd [ls
-unexpect_console ovl
 console sd
 expect_console sd ready
 expect_console fat 32

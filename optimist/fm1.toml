@@ -79,8 +79,8 @@ companion = true               # fm1-base's companion services (docs/COMPANION.m
 emu = ["port"]                 # the browser emulator as a MIDI port for this site's other pages (web/emu/parts/port.js):
                                # Optimist's web editor's "fm1-base emulator" device, the companion page
 # The audio path's calls out of RAM code through a pointer (tools/ramcode.py), every one of them Optimist's own: its
-# firmware runs the same functions from RAM (its .ram_hot / .ram_hot2: core.h HOT, HOT2, OVL as HOT without the
-# overlays) and makes the same calls into XIP (FAR, the engines' and effects' function tables), with its rule that HOT
+# firmware runs the same functions from RAM (its .ram_hot / .ram_hot2: core.h HOT, HOT2, an engine's FAST as HOT
+# when its code is in RAM) and makes the same calls into XIP (FAR, the engines' and effects' function tables), with its rule that HOT
 # code reaches XIP only that way. Safe here for the same reason as there: the XIP flash is on whenever audio renders.
 # The render runs in the audio interrupt, and fm1-base turns the flash off only inside its flash driver with the
 # interrupts off (each 256-byte page write, each ~1 ms window of a sliced erase: plat.h plat_data_erase); between the
@@ -92,8 +92,8 @@ ram_code_allow = [
     # events, the resampler's block, the meters' and scope's taps (all XIP on Optimist, called through FAR or a table)
     "mix_block",
     # ANALOG / ANALOG 2 (eng_analog*.c): the float filter models (a2_models.c a2m_block, a float unit in XIP as on
-    # Optimist); a2_filter's table of SVF kernels (A2_FLT, A2_FLT_I) holds RAM code (OVL), here and on Optimist;
-    # a2_naive (the sync's jump) calls through A2_OSC, whose four oscillators are OVL(analog) RAM code too ("?": inlined
+    # Optimist); a2_filter's table of SVF kernels (A2_FLT, A2_FLT_I) holds RAM code (FAST), here and on Optimist;
+    # a2_naive (the sync's jump) calls through A2_OSC, whose four oscillators are FAST(analog) RAM code too ("?": inlined
     # into a2_sync in some builds)
     "analog_render", "a2_fltb", "a2_filter", "a2_naive?",
     # the effect buses (fx.c): the reverb's rare clear and parameters, the delay's block, the returns' zeroing, the

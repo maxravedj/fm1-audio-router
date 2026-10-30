@@ -24,7 +24,6 @@
  *   flr OFFSET [LEN<=256]  the flash as plat_data reads it (the data windows; the app's own code is not there)
  *   tabbench     the tables' read speed: SINE, main RAM, the pool (TAB_IN_POOL)
  *   sd [ls [DIR] | cat FILE | raw SECTOR]   the card: its state, a folder, a file's first bytes, a sector (SDCARD builds)
- *   ovl          the overlays' slots (OVERLAY builds)
  * What stays with fm1-base, which owns that hardware (its own tools read it: tools/fm1_debug.py, fm1_remote.py): memory reads (memr: raw addresses, the platform's alone to read), the crash
  * and boot records (crash, boot), the second core's set-up and rails (dualcfg), the radio's calibration, link layer and
  * Bluetooth Classic diagnostics (blevm, bletrim, blell, btclk, btinq, btscan, btrx, btpage, bttrace), the SD bus modes
@@ -373,25 +372,6 @@ static void con_sd_cmd(const char *p)
     }
 }
 #endif
-#if FELUCCA_OVERLAY
-static void con_ovl(void)                       /* the overlays (core/overlay.c): the slots, the copies */
-{
-    uint32_t k;
-    con_kv("ovl_bad", rto_st.bad);
-    con_kv("slot_bytes", (int32_t)rto_slot_len);
-    for (k = 0; k < NPART; k++) {
-        con_puts("slot ");
-        con_dec((int32_t)k + 1);
-        con_puts(" ");
-        con_puts(rto_eng[k] && rto_eng[k] <= NENGINES ? ENGINES[rto_eng[k] - 1u]->name : "-");
-        con_puts("\r\n");
-    }
-    con_kv("loads", (int32_t)rto_st.loads);
-    con_kv("copy_us_last", (int32_t)rto_st.us_last);
-    con_kv("copy_us_max", (int32_t)rto_st.us_max);
-    con_kv("copy_bytes_max", (int32_t)rto_st.bytes_max);
-}
-#endif
 
 static void con_exec(const char *p)
 {
@@ -402,9 +382,6 @@ static void con_exec(const char *p)
                  "  flr OFFSET [LEN]  tabbench"
 #if FELUCCA_SDCARD
                  "  sd [ls [DIR] | cat FILE | raw SECTOR]"
-#endif
-#if FELUCCA_OVERLAY
-                 "  ovl"
 #endif
 #if FELUCCA_BLE || FELUCCA_BT_AUDIO
                  "  btlog [N]"
@@ -429,10 +406,6 @@ static void con_exec(const char *p)
 #if FELUCCA_SDCARD
     else if (con_word(&p, "sd"))
         con_sd_cmd(p);
-#endif
-#if FELUCCA_OVERLAY
-    else if (con_word(&p, "ovl"))
-        con_ovl();
 #endif
 #if FELUCCA_BLE || FELUCCA_BT_AUDIO
     else if (con_word(&p, "btlog"))

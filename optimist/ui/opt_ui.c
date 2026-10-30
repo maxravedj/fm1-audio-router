@@ -197,14 +197,12 @@ void opt_core_init(void)
 static int32_t opt_batt_raw(void) { return plat_battery_raw(); }
 /* after every ui_input, as main.c does: the effects' lines and the other buffers in the arena (fx/fx_arena.c,
  * core/arena_bufs.c), the limited inserts' instances after a change of slots or a load (fx/insfx/fxi.c: CHRS ECHO
- * JUNO FLNG XDLY on a track get an instance here, else they wait unheard), the engines' code a part asked for
- * (core/overlay.c); those a build leaves out are no-ops */
+ * JUNO FLNG XDLY on a track get an instance here, else they wait unheard); those a build leaves out are no-ops */
 static void opt_ui_polls(void)
 {
     fxm_poll();
     arb_poll();
     fxi_poll();
-    rto_poll();
 }
 
 void opt_ui_init(void)
