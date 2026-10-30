@@ -103,6 +103,8 @@ static uint8_t live_save_off;
 #define HOT
 #define HOT2
 #endif
+#include "opt_lend.h"                           /* the switchable features' blocks the arena lends (FMEM_NLEND, before
+                                                 * engines.c counts its clients) */
 #include "engines/engines.c"
 #include "drums/drums.c"
 #include "core/params.c"
