@@ -86,8 +86,10 @@ ram_code_allow = [
     # events, the resampler's block, the meters' and scope's taps (all XIP on Optimist, called through FAR or a table)
     "mix_block",
     # ANALOG / ANALOG 2 (eng_analog*.c): the float filter models (a2_models.c a2m_block, a float unit in XIP as on
-    # Optimist); a2_filter's table of SVF kernels (A2_FLT, A2_FLT_I) holds RAM code (OVL), here and on Optimist
-    "analog_render", "a2_fltb", "a2_filter",
+    # Optimist); a2_filter's table of SVF kernels (A2_FLT, A2_FLT_I) holds RAM code (OVL), here and on Optimist;
+    # a2_naive (the sync's jump) calls through A2_OSC, whose four oscillators are OVL(analog) RAM code too ("?": inlined
+    # into a2_sync in some builds)
+    "analog_render", "a2_fltb", "a2_filter", "a2_naive?",
     # the effect buses (fx.c): the reverb's rare clear and parameters, the delay's block, the returns' zeroing, the
     # distortion's gains, the drum inserts' rest; rev_run: rev_bus's per-block worker (the reverb type's parameters through
     # its table, as rev_bus), a function of its own when not inlined ("?": some builds inline it); dins_one: dins_of's
