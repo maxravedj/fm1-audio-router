@@ -3,6 +3,11 @@
 # mixer, the knobs and the buttons move it as on an FM-1, and the keys still play. optimist/run.sh builds and runs it:
 #   optimist/build/host/optimist_host optimist/tests/dev/ui.txt optimist/build/host
 # (the screens: optimist/build/host/ui-*.png). "cells" prints the screen, its cursor row and its four cards.
+# the boot screen: the dinghy, "OPTIMIST" and the version lit (tests/ui.txt's checks)
+expect splash_lit.10.160 >1000
+expect splash_lit.173.205 >300
+expect splash_lit.211.232 >30
+splashshot ui-splash.png
 wait 600
 # the mixer (SCR_HOME 0), track 1, its MIX row: VOLUME -4.0 dB
 expect scr 0

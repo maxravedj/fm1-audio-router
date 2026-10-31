@@ -119,9 +119,14 @@ static void cv_mirror(uint32_t x, uint32_t y) { mir_blit(x, y, cv_w, cv_h, cv_px
 /* ---- the boot screen (fm1-base's APP_SPLASH, app.c app_splash: before app_init): Optimist's own, the dinghy logo,
  * "OPTIMIST" and the version (ui/splash.c, always built in Optimist: main.c boot_splash), on this unit's canvas */
 #include "ui/splash.c"
+#define OPT_UI_PALETTE 4u                        /* MONO: the palette ui/panel.c settings_init always sets (no COLOR setting) */
 void opt_splash(void)
 {
     opt_cv_init();                               /* (the canvas: app_init has not run yet) */
+    opt_palette_set(OPT_UI_PALETTE);             /* the name and the version are drawn in C_HI / C_AMB, this unit's pal[]
+                                                  * (fm1-base's palette_set at boot sets its own unit's copy): zero until
+                                                  * settings_init (opt_core_init, after the splash), so black on black.
+                                                  * Optimist's own main.c runs settings_init before boot_splash */
     boot_splash();
 }
 

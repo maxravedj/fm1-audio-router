@@ -2211,11 +2211,18 @@ static void wifi_tick(void)
     wifi_poll();
 }
 #endif
+#ifdef APP_SPLASH
+static uint16_t splash_fb[240 * 240];   /* the screen as the app's splash left it, the last boot's (boot) */
+#endif
 static void boot(void)
 {
-    hcr_boot();                                     /* a crash before this boot into the flash history (main_fm1.c) */
+    hcr_boot();                                    /* a crash before this boot into the flash history (main_fm1.c) */
     hds_boot();                                     /* the debug stats' queue, a crash's snapshot (main_fm1.c) */
     palette_set(APP_PALETTE);                       /* as the device does at boot */
+#ifdef APP_SPLASH
+    app_splash();                                   /* the app's boot screen, before app_init as main_fm1.c draws it */
+    memcpy(splash_fb, fb, sizeof fb);               /* (kept: expect splash_lit.Y0.Y1, splashshot) */
+#endif
 #if FM1B_WIFI_OWN
     wifi_own_forget();                              /* (a reboot: the Wi-Fi stack's RAM as after a restart) */
 #endif
@@ -2486,6 +2493,16 @@ static int expect(const char *what, const char *val)
 #ifdef APP_DIM_LEVELS
     else if (!strcmp(what, "dim_ns"))               /* the dim pulse (plat_dim_ns, else the glow's), ns */
         got = (int)dim_pulse();
+#endif
+#ifdef APP_SPLASH
+    else if (!strncmp(what, "splash_lit.", 11)) {   /* splash_lit.Y0.Y1: the boot screen's (APP_SPLASH) pixels that are
+                                                     * not black in rows Y0..Y1 (a text in black on black: none) */
+        char *e;
+        long y0 = strtol(what + 11, &e, 10), y1 = *e == '.' ? strtol(e + 1, 0, 10) : y0, y, x;
+        for (got = 0, y = y0 < 0 ? 0 : y0; y <= y1 && y < 240; y++)
+            for (x = 0; x < 240; x++)
+                got += splash_fb[y * 240 + x] != 0;
+    }
 #endif
     else if (!strcmp(what, "clocks_out"))
         got = (int)clock_out_count;
@@ -2974,6 +2991,15 @@ int main(int argc, char **argv)
         else if (!strcmp(cmd, "shot")) {
             snprintf(out, sizeof out, "%s/%s", dir, a);
             png_write(out);
+#ifdef APP_SPLASH
+        } else if (!strcmp(cmd, "splashshot")) {   /* splashshot FILE: the last boot's splash screen as a PNG */
+            static uint16_t now[240 * 240];
+            snprintf(out, sizeof out, "%s/%s", dir, a);
+            memcpy(now, fb, sizeof fb);
+            memcpy(fb, splash_fb, sizeof fb);
+            png_write(out);
+            memcpy(fb, now, sizeof fb);
+#endif
         } else if (!strcmp(cmd, "leds")) {
             int i;
             printf("  leds: buttons");
