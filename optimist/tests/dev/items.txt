@@ -320,9 +320,8 @@ turn K1 40
 turn K3 40
 wait 100
 cells
-# the reverb: the master's RETURNS TYPE through every algorithm built, a note's tail heard each time (REV send 90 on track 1);
-# MASTER is the walk's last stop since fm1-next-rettracks (ALGO 40 there, -40 back to T1)
-turn ALGO 40
+# the reverb: the master's RETURNS TYPE through every algorithm built, a note's tail heard each time (REV send 90 on track 1)
+turn ALGO -1
 wait 100
 tap FX
 wait 100
@@ -334,7 +333,7 @@ cells
 turn K4 0
 wait 100
 expect gv4 0
-turn ALGO -40
+turn ALGO 1
 wait 100
 peakreset
 key 7 down
@@ -344,7 +343,7 @@ wait 1000
 peakreset
 wait 300
 expect peak_db_min -75
-turn ALGO 40
+turn ALGO -1
 wait 100
 tap FX
 wait 100
@@ -355,7 +354,7 @@ wait 50
 turn K4 1
 wait 100
 expect gv4 1
-turn ALGO -40
+turn ALGO 1
 wait 100
 peakreset
 key 7 down
@@ -365,7 +364,7 @@ wait 1000
 peakreset
 wait 300
 expect peak_db_min -75
-turn ALGO 40
+turn ALGO -1
 wait 100
 tap FX
 wait 100
@@ -376,7 +375,7 @@ wait 50
 turn K4 1
 wait 100
 expect gv4 2
-turn ALGO -40
+turn ALGO 1
 wait 100
 peakreset
 key 7 down
@@ -386,7 +385,7 @@ wait 1000
 peakreset
 wait 300
 expect peak_db_min -75
-turn ALGO 40
+turn ALGO -1
 wait 100
 tap FX
 wait 100
@@ -397,7 +396,7 @@ wait 50
 turn K4 1
 wait 100
 expect gv4 3
-turn ALGO -40
+turn ALGO 1
 wait 100
 peakreset
 key 7 down
@@ -407,7 +406,7 @@ wait 1000
 peakreset
 wait 300
 expect peak_db_min -75
-turn ALGO 40
+turn ALGO -1
 wait 100
 tap FX
 wait 100
@@ -416,7 +415,7 @@ wait 50
 turn SELECT 4
 wait 50
 # MACROS: MASTER > FX > MACRO, the COLOR macro moved (it moves the voices' LFO depths and the filter), a key played
-turn ALGO 40
+turn ALGO -1
 wait 100
 tap FX
 wait 100
@@ -429,7 +428,7 @@ expect gv1 0
 turn K1 40
 wait 100
 expect gv1 40
-turn ALGO -40
+turn ALGO 1
 wait 100
 # a key under the COLOR macro
 peakreset
