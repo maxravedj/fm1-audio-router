@@ -152,6 +152,7 @@ static uint8_t ed_out[ED_OUT_N] __attribute__((aligned(4))) IN_POOL;
 #define OPT_IN_MIR_PKT (sizeof __func__ == sizeof "mir_pkt" && __func__[1] == 'i' && __func__[4] == 'p')   /* (no strcmp:
                                                  * the FM-1 has no C library; the compiler folds it) */
 #define RING_PUBLISH() do { if (OPT_IN_MIR_PKT) opt_sx_publish(); __asm__ volatile("" ::: "memory"); } while (0)
+#define ED_BOOT_READ plat_boot_read   /* (INFO tag 0x68: which bootloader the FM-1 has, Optimist's system/bootid.h) */
 #include "io/editor/editor.c"
 #undef RING_PUBLISH
 #define RING_PUBLISH() __asm__ volatile("" ::: "memory")   /* (core/core.h's) */
