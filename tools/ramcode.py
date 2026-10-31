@@ -71,6 +71,7 @@ def check(syms, dis, allow=()):
         return [], []
     starts, names, insns = functions(dis)
     by_name = {n: i for i, n in enumerate(names)}
+    code_starts = {a for a, n in zip(starts, names) if not n.startswith(".GJTI")}   # (where a function begins)
     optional = {n[:-1] for n in allow if n.endswith("?")}
     absent = sorted(n for n in optional if n not in by_name)       # ("fn?": not built here, the switch off)
     allow = [n.rstrip("?") for n in allow if n.rstrip("?") not in absent]
@@ -118,7 +119,8 @@ def check(syms, dis, allow=()):
             elif t is None:
                 ptr.append(pc)
             elif not in_ram(t):
-                xip.setdefault(t, []).append(pc)
+                if t in code_starts:      # (a jump table's data word can read as a call to anywhere: no code, no call)
+                    xip.setdefault(t, []).append(pc)
             else:
                 j = owner(t)
                 if j is not None and j not in seen:
