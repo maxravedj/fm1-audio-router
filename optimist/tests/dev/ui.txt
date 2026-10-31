@@ -9,10 +9,10 @@ expect splash_lit.173.205 >300
 expect splash_lit.211.232 >30
 splashshot ui-splash.png
 wait 600
-# the mixer (SCR_HOME 0), track 1, its MIX row: VOLUME -4.0 dB
+# the mixer (SCR_HOME 0), track 1, its MIX row (row 4: RET A B C and MASTER above T1 since fm1-next-rett-int): VOLUME -4.0 dB
 expect scr 0
 expect track 0
-expect row 1
+expect row 4
 expect gv1 104
 cells
 shot ui-mix.png
