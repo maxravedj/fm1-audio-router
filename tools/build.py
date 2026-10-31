@@ -322,12 +322,20 @@ def builder():
         return _builder_start()
 
 
+def builder_name(root, toolchain_dir, image):
+    """the toolchain container's name: one per source tree, toolchain and image. A container mounts one toolchain
+    and runs one image for the hour it lives, so a build with another JIELI_TOOLCHAIN (another compiler, an app's
+    measurement toolchain) or JIELI_DOCKER_IMAGE gets a container of its own, never one that has the other mounted"""
+    key = "\n".join((str(root), str(toolchain_dir), image))
+    return "jieli-" + hashlib.sha1(key.encode()).hexdigest()[:10]
+
+
 def _builder_start():
     global _BUILDER
     if _BUILDER:
         return _BUILDER
-    name = "jieli-" + hashlib.sha1(str(ROOT).encode()).hexdigest()[:10]
-    st = subprocess.run(["docker", "inspect", "-f", "{{.State.Running}}", name], capture_output=True, text=True)
+    name = builder_name(ROOT, toolchain(), DOCKER_IMAGE)
+    st =subprocess.run(["docker", "inspect", "-f", "{{.State.Running}}", name], capture_output=True, text=True)
     if st.stdout.strip() != "true":
         subprocess.run(["docker", "rm", "-f", name], capture_output=True)
         r = subprocess.run(["docker", "run", "-d", "--rm", "--name", name, "--platform", "linux/amd64",
