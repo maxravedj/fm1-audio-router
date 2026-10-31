@@ -4,10 +4,10 @@
 #   optimist/build/host/optimist_host optimist/tests/dev/ui.txt optimist/build/host
 # (the screens: optimist/build/host/ui-*.png). "cells" prints the screen, its cursor row and its four cards.
 wait 600
-# the mixer (SCR_HOME 0), track 1, its MIX row (row 0: T1 is the first row, MASTER the last since fm1-next-rettracks): VOLUME -4.0 dB
+# the mixer (SCR_HOME 0), track 1, its MIX row (row 4: RET A B C and MASTER above T1 since fm1-next-rett-int): VOLUME -4.0 dB
 expect scr 0
 expect track 0
-expect row 0
+expect row 4
 expect gv1 104
 cells
 shot ui-mix.png
