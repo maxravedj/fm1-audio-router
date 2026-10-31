@@ -109,6 +109,18 @@ ok(errs == [] and any("in XIP in this build (not RAM code): xip_helper" in n for
 errs, _ = run(RAM_TO_RAM, allow=["xip_helper"])
 ok(len(errs) == 1 and "xip_helper is no function in RAM code" in errs[0], f"a plain name built in XIP still fails ({errs})")
 
+# a jump table's data word that decodes as a call to where no code sits (2026-10-31, tools/build.py had the same trap)
+TABLE = """
+render:
+ 1c00020:    00 01             \ttbb [r0]
+
+.GJTIS1_0_0_:
+ 1c00022:    aa ea 04 02       \tcall -1048576
+ 1c00026:    81 00             \trts
+"""
+errs, _ = run(TABLE)
+ok(errs == [], f"a table word that reads as a call to no function passes ({errs})")
+
 # the flash driver's .ram_text is no root: its code is only followed when RAM code calls it
 errs, notes = run(RAM_TO_RAM, ar_end=0x1c00020)
 ok(errs == [] and notes == [], f"no .app_ram: nothing checked, nothing said ({errs}, {notes})")
