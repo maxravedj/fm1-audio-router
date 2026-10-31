@@ -285,8 +285,10 @@ BLE_API void ble_sig_bulk(int want)
             bk_go(BK_ASKED, now);
         return;
     case BK_ASKED:
-        if (iv >= BLE_CONN_BULK_MIN)
+        if (iv >= BLE_CONN_BULK_MIN) {
+            ble_ll_length_again();             /* (the Mac's 50 octets at 7.5 ms: its packet time may follow the interval) */
             bk_go(BK_BULK, now);
+        }
         else if (now - bhs.bk.t > BLE_BULK_WAIT_US)
             bk_go(BK_LOST, now);               /* (refused, or never moved) */
         return;

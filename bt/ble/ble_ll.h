@@ -58,6 +58,9 @@ BLE_API int ble_ll_encrypted(void);                       /* the link is encrypt
 /* the link's rate: octets acknowledged in connection events that ended with data still waiting (the link full), and those
  * events' time (us); both free-running totals since the connection started, the caller takes differences */
 BLE_API void ble_ll_rate(uint32_t *octets, uint32_t *us);
+/* the data length asked for again (LL_LENGTH_REQ, when the central has the feature): after an interval change, a central
+ * whose controller caps the packet time by the interval may now allow longer packets */
+BLE_API void ble_ll_length_again(void);
 #if BLE_CENTRAL
 /* scan instead of advertising while on (the DEVICES list is open), when enabled and not connected; a connection
  * that ends while on goes back to scanning. Off: advertising again (when enabled). Called like ble_ll_enable */

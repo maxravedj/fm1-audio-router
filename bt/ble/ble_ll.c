@@ -128,6 +128,12 @@ BLE_API int ble_ll_encrypted(void) { return bll.state == LL_CONN && bll.enc_tx; 
 BLE_API int ble_ll_encrypted(void) { return 0; }
 #endif
 
+BLE_API void ble_ll_length_again(void)
+{
+    if (bll.state == LL_CONN && BLE_LL_MAX_OCTETS > 27u && bll.feat_known && (bll.peer_feat & BLE_FEAT_DLE))
+        bll.len_done = 0;                           /* (ll_start_procs sends LL_LENGTH_REQ at the next free moment) */
+}
+
 BLE_API void ble_ll_rate(uint32_t *octets, uint32_t *us)
 {
     *octets = bll.sat_oct;

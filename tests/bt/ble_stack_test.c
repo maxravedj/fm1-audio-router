@@ -1007,6 +1007,7 @@ static struct {
     int accept;                                   /* 1: accept our L2CAP request (and move there), 0: reject it */
     int asks, last_min, last_max, last_to;        /* the requests seen */
     unsigned seen;                                /* frames looked at */
+    int lreq;                                     /* LL_LENGTH_REQs answered */
 } bkm;
 static void bk_model_apply(void)
 {
@@ -1025,6 +1026,12 @@ static void bk_run(int n, int want)
             app_out(0x0B | 0xB0 << 8 | 7u << 16 | 5u << 24, now_us / 1000u);
         c_event();
         ble_sig_bulk(want);
+        if (c_ctrl_count(LL_LENGTH_REQ) > bkm.lreq) {   /* (our data length asked again: the model's, by its interval) */
+            int o = bll.interval >= 24 ? bkm.slow_len : bkm.fast_len, t = (o + 14) * 8;
+            uint8_t d[9] = {LL_LENGTH_RSP, (uint8_t)o, 0, (uint8_t)t, (uint8_t)(t >> 8), (uint8_t)o, 0, (uint8_t)t, (uint8_t)(t >> 8)};
+            bkm.lreq = c_ctrl_count(LL_LENGTH_REQ);
+            c_ctrl(d, 9);
+        }
         for (; (int)bkm.seen < C.fr_n; bkm.seen++) {
             uint8_t *f = C.fr[bkm.seen % C_FRAMES];
             if ((f[2] | f[3] << 8) != 5 || f[4] != 0x12)
@@ -1046,6 +1053,7 @@ static void test_bulk(void)
     c_frames_done();
     memset(&bkm, 0, sizeof bkm);
     bkm.seen = (unsigned)C.fr_n;
+    bkm.lreq = c_ctrl_count(LL_LENGTH_REQ);
     bkm.fast_len = 50, bkm.fast_cap = 1, bkm.slow_len = 251, bkm.slow_cap = 4, bkm.accept = 1;
     bll.interval = 6;
     bk_model_apply();
@@ -1062,9 +1070,12 @@ static void test_bulk(void)
     check("... an idle link adds nothing", u1 == u0 && o1 == o0);
     /* the Mac's case: bulk faster */
     bhs.bk.st = 0;
+    asks = c_ctrl_count(LL_LENGTH_REQ);
     bk_run(200, 1);                            /* 1.5 s */
     check("bulk: the fast link measured full, then {24, 36, 0, 200} asked",
           bkm.asks == 1 && bkm.last_min == 24 && bkm.last_max == 36 && bkm.last_to == 200 && bll.interval == 24);
+    check("... at 30 ms the data length asked for again (LL_LENGTH_REQ)",
+          !(bll.feat_known && (bll.peer_feat & BLE_FEAT_DLE)) || c_ctrl_count(LL_LENGTH_REQ) > asks);
     bk_run(60, 1);                             /* 1.8 s at 30 ms */
     rb = 0;
     check("bulk: 30 ms with 251-octet packets, 4 an event measured faster: kept", ble_bulk_state(&rf, &rb) == 4 &&
