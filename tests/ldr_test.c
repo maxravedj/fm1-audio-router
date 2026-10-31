@@ -15,7 +15,27 @@
 
 static uint8_t nor[0x100000], *logical;
 static size_t logical_len;
-static uint8_t rx[1024];
+static uint8_t rx[5000];
+static uint32_t served, cut_after, wire_in, wire_out, progs, er_on, damage_at;   /* (the fast install's tests) */
+static uint32_t t_crc16(const uint8_t *p, uint32_t n)
+{
+    uint32_t c = 0, i;
+    while (n--) {
+        c ^= (uint32_t)*p++ << 8;
+        for (i = 0; i < 8; i++) c = c & 0x8000 ? (c << 1) ^ 0x1021 : c << 1;
+        c &= 0xFFFF;
+    }
+    return c;
+}
+static uint32_t t_crc32(const uint8_t *p, uint32_t n)
+{
+    uint32_t c = 0xFFFFFFFFu, k;
+    while (n--) {
+        c ^= *p++;
+        for (k = 0; k < 8; k++) c = (c >> 1) ^ (c & 1 ? 0xEDB88320u : 0);
+    }
+    return ~c;
+}
 static uint32_t rx_len, rx_full, now_ms, requests, erases, data_erases, bad_range, record_cleared, f0_asked;
 static int rec_prog_fails;
 
@@ -43,13 +63,18 @@ static uint32_t unpack7h(const uint8_t *in, uint32_t n, uint8_t *out)
 
 static int ota_wire_send(const uint8_t *p, uint32_t n)
 {
-    uint8_t u[64], m[600];
+    static uint8_t m[4200];
+    uint8_t u[64];
     uint32_t addr, len, i, s = 0;
     unpack7h(p + 1, n - 2, u);
-    if (u[2] == 0x11) return 0;
+    if (u[2] == 0x11 || u[2] == 0x31) return 0;
     addr = u[7] | u[8] << 8 | u[9] << 16 | (uint32_t)u[10] << 24;
     len = u[11] | u[12] << 8 | u[13] << 16;
     requests++;
+    wire_out += n;
+    if (cut_after && served >= cut_after)
+        return 0;                                    /* the host is gone (a cut-off install) */
+    served++;
     memcpy(m, "\x00\x59\x30", 3);
     m[3] = (uint8_t)(len + 8); m[4] = (uint8_t)((len + 8) >> 8); m[5] = 0; m[6] = 0;
     memcpy(m + 7, &addr, 4);
@@ -58,14 +83,30 @@ static int ota_wire_send(const uint8_t *p, uint32_t n)
         f0_asked += addr == 0xF0000000u;
         memset(m + 14, 0, len);
         memcpy(m + 14, "success", 8);
+    } else if (addr >= 0xD0000000u) {                /* the fast install's table: CRC16 + CRC-32 per 4 KiB sector */
+        static uint8_t sec4k[0x1000];
+        uint32_t off = addr - 0xD0000000u, k, c16, c32;
+        if (len % 6u || off + len / 6u * 0x1000u > logical_len) { printf("bad table request %#x+%u\n", addr, len); exit(1); }
+        for (k = 0; k < len / 6u; k++) {
+            memcpy(sec4k, logical + off + k * 0x1000u, 0x1000);
+            if (damage_at && damage_at - (off + k * 0x1000u) < 0x1000u)
+                sec4k[damage_at - (off + k * 0x1000u)] ^= 0x08;   /* a damaged package: its table says so too */
+            c16 = t_crc16(sec4k, 0x1000);
+            c32 = t_crc32(sec4k, 0x1000);
+            m[14 + k * 6] = (uint8_t)c16; m[15 + k * 6] = (uint8_t)(c16 >> 8);
+            memcpy(m + 16 + k * 6, &c32, 4);
+        }
     } else {
         if (addr + len > logical_len) { printf("read past the package %#x\n", addr); exit(1); }
         memcpy(m + 14, logical + addr, len);
+        if (damage_at && addr <= damage_at && damage_at < addr + len)
+            m[14 + damage_at - addr] ^= 0x08;
     }
     for (i = 6; i < 14 + len; i++) s += m[i];
     m[14 + len] = (uint8_t)~s;
     rx_len = pack7(m, 15 + len, rx);
     rx_full = 1;
+    wire_in += rx_len + 2;
     return 0;
 }
 static int ota_frame_get(const uint8_t **p, uint32_t *n) { if (!rx_full) return 0; *p = rx; *n = rx_len; return 1; }
@@ -79,9 +120,14 @@ static void ota_show(uint32_t step, int32_t code) { (void)step; (void)code; }
 static void ota_commit(const uint8_t *parm) { (void)parm; }
 #include "../bsp/chip/ota.c"
 
-static int ldr_fread(uint32_t off, void *p, uint32_t n) { memcpy(p, nor + off, n); return 0; }
+static void no_erase_on(const char *what)
+{
+    if (er_on) { printf("FLASH %s WHILE AN ERASE RUNS\n", what); exit(1); }
+}
+static int ldr_fread(uint32_t off, void *p, uint32_t n) { no_erase_on("READ"); memcpy(p, nor + off, n); return 0; }
 static int ldr_erase(uint32_t off)
 {
+    no_erase_on("ERASE");
     if (off < 0x4000u || off >= 0xFC000u || (off & 0xFFFu)) bad_range++;
     if (off < 0x4000u) { printf("ERASE IN THE HEAD %#x\n", off); exit(1); }
     erases++;
@@ -93,7 +139,10 @@ static int ldr_prog(uint32_t off, const void *p, uint32_t n)
 {
     const uint8_t *s = p;
     uint32_t i;
-    int rec = (off & 0xFFFu) == 0xF00u && n <= 80u && off >= 0x93000u && off < 0xFC000u &&
+    int rec;
+    no_erase_on("PROGRAM");
+    progs++;
+    rec = (off & 0xFFFu) == 0xF00u && n <= 80u && off >= 0x93000u && off < 0xFC000u &&
               !(off >= 0x97000u && off < 0xE0000u);   /* an update record's slot, outside the store: made invalid */
     if (!rec && (off < 0x4000u || off + n > 0x93000u || ((off & 0xFFu) + n) > 256u)) bad_range++;
     if (rec && rec_prog_fails) return -1;      /* (the driver refusing: the loader falls back to the erase) */
@@ -102,7 +151,18 @@ static int ldr_prog(uint32_t off, const void *p, uint32_t n)
 }
 static void ldr_record_clear(void) { record_cleared++; }
 static void ldr_progress(uint32_t done, uint32_t total) { (void)done; (void)total; }
+#ifdef LDR_FAST_CHUNK
+static int ldr_erase_begin(uint32_t off) { int rc = ldr_erase(off); er_on = !rc; return rc; }
+static int ldr_erase_end(void) { if (!er_on) return -1; er_on = 0; return 0; }
+#endif
 #include "../bsp/loader/ldr_core.c"
+#ifdef LDR_FAST_CHUNK
+#define FAST 1
+static int session(void) { ldr_fast_on = 1; return ldr_session(); }   /* (the host said the fast word: ldr_fast_hello) */
+#else
+#define FAST 0
+static int session(void) { return ldr_session(); }
+#endif
 
 static uint8_t *load_logical(const char *path, size_t *len)
 {
@@ -277,8 +337,10 @@ int main(int argc, char **argv)
         ota_wr16(r, ota_crc16(r + 2, 78, 0));
         memcpy(nor + 0xE4F00, r, sizeof r);
     }
-    rc = ldr_session();
-    printf("  rc %d, %u requests, %u sector erases\n", rc, requests, erases);
+    wire_in = wire_out = progs = 0;
+    rc = session();
+    printf("  rc %d, %u requests, %u sector erases, %u page programs, wire: %u B to the FM-1, %u B from it (%s)\n", rc,
+           requests, erases, progs, wire_in, wire_out, FAST ? "fast" : "classic");
     bad += check("install completes", rc == 0);
     bad += check("app area == the new package's flash.bin", !memcmp(nor + 0x4000, logical + nfo + 0x4000, 0x93000 - 0x4000));
     bad += check("flash head [0, 0x4000) untouched", !memcmp(nor, head, sizeof head));
@@ -287,15 +349,49 @@ int main(int argc, char **argv)
     bad += check("no write outside the allowed windows", bad_range == 0);
     /* same package again: nothing to erase */
     erases = 0; requests = 0;
-    rc = ldr_session();
+    rc = session();
     bad += check("re-run with the same package erases nothing", rc == 0 && erases == 0);
+#ifdef LDR_FAST_CHUNK
+    {
+        static const uint8_t VEC[12] = {98, 4, 162, 95, 146, 95, 92, 197, 155, 40, 53, 131};   /* the hosts' vector */
+        uint8_t v[0x2000], t[12];
+        uint32_t k;
+        printf("  re-run: %u requests\n", requests);
+        bad += check("fast: a re-run sends no sector (header, app head, table, finish)", requests <= 5u);
+        for (k = 0; k < sizeof v; k++)
+            v[k] = (uint8_t)((k * 31u) ^ (k >> 8));
+        for (k = 0; k < 2u; k++) {
+            uint32_t c16 = ota_crc16(v + k * 0x1000u, 0x1000u, 0), c32 = ldr_crc32(v + k * 0x1000u, 0x1000u);
+            t[k * 6] = (uint8_t)c16; t[k * 6 + 1] = (uint8_t)(c16 >> 8); memcpy(t + k * 6 + 2, &c32, 4);
+        }
+        bad += check("fast: the table entries are the hosts' (Python, web, app vector)", !memcmp(t, VEC, 12) &&
+                     ldr_same(v, VEC) && ldr_same(v + 0x1000, VEC + 6));
+        /* cut off half way (the host gone after some sectors), then resumed: the rest only, and all of it */
+        memcpy(nor, old + ofo, 0x93000);
+        requests = 0; served = 0; cut_after = 40u;
+        rc = session();
+        bad += check("fast: cut off after 40 answers: not finished", rc < 0);
+        cut_after = 0; requests = 0; erases = 0;
+        rc = session();
+        printf("  resumed: rc %d, %u requests, %u erases\n", rc, requests, erases);
+        bad += check("fast: the resumed install completes and matches the package", rc == 0 &&
+                     !memcmp(nor + 0x4000, logical + nfo + 0x4000, 0x93000 - 0x4000));
+        /* a damaged package (its table from the damaged bytes): refused before anything is erased */
+        memcpy(nor, old + ofo, 0x93000);
+        damage_at = nfo + 0x30123u; erases = 0;
+        rc = session();
+        bad += check("fast: a damaged package refused, nothing erased", rc == -12 && erases == 0 &&
+                     !memcmp(nor, old + ofo, 0x93000));
+        damage_at = 0;
+    }
+#endif
     /* a package for another chip key is refused before any erase */
     {
         uint8_t save = logical[nfo + 0x4000 + 5];
         logical[nfo + 0x4000 + 5] ^= 0x5A;           /* app area head no longer decrypts */
         memcpy(nor, old + ofo, 0x93000);
         erases = 0;
-        rc = ldr_session();
+        rc = session();
         bad += check("foreign key / damaged app head refused, nothing erased", rc == -6 && erases == 0);
         logical[nfo + 0x4000 + 5] = save;
     }

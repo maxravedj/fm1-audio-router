@@ -110,6 +110,10 @@ if [ -f "$PKG" ]; then
     run update-loader sh -c "head -c 60000 template/build/template.bin > $OUT/old_app.bin && \
         $PY tools/fm1pkg_make.py $OUT/old_app.bin template/build/loader/ota.bin $OUT/old.fwsc >/dev/null && \
         $CC -w -o $OUT/ldr_test tests/ldr_test.c && $OUT/ldr_test $OUT/old.fwsc $PKG"
+    # the fast install (bsp/loader/ldr_core.c ldr_fast: the host's table, the changed sectors only, 4 KiB reads, the erase
+    # while one comes in, resume)
+    run update-loader-fast sh -c "$CC -w -DLDR_FAST_CHUNK=4096u -DOTA_FRAME_MAX=4200u -o $OUT/ldr_test_fast tests/ldr_test.c && \
+        $OUT/ldr_test_fast $OUT/old.fwsc $PKG"
     # a bigger app slot (tools/build.py app_end): the template's app in a package with the slot to 0xCE000, installed
     # over the normal one (the loader built with that slot clears [0xCE000, 0xDA000) first) and back (the old code above
     # 0x93000 erased)
