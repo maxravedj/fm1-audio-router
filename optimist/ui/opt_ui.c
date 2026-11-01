@@ -64,7 +64,7 @@ static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint1
 #endif
 #include "gfx.c"                           /* fm1-base's (device/gfx.c): its fonts from build/gen/felucca_font.h */
 #ifndef FELUCCA_CANVAS_STRIP
-#define FELUCCA_CANVAS_STRIP 0
+#define FELUCCA_CANVAS_STRIP 2
 #endif
 _Static_assert(CV_MAX == 240u * (FELUCCA_CANVAS_STRIP == 2 ? 31u : FELUCCA_CANVAS_STRIP == 1 ? 62u : 124u),
                "the canvas: app.h's rows (opt_dim.h OPT_CANVAS_ROWS) are the build's CANVAS_STRIP (felucca_config.h): "

@@ -17,7 +17,7 @@
  * gen_optimist.py from FELUCCA_CANVAS_STRIP): 240 x 62 or 240 x 31, 29,760 / 44,640 B of the pool less, its tall bands
  * drawn in passes */
 #ifndef OPT_CANVAS_ROWS
-#define OPT_CANVAS_ROWS 124u
+#define OPT_CANVAS_ROWS 31u
 #endif
 #define APP_CANVAS_PX (240u * OPT_CANVAS_ROWS)
 
