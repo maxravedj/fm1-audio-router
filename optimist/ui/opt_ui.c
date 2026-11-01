@@ -47,7 +47,7 @@ static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint1
 static void lcd_fill(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint16_t c) { opt_lcd_fill(x, y, w, h, c); }
 static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint16_t *px) { opt_lcd_blit(x, y, w, h, px); }
 #endif
-/* one canvas for the two units: gfx.c's cv_px (69 KiB of the pool) is the app's unit's (app.c opt_canvas), this unit's
+/* one canvas for the two units: gfx.c's cv_px (59,520 B of the pool; 29,760 or 14,880 B with CANVAS_STRIP) is the app's unit's (app.c opt_canvas), this unit's
  * gfx.c a pointer to it (set at power-on: opt_core_init, before anything draws). Both units' gfx.c are the same file
  * with the same APP_CANVAS_PX (app.h gives none): opt_canvas answers 0 for a bigger one */
 #define cv_px (*opt_cv)
@@ -63,6 +63,13 @@ static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint1
 #define APP_FONT_CACHE_BITS 8
 #endif
 #include "gfx.c"                           /* fm1-base's (device/gfx.c): its fonts from build/gen/felucca_font.h */
+#ifndef FELUCCA_CANVAS_STRIP
+#define FELUCCA_CANVAS_STRIP 0
+#endif
+_Static_assert(CV_MAX == 240u * (FELUCCA_CANVAS_STRIP == 2 ? 31u : FELUCCA_CANVAS_STRIP == 1 ? 62u : 124u),
+               "the canvas: app.h's rows (opt_dim.h OPT_CANVAS_ROWS) are the build's CANVAS_STRIP (felucca_config.h): "
+               "gen_optimist.py dim_header");
+#define CV_ROWS (CV_MAX / 240u)                    /* (as Optimist's display/gfx.c: the UI's passes, op_graph.c cv_tall) */
 #undef FONT_L
 #undef FONT_S
 extern const felucca_font_t *const opt_font_l, *const opt_font_s;   /* (app.c) */
@@ -285,6 +292,7 @@ void opt_ui_param_set(uint32_t track, uint32_t id, int32_t v)   /* (the host's "
 }
 int32_t opt_ui_bpm(void) { return song.g[G_BPM]; }
 uint32_t opt_ui_playing(void) { return song.playing; }
+uint32_t opt_ui_cv_cuts(void) { return cv_cuts; }   /* (gfx.c: a canvas asked taller than CV_MAX, cut short) */
 /* the cursor row's cell k (the cards KNOB 1..4 edit): its value as its form draws it (cell_t gv), its label and text */
 int32_t opt_ui_cell(uint32_t k, const char **label, char *val, uint32_t n)
 {
