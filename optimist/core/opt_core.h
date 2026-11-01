@@ -16,6 +16,7 @@ const int32_t *opt_core_capture(uint32_t n);                 /* the last render'
 void opt_core_midi(uint32_t pkt, int port);                  /* a USB-MIDI packet in (channel messages, clock), from PORT_* */
 void opt_core_tick(void);                                    /* fm1-base's 1 kHz tick: the MIDI in (plat_midi_in), CLOCK OUT */
 void opt_core_panic(void);                                   /* every voice off */
+void opt_update_begin(void);                                 /* an update begins: the transport stopped first (ui/opt_update.h) */
 uint32_t opt_core_voices(void);                              /* voices sounding (a check) */
 const char *opt_core_engine(uint32_t part);                  /* the part's engine's name */
 void opt_core_dual_parts(uint32_t jobs);                     /* the host: a fixed set of jobs for the second core (bit p:

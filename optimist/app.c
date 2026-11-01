@@ -29,6 +29,7 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
 void app_tick(void) { opt_core_tick(); }
 
 void app_panic(void) { opt_core_panic(); }
+void app_update_begin(void) { opt_update_begin(); }   /* (before app_panic: the transport stops cleanly first) */
 /* the frames Bluetooth audio takes from the render (APP_BT_FRAMES): the plain output, or silence for a render corrected
  * for the FM-1's own codec (SPK LOWCUT / HP BASS, Optimist's fx/outcorr.c) */
 const int32_t *app_bt_frames(const int32_t *lr, uint32_t n)
@@ -443,6 +444,12 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
     }
     if (!strcmp(cmd, "linkset")) {               /* linkset N: SYNC > LINK stored as N (0 OFF, 1 ON, 2 ON+S/S) */
         opt_ui_link_set((uint32_t)atoi(a ? a : "0"));
+        return 1;
+    }
+    if (!strcmp(cmd, "update_begin")) {         /* an update begins (main_fm1.c update_begin): the transport asked to stop; the host's
+                                                 * time stands still inside the app (stop_first gives up waiting), so the
+                                                 * next millisecond's render carries it out */
+        app_update_begin();
         return 1;
     }
     if (!strcmp(cmd, "lights")) {                /* lights N: SYSTEM > LIGHTS set to level N (0 OFF .. 3 HIGH) */
