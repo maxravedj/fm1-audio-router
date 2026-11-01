@@ -139,9 +139,30 @@ static HOT void dual_job(uint32_t mask)
     dt = dual_ticks() - t0;
     dual_c1_ticks += dt;                           /* (before its complete: fm1-base's csync orders it) */
 #if DUAL_TIMES
-    dual_tm.c1_last = dt;                          /* (SYSTEM > DUAL TIMES: CPU0 folds it in after the join, dual_load.h) */
+    dual_tm.c1_last += dt;                         /* (SYSTEM > DUAL TIMES: CPU0 folds it in after the join, dual_load.h;
+                                                    * a block's two jobs (dual_early's and the split's) summed: CPU0 zeroes
+                                                    * it before the block's first) */
 #endif
 }
+
+#if DUAL_JOB_SBC
+/* The early SBC frame (2026-11-01, the user's FM-1 playing to Bluetooth headphones: the frame's job, ~31 % of a block,
+ * went to CPU0 at the split, the longest job, while CPU1 rendered the parts; PRE, up to 70 % in a step's block, before
+ * it). A kept frame does not depend on this block's events: it is handed to CPU1 at the block's start, before PRE, so
+ * CPU1 encodes it while CPU0 runs the events. At the fork, while CPU1 is still on it, CPU0 renders the block's jobs
+ * itself, the longest first; once CPU1 is free (or before the first, when it already is), the frame is joined and the
+ * jobs left go through dual_split as before. Only which core runs what moves: the sums are integer, in the same order
+ * (A, then B), the frame's bytes the same: the same samples and frames (optimist/dualproof.py: FM1B_HOST_BTA_JOBS,
+ * FM1B_HOST_CPU2_BUSY). The render still waits for every job it handed over before it returns */
+static HOT uint32_t dual_longest(uint32_t jobs)    /* the job of jobs with the largest smoothed cost (ties: the lowest) */
+{
+    uint32_t p, k = 0, c = 0, any = 0;
+    for (p = 0; p < DUAL_JOBS; p++)
+        if (((jobs >> p) & 1u) && (!any || dual_cost[p] > c))
+            k = p, c = dual_cost[p], any = 1;
+    return k;
+}
+#endif
 
 /* CPU0, before the fork: CPU1's jobs. The longest first, each onto the core with less so far (ties: CPU0); CPU1 starts
  * a little behind (its loop's look at the mailbox). Integer compares only (dual.c dual_split) */
@@ -326,7 +347,7 @@ static void dual_log_down(void)
 static HOT void mix_block(int32_t *out, uint32_t n)
 {
     mixacc_t *A = &dual_acc[0], *B = &dual_acc[1];
-    uint32_t i, mask = 0, got = 0, post = 0, jobs, sw, t0;
+    uint32_t i, mask = 0, got = 0, post = 0, jobs, sw, t0, early = 0, c1early = 0, ran;
 #if DUAL_TIMES
     uint32_t tm0 = dual_ticks(), tmf, tmj0, tmj1;  /* (SYSTEM > DUAL TIMES: dual_load.h dual_tm_block, as dual.c) */
 #endif
@@ -336,6 +357,13 @@ static HOT void mix_block(int32_t *out, uint32_t n)
     for (i = 0; i < n; i++)
         send_c[i] = send_d[i] = send_r[i] = mix_l[i] = mix_r[i] = 0;
     dual_clear(A, n);
+#if DUAL_TIMES
+    dual_tm.c1_last = 0;                           /* (CPU1's jobs this block: dual_job adds them) */
+#endif
+#if DUAL_JOB_SBC
+    if (dual.up && n == CTL && FAR(plat_bta_job_pending)() && FAR(plat_cpu2_run)(dual_job, DUAL_JOB_SBC))
+        early = 1, dual.posts++;                   /* (the kept frame on CPU1 now, beside the events: dual_longest) */
+#endif
     FAR(events_block)(n);                          /* (the sequencer stays in XIP) */
     BENCH_BLOCK();
 #if FELUCCA_MACROS
@@ -353,7 +381,7 @@ static HOT void mix_block(int32_t *out, uint32_t n)
 #else
     jobs = (1u << NPART) - 1u;
 #endif
-    if (dual.up && fm1_ms - dual_loop_ms > DUAL_STARVE_MS)
+    if (dual.up && !early && fm1_ms - dual_loop_ms > DUAL_STARVE_MS)   /* (an early frame out: the next block) */
         FAR(dual_down)(DUAL_OVERLOAD, 0u, 0u);        /* (the main loop starved: one core; opt_dual_loop holds it) */
 #if REV_LATE
     rev_late = (uint8_t)(dual.up && n == CTL);     /* CPU1 up: the reverb one block late (fx.c fx_buses) */
@@ -366,7 +394,33 @@ static HOT void mix_block(int32_t *out, uint32_t n)
             keep = dual.up;
             FAR(plat_bta_job_keep)(keep);
         }
-        jobs |= FAR(plat_bta_job_pending)() ? DUAL_JOB_SBC : 0u;   /* (a kept frame: on either core) */
+        jobs |= !early && FAR(plat_bta_job_pending)() ? DUAL_JOB_SBC : 0u;   /* (a kept frame: on either core; one a
+                                                    * block: the early one's, when CPU1 took it) */
+    }
+#endif
+    ran = jobs | (early ? DUAL_JOB_SBC : 0u);      /* (the block's jobs, for DUAL TIMES) */
+#if DUAL_TIMES
+    tmf = dual_ticks();
+#endif
+#if DUAL_JOB_SBC
+    if (early) {                                   /* (dual_longest: CPU0 renders while CPU1 encodes, then joins it) */
+        while (jobs && FAR(plat_cpu2_busy)()) {
+            uint32_t k = dual_longest(jobs);
+            dual_run(1u << k, n, A);
+            jobs &= ~(1u << k);
+        }
+        t0 = dual_ticks();
+        if (FAR(plat_cpu2_wait)() == 0) {
+            FAR(plat_cpu2_sync)();                 /* (its frame and its times after its complete) */
+            t0 = dual_ticks() - t0;
+            if (t0 > dual.wait_max)
+                dual.wait_max = t0;
+            dual.jobs++;
+            fm1_dual_mb.stage = C1S_DONE;
+            c1early = DUAL_JOB_SBC;
+        } else {                                   /* retired: the frame dropped, bt_acl.c's feed encodes it (in order) */
+            FAR(dual_down)(FAR(dual_why_of)(FAR(plat_cpu2_gave_up)()), 1u, (dual_ticks() - t0) / FM1_TICKS_PER_US);
+        }
     }
 #endif
     if (dual.up && n == CTL) {
@@ -381,9 +435,6 @@ static HOT void mix_block(int32_t *out, uint32_t n)
             }
         }
     }
-#if DUAL_TIMES
-    tmf = dual_ticks();
-#endif
     dual_run(jobs & ~mask, n, A);                  /* CPU0's jobs: those CPU1 was not given */
 #if DUAL_TIMES
     tmj0 = tmj1 = dual_ticks();
@@ -434,6 +485,7 @@ static HOT void mix_block(int32_t *out, uint32_t n)
     FAR(mac_post)();
 #endif
 #if DUAL_TIMES
-    dual_tm_block(tm0, tmf, tmj0, tmj1, dual_ticks(), got ? mask : 0u, jobs, fm1_ms);
+    dual_tm_block(tm0, tmf, tmj0, tmj1, dual_ticks(), (got ? mask : 0u) | c1early, ran, fm1_ms);
 #endif
+    (void)c1early, (void)ran;
 }

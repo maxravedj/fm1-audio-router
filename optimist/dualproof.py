@@ -33,13 +33,20 @@ SPLITS = [None, 0x1, 0x6, 0x8, 0x10, 0x1F]       # (bit p: part p, 3 the drums, 
 SENDS = [0, 100]                                 # (0 first: the sends' part of the output is a take less the 0 one)
 CTL = 32                                         # (Optimist's mix block, frames: the reverb's lateness)
 LATE_DB = -50.0
+# the early SBC frame (core/opt_dual.c dual_longest): a kept frame always waiting (FM1B_HOST_BTA_JOBS, host/plat_host.c),
+# handed to the second core before the events; it reads busy for k looks after (FM1B_HOST_CPU2_BUSY): the first core
+# renders the block's jobs meanwhile, the longest first (k 1: one of them, k 50: all), then the rest split as before.
+# The host build needs OPT_HOST_BT=1 for these to test anything (the SBC job is Bluetooth audio's: BT_AUDIO on the host)
+EARLY = [{"FM1B_HOST_BTA_JOBS": "1"}, {"FM1B_HOST_BTA_JOBS": "1", "FM1B_HOST_CPU2_BUSY": "1"},
+         {"FM1B_HOST_BTA_JOBS": "1", "FM1B_HOST_CPU2_BUSY": "3"}, {"FM1B_HOST_BTA_JOBS": "1", "FM1B_HOST_CPU2_BUSY": "50"}]
+EARLY_ENV = ("FM1B_HOST_BTA_JOBS", "FM1B_HOST_CPU2_BUSY")
 
 
 def fail(msg: str) -> None:
     sys.exit(f"FAIL dualproof: {msg}")
 
 
-def run(exe: Path, out: Path, name: str, rev: int, split: int | None, dual: bool) -> list[int]:
+def run(exe: Path, out: Path, name: str, rev: int, split: int | None, dual: bool, extra: dict | None = None) -> list[int]:
     pcm = out / f"{name}.pcm"
     c1 = ["expect c1up 1"] + ([f"expect c1jobs >100"] if split else []) if dual else []
     text = TEMPLATE.read_text().replace("{REV}", str(rev)).replace("{PCM}", str(pcm)).replace("{C1}", "\n".join(c1))
@@ -48,6 +55,9 @@ def run(exe: Path, out: Path, name: str, rev: int, split: int | None, dual: bool
     env = {k: v for k, v in os.environ.items() if k != "OPT_DUAL_PARTS"}
     if split is not None:
         env["OPT_DUAL_PARTS"] = hex(split)
+    for k in EARLY_ENV:
+        env.pop(k, None)
+    env.update(extra or {})
     r = subprocess.run([str(exe), str(script), str(out)], env=env, capture_output=True, text=True)
     if r.returncode or "FAIL" in r.stdout:
         fail(f"{name}: {exe.name} {script.name}\n{r.stdout[-2000:]}{r.stderr[-2000:]}")
@@ -100,6 +110,13 @@ def main() -> int:
                 k = next(i for i, (a, b) in enumerate(zip(s, ref)) if a != b) if len(s) == len(ref) else -1
                 fail(f"{name}: not the samples of the split by load (first difference at word {k} of {len(ref)})")
             print(f"  ok {name}: {len(s) // 2} frames, the samples of the split by load")
+        for e in EARLY:
+            name = f"dual_rev{rev}_early_busy{e.get('FM1B_HOST_CPU2_BUSY', '0')}"
+            s = run(dual_exe, out, name, rev, None, True, e)
+            if s != ref:
+                k = next(i for i, (a, b) in enumerate(zip(s, ref)) if a != b) if len(s) == len(ref) else -1
+                fail(f"{name}: not the samples of the split by load (first difference at word {k} of {len(ref)})")
+            print(f"  ok {name}: an SBC frame early each block, the first core's jobs while the second is busy: the same samples")
         takes[rev] = ref
     if single:
         try:
