@@ -107,9 +107,10 @@
 /* the link layer asks the host for more (ble_host_tx_low) while it loads a packet, so the central's "more data" goes on
  * within the event instead of BLE_MIDI_PER_EVENT notifications an event; never while Bluetooth audio streams */
 #ifndef BLE_LL_REFILL
-#define BLE_LL_REFILL 0                  /* off (2026-11-01, the user's Mac with it on: whole frames lost every second, the
-                                          * mirror's picture never complete; the classic build's one notification pace ran clean).
-                                          * On: 13-19 KB/s through CoreMIDI at 7.5 ms instead of 4.6-5.6 (measured) */
+#define BLE_LL_REFILL 1                  /* on again (2026-11-01, btaimd): 13-19 KB/s through CoreMIDI at 7.5 ms instead of 4.6-5.6
+                                          * (measured). Unpaced, the mirror's stream filled that and the Mac lost whole frames
+                                          * every second; Optimist's mirror now paces itself to a budget it halves on each loss
+                                          * (ed_mirror.c MIR_AIMD), so the refill is the ceiling, not the rate */
 #endif
 
 /* ---- link layer */
