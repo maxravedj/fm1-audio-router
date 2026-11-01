@@ -336,9 +336,10 @@ FAST_ALLOW = {
 # call its cold paths in XIP through FAR (FAST_CALL(seqev, f): the arrangement, MIDI out, the generators, the locks' writes,
 # the note ends ...) or the engines' note hooks through ENGINES[]; events_block's switches are tbh tables in its code too
 # (read as a 'goto rN'). '?': a profile without the feature a function serves may inline it or leave it out
-SEQ_ALLOW_EV = ["events_block?"]                   # (SEQ_RAM 1: the events; 2: and the hot core, SEQ_ALLOW too)
+SEQ_ALLOW_EV = ["events_block?", "events_block_?"]   # (SEQ_RAM 1: the events; 2: and the hot core, SEQ_ALLOW too; "_": the
+#                                                    inner function under CPU TIMES' timer, SYS_DEBUG)
 SEQ_ALLOW = ["seq_step?", "gen_eff?", "gen_deff_of?", "lock_apply?", "sa_locks_off?", "rec_hold?",
-             "seq_out_on?", "trk_note_on?", "trk_note_chord?", "voice_start?", "mono_play?"]
+             "seq_out_on?", "trk_note_on?", "trk_note_on_?", "trk_note_chord?", "voice_start?", "mono_play?"]
 
 
 def ram_code_allow(flags):
