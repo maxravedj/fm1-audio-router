@@ -146,6 +146,9 @@ def dim_header(flags, path):
     felucca_config.h). flags stays for the call sites"""
     text = ("/* the trial (gen_optimist.py dim_header): LIGHTS's levels on fm1-base's dim pulse */\n#pragma once\n"
             f"#define OPT_DIM_LEVELS 1\n")
+    rows = {0: 124, 1: 62, 2: 31}.get(flags.get("FELUCCA_CANVAS_STRIP", 2))
+    if rows:                                   # (CANVAS_STRIP: the canvas's rows for the platform's units too, app.h)
+        text += f"#define OPT_CANVAS_ROWS {rows}u\n"
     if not path.exists() or path.read_text() != text:
         path.write_text(text)
 

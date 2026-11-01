@@ -13,8 +13,13 @@
 #define APP_BLOCK 256u                   /* frames per audio block (8 of Optimist's 32-frame mix blocks) */
 /* the canvas: Optimist's own, 240 x 124 (display/gfx.c CV_MAX: its graph strip; every screen of its UI draws in bands
  * of at most that, as on its own firmware), not fm1-base's 240 x 144: 9,600 B of the SRAM. fm1-base's own screens draw
- * 64 rows at most (main_fm1.c splash, sys_text.c) */
-#define APP_CANVAS_PX (240u * 124u)
+ * 64 rows at most (main_fm1.c splash, sys_text.c). Optimist's builder item CANVAS_STRIP (OPT_CANVAS_ROWS, opt_dim.h:
+ * gen_optimist.py from FELUCCA_CANVAS_STRIP): 240 x 62 or 240 x 31, 29,760 / 44,640 B of the pool less, its tall bands
+ * drawn in passes */
+#ifndef OPT_CANVAS_ROWS
+#define OPT_CANVAS_ROWS 31u
+#endif
+#define APP_CANVAS_PX (240u * OPT_CANVAS_ROWS)
 
 /* the store: only the platform's panel calibration (fm1-base's device/storage.c). Optimist's own data (its projects,
  * section log, presets, kits, snapshots, settings, autosave, drum records) is Optimist's storage at Optimist's addresses

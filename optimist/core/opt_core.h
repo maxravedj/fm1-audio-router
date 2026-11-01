@@ -53,6 +53,7 @@ int32_t opt_ui_param(uint32_t track, uint32_t id);           /* a track's value 
 void opt_ui_param_set(uint32_t track, uint32_t id, int32_t v);   /* the host: a track's value set as is (no hook) */
 int32_t opt_ui_bpm(void);
 uint32_t opt_ui_playing(void);
+uint32_t opt_ui_cv_cuts(void);
 int32_t opt_ui_cell(uint32_t k, const char **label, char *val, uint32_t n);   /* the cursor row's card k (0..3): its value
                                                               * as drawn (its form's), its label, its text into val */
 void opt_ui_row_name(char *b);                               /* the cursor row's name (10 bytes) */

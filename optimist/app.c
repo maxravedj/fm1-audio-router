@@ -307,6 +307,8 @@ int app_expect(const char *what, int *got)
         *got = (int)opt_ui_bpm();
     else if (!strcmp(what, "playing"))
         *got = (int)opt_ui_playing();
+    else if (!strcmp(what, "cv_cuts"))           /* the canvases cut short, both units' (CANVAS_STRIP: none, every tall band in passes) */
+        *got = (int)(opt_ui_cv_cuts() + cv_cuts);
     else if (!strncmp(what, "gv", 2) && what[2] >= '1' && what[2] <= '4' && !what[3])   /* gvK: the cursor row's card K */
         *got = (int)opt_ui_cell((uint32_t)(what[2] - '1'), 0, 0, 0);
     else if (!strncmp(what, "p", 1) && what[1] >= '0' && what[1] <= '3' && what[2] == '.')   /* pT.ID: track T's value ID */

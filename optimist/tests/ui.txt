@@ -102,3 +102,5 @@ shot ui-key.png
 key 7 up
 wait 1500
 expect voices 0
+# the canvas (CANVAS_STRIP: 124, 62 or 31 rows): nothing asked taller than it, every tall band drawn in passes
+expect cv_cuts 0
