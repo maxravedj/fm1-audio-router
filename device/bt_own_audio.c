@@ -196,6 +196,7 @@ static int own_bta_feed(const int32_t *o, uint32_t n)
 int plat_bta_job_pending(void) { return ba_keep_n - ba_keep_done; }   /* (the render, before its split) */
 void plat_bta_job(void) { ba_keep_one(); }        /* (a render job, either core: the next kept frame encoded) */
 void plat_bta_job_keep(int on) { ba_keep_on = (uint8_t)(on != 0); }
+uint32_t plat_bta_job_inline(void) { return ba_feed_enc; }   /* (frames encoded at the feed, not as jobs) */
 uint32_t plat_bta_mem_bytes(void)
 {
 #if FM1B_BTA_MEM

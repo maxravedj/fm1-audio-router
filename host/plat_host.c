@@ -875,6 +875,7 @@ int plat_bta_job_pending(void) { return host_env_n("FM1B_HOST_BTA_JOBS", &host_b
                                                  * encodes nothing; FM1B_HOST_BTA_JOBS: a frame always kept, above) */
 void plat_bta_job(void) { host_bta_jobs++; }
 void plat_bta_job_keep(int on) { (void)on; }   /* (the device's own output muted then) */
+uint32_t plat_bta_job_inline(void) { return 0; }
 void plat_bta_output(int to_device)
 {
     if (bth_st == PLAT_BTA_STREAMING)
@@ -917,6 +918,7 @@ int plat_bta_streams(void) { return 0; }
 int plat_bta_job_pending(void) { return host_env_n("FM1B_HOST_BTA_JOBS", &host_bta_n) > 0; }
 void plat_bta_job(void) { host_bta_jobs++; }
 void plat_bta_job_keep(int on) { (void)on; }
+uint32_t plat_bta_job_inline(void) { return 0; }
 #endif
 #if FM1B_WIFI && !FM1B_WIFI_OWN
 /* WiFi (FM1B_WIFI): a stand-in, two networks around ("Home", kept, and "Cafe", open), on 0.5 s after asked, joined

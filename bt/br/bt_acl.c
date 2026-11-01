@@ -330,6 +330,8 @@ static uint8_t ba_keep_frm[BA_KEEP][128] IN_POOL;
 static uint32_t ba_keep_len[BA_KEEP];
 static volatile uint8_t ba_keep_n, ba_keep_done;   /* frames kept; encoded of them (in order) */
 static volatile uint8_t ba_keep_on;                /* the app runs the jobs (plat_bta_job_keep) */
+static uint32_t ba_feed_enc;                       /* frames encoded here at the feed, on CPU0 after the render (not a job;
+                                                    * plat_bta_job_inline: the app's CPU TIMES) */
 static void ba_keep_one(void)                      /* the next kept frame encoded (a job: either core; or the feed) */
 {
     uint32_t k = ba_keep_done;
@@ -343,7 +345,7 @@ static void ba_keep_flush(void)                    /* every kept frame encoded (
 {
     uint32_t k;
     while (ba_keep_done < ba_keep_n)
-        ba_keep_one();
+        ba_keep_one(), ba_feed_enc++;
     for (k = 0; k < ba_keep_n; k++)
         ba_sbc_out(ba_keep_frm[k], ba_keep_len[k]);
     ba_keep_n = ba_keep_done = 0;
@@ -453,6 +455,9 @@ int bt_audio_feed(const int32_t *q15_pcm, uint32_t n)   /* 1: it streams (audio.
             ba_keep_flush();                       /* (not kept: the kept ones first, in order) */
 #endif
             ba_sbc_out(frame, bt_sbc_encode(&ba_sbc, ba_pcm_acc, frame));
+#if BA_KEEP
+            ba_feed_enc++;
+#endif
             ba_pcm_cnt = 0;
         }
     }

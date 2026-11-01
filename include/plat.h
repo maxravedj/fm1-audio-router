@@ -301,6 +301,7 @@ int32_t plat_bta_latency_us(void);     /* what the stream adds on the FM-1's sid
 int plat_bta_job_pending(void);        /* kept frames not yet encoded */
 void plat_bta_job(void);               /* the next one encoded */
 void plat_bta_job_keep(int on);        /* the render takes them (1) or not (0: encoded at the feed, as before) */
+uint32_t plat_bta_job_inline(void);    /* frames encoded at the feed instead, since boot (a job not taken, or keep off) */
 int plat_bta_streams(void);            /* 1: the last render went to Bluetooth (the FM-1's own output muted for it); for the
                                         * render (the audio interrupt) to plan its block by. 0 without Bluetooth audio */
 /* Bluetooth audio's big buffers in the app's memory (fm1.toml bt_audio_mem = "app": FM1B_BTA_MEM 1): the audio packets'

@@ -115,6 +115,9 @@ static HOT void dual_run(uint32_t mask, uint32_t n, mixacc_t *A)
 #endif
             } else if (DUAL_JOB_SBC && p == DUAL_JOBS - 1u) {
                 FAR(plat_bta_job)();               /* the next kept SBC frame (fm1-base's bt_acl.c; flash code) */
+#if DUAL_TIMES
+                dual_tm.sbc_n[A == &dual_acc[1] ? 1 : 2]++;   /* (CPU TIMES' SBC row: CPU1's, the early ones too; CPU0's) */
+#endif
             } else {
 #if REV_LATE
                 if (!rvj.done)                     /* (CPU1 retired after it ran it: not twice) */
@@ -347,7 +350,7 @@ static void dual_log_down(void)
 static HOT void mix_block(int32_t *out, uint32_t n)
 {
     mixacc_t *A = &dual_acc[0], *B = &dual_acc[1];
-    uint32_t i, mask = 0, got = 0, post = 0, jobs, sw, t0, early = 0, c1early = 0, ran;
+    uint32_t i, mask = 0, got = 0, post = 0, jobs, sw, t0, early = 0, c1early = 0, ran, ew = 0;
 #if DUAL_TIMES
     uint32_t tm0 = dual_ticks(), tmf, tmj0, tmj1;  /* (SYSTEM > DUAL TIMES: dual_load.h dual_tm_block, as dual.c) */
 #endif
@@ -413,6 +416,10 @@ static HOT void mix_block(int32_t *out, uint32_t n)
         if (FAR(plat_cpu2_wait)() == 0) {
             FAR(plat_cpu2_sync)();                 /* (its frame and its times after its complete) */
             t0 = dual_ticks() - t0;
+            ew = t0;                               /* (CPU TIMES: CPU0 idle for the frame: WAIT, not JOBS) */
+#if DUAL_TIMES
+            dual_tm.sbc_n[0]++;                    /* (an early frame joined: CPU TIMES' SBC row) */
+#endif
             if (t0 > dual.wait_max)
                 dual.wait_max = t0;
             dual.jobs++;
@@ -485,7 +492,7 @@ static HOT void mix_block(int32_t *out, uint32_t n)
     FAR(mac_post)();
 #endif
 #if DUAL_TIMES
-    dual_tm_block(tm0, tmf, tmj0, tmj1, dual_ticks(), (got ? mask : 0u) | c1early, ran, fm1_ms);
+    dual_tm_block(tm0, tmf, tmj0 - ew, tmj1, dual_ticks(), (got ? mask : 0u) | c1early, ran, fm1_ms);
 #endif
-    (void)c1early, (void)ran;
+    (void)c1early, (void)ran, (void)ew;
 }

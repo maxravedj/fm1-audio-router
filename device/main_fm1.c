@@ -51,6 +51,7 @@ int plat_bta_streams(void) { return 0; }
 int plat_bta_job_pending(void) { return 0; }
 void plat_bta_job(void) {}
 void plat_bta_job_keep(int on) { (void)on; }
+uint32_t plat_bta_job_inline(void) { return 0; }
 #endif
 static void render_block(int32_t *o)                /* ALNK0: one half, measured */
 {

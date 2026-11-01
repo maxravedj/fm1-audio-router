@@ -34,6 +34,8 @@
 #define EN_K4 PLAT_EN_K4
 #define NE PLAT_NE
 #include "plat.h"
+/* CPU TIMES' SBC row (Optimist's system/dual_load.h, op_project.c): the frames fm1-base's feed encoded itself, not as jobs */
+#define DUAL_TM_SBC_FEED() ((uint32_t)plat_bta_job_inline())
 #undef clamp
 #undef B_FX
 #undef B_SEL
