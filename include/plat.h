@@ -294,6 +294,13 @@ int plat_bta_timed_out(void);          /* PLAT_BTA_REFUSED because the set-up ti
 int32_t plat_bta_latency_us(void);     /* what the stream adds on the FM-1's side (its queue), us; -1: not streaming.
                                         * An app that follows a clock may play that much earlier (the device's own
                                         * buffer comes on top and is not known) */
+/* the stream's SBC encoding as the app's render jobs (an app with a second core: Optimist's opt_dual.c). With keep on, the
+ * frames a render's output completes are kept and not encoded at the feed; the next render encodes them, one a
+ * plat_bta_job call (either core, in order: one call at a time), and the next feed sends them (one half later, the same
+ * bytes). Those the render did not encode, the feed encodes as before. Without Bluetooth audio: 0, nothing */
+int plat_bta_job_pending(void);        /* kept frames not yet encoded */
+void plat_bta_job(void);               /* the next one encoded */
+void plat_bta_job_keep(int on);        /* the render takes them (1) or not (0: encoded at the feed, as before) */
 int plat_bta_streams(void);            /* 1: the last render went to Bluetooth (the FM-1's own output muted for it); for the
                                         * render (the audio interrupt) to plan its block by. 0 without Bluetooth audio */
 /* Bluetooth audio's big buffers in the app's memory (fm1.toml bt_audio_mem = "app": FM1B_BTA_MEM 1): the audio packets'
