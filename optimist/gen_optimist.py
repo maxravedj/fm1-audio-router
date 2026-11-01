@@ -332,11 +332,18 @@ FAST_ALLOW = {
     "fm6": ["fm6_render"],
     "prophet": ["prophet_render"],                    # (p5_render, its own unit: FAR, RAM code with it)
 }
+# the sequencer's code in RAM (Optimist's builder item SEQ_RAM, FELUCCA_SEQ_RAM: 1 FAST(seqev), 2 FAST(seq) too): the functions that
+# call its cold paths in XIP through FAR (FAST_CALL(seqev, f): the arrangement, MIDI out, the generators, the locks' writes,
+# the note ends ...) or the engines' note hooks through ENGINES[]; events_block's switches are tbh tables in its code too
+# (read as a 'goto rN'). '?': a profile without the feature a function serves may inline it or leave it out
+SEQ_ALLOW_EV = ["events_block?"]                   # (SEQ_RAM 1: the events; 2: and the hot core, SEQ_ALLOW too)
+SEQ_ALLOW = ["seq_step?", "gen_eff?", "gen_deff_of?", "lock_apply?", "sa_locks_off?", "rec_hold?",
+             "seq_out_on?", "trk_note_on?", "trk_note_chord?", "voice_start?", "mono_play?"]
 
 
 def ram_code_allow(flags):
     """fm1.toml's ram_code_allow for this configuration: the file's, the engines' names by their places (FAST_ALLOW),
-    without ut_mix when there is no USB audio (the serial console)"""
+    the sequencer's (SEQ_ALLOW) with its step code in RAM, without ut_mix when there is no USB audio (the serial console)"""
     import tomllib
     allow = tomllib.loads((APP / "fm1.toml").read_text())["ram_code_allow"]
     out = list(allow)
@@ -346,6 +353,8 @@ def ram_code_allow(flags):
         for nm, names in FAST_ALLOW.items():
             if flags.get(f"FAST_RAM_{nm}", 0):
                 out += [f for f in names if f not in out]
+    seq_ram = flags.get("FELUCCA_SEQ_RAM", 0)
+    out += [f for f in (SEQ_ALLOW_EV if seq_ram >= 1 else []) + (SEQ_ALLOW if seq_ram >= 2 else []) if f not in out]
     if flags.get("FELUCCA_CDC", 0):
         out = [f for f in out if f != "ut_mix"]       # (ut_mix, the USB input track's mix, is not built without USB audio)
     return out
