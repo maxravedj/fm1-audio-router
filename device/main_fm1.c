@@ -48,6 +48,9 @@ static volatile uint8_t bta_streamed;               /* the last render went to B
 int plat_bta_streams(void) { return bta_streamed; }
 #else
 int plat_bta_streams(void) { return 0; }
+int plat_bta_job_pending(void) { return 0; }
+void plat_bta_job(void) {}
+void plat_bta_job_keep(int on) { (void)on; }
 #endif
 static void render_block(int32_t *o)                /* ALNK0: one half, measured */
 {

@@ -37,10 +37,21 @@ _Static_assert(FM1_CPU1_TIMEOUT_US == DUAL_JOIN_US, "app.h FM1_CPU1_TIMEOUT_US: 
 #define DUAL_JOB_DRUMS (1u << NPART)               /* a job's bit: the drum track (slicer_drums, dbus_run) */
 #if REV_LATE
 #define DUAL_JOB_REV (1u << (NPART + 1u))          /* the reverb's kept block (fx.c rev_job) */
-#define DUAL_JOBS (NPART + 2u)
+#define DUAL_JOBS_R (NPART + 2u)
 #else
 #define DUAL_JOB_REV 0u
-#define DUAL_JOBS (NPART + 1u)
+#define DUAL_JOBS_R (NPART + 1u)
+#endif
+/* the Bluetooth stream's SBC frames (2026-11-01, the user: "cpu0 hit 100% while cpu1 never exceeded 45%"): the platform
+ * encoded each half's two frames on CPU0 after the render (main_fm1.c render_block, bt_acl.c bt_audio_feed); kept now
+ * (plat.h plat_bta_job_keep while CPU1 is up), each is a job of the next half's render, one a block, on either core
+ * (plat_bta_job), sent at the next feed: the same bytes, a half later. Without BT_AUDIO: no job */
+#if defined(FELUCCA_BT_AUDIO) && FELUCCA_BT_AUDIO
+#define DUAL_JOB_SBC (1u << DUAL_JOBS_R)
+#define DUAL_JOBS (DUAL_JOBS_R + 1u)
+#else
+#define DUAL_JOB_SBC 0u
+#define DUAL_JOBS DUAL_JOBS_R
 #endif
 #define DUAL_ALLOWED ((1u << DUAL_JOBS) - 1u)
 
@@ -102,6 +113,8 @@ static HOT void dual_run(uint32_t mask, uint32_t n, mixacc_t *A)
                 dbus_run(n);                       /* the drum bus's inserts and sends (fx.c; the drums alone) */
                 SCOPE_DRUMS(scope_drums_take);
 #endif
+            } else if (DUAL_JOB_SBC && p == DUAL_JOBS - 1u) {
+                FAR(plat_bta_job)();               /* the next kept SBC frame (fm1-base's bt_acl.c; flash code) */
             } else {
 #if REV_LATE
                 if (!rvj.done)                     /* (CPU1 retired after it ran it: not twice) */
@@ -345,6 +358,16 @@ static HOT void mix_block(int32_t *out, uint32_t n)
 #if REV_LATE
     rev_late = (uint8_t)(dual.up && n == CTL);     /* CPU1 up: the reverb one block late (fx.c fx_buses) */
     jobs |= rvj.pend ? DUAL_JOB_REV : 0u;          /* (its kept block, on either core) */
+#endif
+#if DUAL_JOB_SBC
+    {
+        static uint8_t keep;                       /* (told the platform: CPU1 up, the frames kept for jobs) */
+        if (keep != dual.up) {
+            keep = dual.up;
+            FAR(plat_bta_job_keep)(keep);
+        }
+        jobs |= FAR(plat_bta_job_pending)() ? DUAL_JOB_SBC : 0u;   /* (a kept frame: on either core) */
+    }
 #endif
     if (dual.up && n == CTL) {
         mask = dual_split(jobs);
