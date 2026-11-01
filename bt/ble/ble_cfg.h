@@ -107,10 +107,9 @@
 /* the link layer asks the host for more (ble_host_tx_low) while it loads a packet, so the central's "more data" goes on
  * within the event instead of BLE_MIDI_PER_EVENT notifications an event; never while Bluetooth audio streams */
 #ifndef BLE_LL_REFILL
-#define BLE_LL_REFILL 1                  /* on: 13-19 KB/s through CoreMIDI at 7.5 ms (measured 2026-11-01) instead of 4.6-5.6. The
-                                          * Mac damaged about 1 % of the mirror's frames at that rate (a 6 s capture; whether less at
-                                          * the slower pace is not measured: INFO came damaged then too); a lost frame now costs its
-                                          * rectangle only (ed_mirror.c mir_fix), not a whole panel */
+#define BLE_LL_REFILL 0                  /* off (2026-11-01, the user's Mac with it on: whole frames lost every second, the
+                                          * mirror's picture never complete; the classic build's one notification pace ran clean).
+                                          * On: 13-19 KB/s through CoreMIDI at 7.5 ms instead of 4.6-5.6 (measured) */
 #endif
 
 /* ---- link layer */
