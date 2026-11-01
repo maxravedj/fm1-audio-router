@@ -96,6 +96,9 @@ ram_code_allow = [
     # a2_naive (the sync's jump) calls through A2_OSC, whose four oscillators are FAST(analog) RAM code too ("?": inlined
     # into a2_sync in some builds)
     "analog_render", "a2_fltb", "a2_filter", "a2_naive?",
+    # DIGITAL in RAM (ENG_DIGITAL=3: FAST(digital)): its TONE algorithms (DIG_TONE, eng_digital.c dig_tone_render) run
+    # from XIP through FAR, as on Optimist ("?": DIGITAL from XIP or DIG_TONE off builds no such call)
+    "digital_render?",
     # the effect buses (fx.c): the reverb's rare clear and parameters, the delay's block, the returns' zeroing, the
     # distortion's gains, the drum inserts' rest; rev_run: rev_bus's per-block worker (the reverb type's parameters through
     # its table, as rev_bus), a function of its own when not inlined ("?": some builds inline it); dins_one: dins_of's
