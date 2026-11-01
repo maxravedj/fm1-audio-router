@@ -56,11 +56,21 @@ static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint1
  * by other names that nothing reads (static: the compiler leaves them out), like the faces neither unit uses */
 #define FONT_L opt_font_L_unused
 #define FONT_S opt_font_S_unused
-#ifndef APP_FONT_CACHE                       /* the glyphs drawn lately kept decoded (device/gfx.c font_cached; 6 KB and 256
+#ifndef FELUCCA_FONT_CACHE                   /* (Optimist's builder item FONT_CACHE: 0 off, 1 small, 2 full; a build without it: full) */
+#define FELUCCA_FONT_CACHE 2
+#endif
+#ifndef APP_FONT_CACHE                       /* the glyphs drawn lately kept decoded (device/gfx.c font_cached; full, 6 KB and 256
                                               * slots: a STEP or a page change's frame about half the instructions, host-measured):
                                               * this unit's, which draws the screens (the app's unit, the splash and messages: none) */
+#if FELUCCA_FONT_CACHE >= 2
 #define APP_FONT_CACHE 6144u
 #define APP_FONT_CACHE_BITS 8
+#elif FELUCCA_FONT_CACHE == 1                /* small: 1,536 B and 64 slots (1,920 B in all). Host, the source defaults, a
+                                              * 30 s walk over four pages while playing: full decodes 11 % of the glyph
+                                              * pixels drawn, small 28 %, none all of them (2026-11-01) */
+#define APP_FONT_CACHE 1536u
+#define APP_FONT_CACHE_BITS 6
+#endif                                       /* (0: none, each glyph decoded as it is drawn) */
 #endif
 #include "gfx.c"                           /* fm1-base's (device/gfx.c): its fonts from build/gen/felucca_font.h */
 #undef FONT_L
