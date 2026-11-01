@@ -95,9 +95,27 @@ def frame_of(text):
 STRADDLE = []                                      # (an instruction decoded across a table's end: the code after it unsure)
 
 
+WTAB = re.compile(r"^r(\d+) = \d+ <[\w.$]+(?:\+0x[0-9A-Fa-f]+)? : ([0-9a-f]+) >")
+
+
+def word_table_end(last, load, at):
+    """a goto r through [rB+rI<<2] at address at, its table of words in the code just after it (rB = the table, an
+    'if (rI > N)' before: N + 1 words) -> where the table ends, 0 none such (the words' bytes would decode as code)"""
+    m = re.search(r"\[r(\d+)\+r\d+<<2\]", load)
+    if not m:
+        return 0
+    n = next((int(x.group(1)) + 1 for t in reversed(last) for x in [re.match(r"^if \(r\d+ > (\d+)\)", t)] if x), None)
+    for t in reversed(last):
+        w = WTAB.match(t)
+        if w and w.group(1) == m.group(1):
+            start = int(w.group(2), 16)
+            return start + 4 * n if n and at < start <= at + 8 else 0
+    return 0
+
+
 def parse(dis):
     """-> {name: {addr, frame, calls, indirect, refs, var}}; calls: (name, whole, addr) of each call and tail call"""
-    fns, cur, name, prev, tab, last = {}, None, None, "", None, []
+    fns, cur, name, prev, tab, last, words_to, hist = {}, None, None, "", None, [], 0, []
     for ln in dis.splitlines():
         m = FN.match(ln)
         if m:
@@ -113,6 +131,8 @@ def parse(dis):
             continue
         a, text = int(m.group(1), 16), m.group(3).strip()
         raw = bytes(int(x, 16) for x in m.group(2).split())
+        if a < words_to:                         # (a table of words a goto r reads: addresses, not code)
+            continue
         if tab is not None:                      # (a tbh / tbb table: data, not code, up to its nearest target)
             if a < tab["end"]:
                 tab["bytes"] += raw
@@ -134,6 +154,7 @@ def parse(dis):
             tab = {"start": st, "unit": w, "k": 0, "bytes": b"",
                    "end": st + (n * w + 1) // 2 * 2 if n else st + 0x20000}
         last = (last + [text])[-5:]
+        hist = (hist + [text])[-12:]
         if cur["addr"] is None:
             cur["addr"] = a
         f = frame_of(text)
@@ -149,6 +170,8 @@ def parse(dis):
                 cur["calls"].add((g.group(1), True, int(g.group(3), 16)))
         elif CALLR.match(text):
             cur["indirect"] = "call"
+        elif GOTOR.match(text) and TABLE.search(prev):
+            words_to = word_table_end(hist, prev, a) or words_to
         elif GOTOR.match(text) and not TABLE.search(prev):
             cur["indirect"] = cur["indirect"] or "goto"      # (a jump table, or an indirect tail call)
         else:
