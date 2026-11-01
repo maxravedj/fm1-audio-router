@@ -80,7 +80,8 @@
  * (ble_ll_rate: octets acknowledged while data waited) for BLE_BULK_MEAS_US of full link each, and the faster kept; the
  * slower is not tried again for BLE_BULK_RETRY_US on this link. Off: BLE_BULK 0 (as before) */
 #ifndef BLE_BULK
-#define BLE_BULK 1
+#define BLE_BULK 0                       /* off by default (2026-11-01, the user's Mac: at 45 ms CoreMIDI still took 50-octet
+                                          * packets, so bulk measured slower every time and only cost the tries) */
 #endif
 #ifndef BLE_CONN_BULK_MIN
 #define BLE_CONN_BULK_MIN 24u            /* 30 ms .. 45 ms, 2 s: the audio's (Apple's rules hold; a Mac took them) */
@@ -106,7 +107,9 @@
 /* the link layer asks the host for more (ble_host_tx_low) while it loads a packet, so the central's "more data" goes on
  * within the event instead of BLE_MIDI_PER_EVENT notifications an event; never while Bluetooth audio streams */
 #ifndef BLE_LL_REFILL
-#define BLE_LL_REFILL 1
+#define BLE_LL_REFILL 0                  /* off by default (2026-11-01): at 13-19 KB/s through CoreMIDI the Mac damaged about 1 %
+                                          * of the mirror's frames (zeroed headers, lost F0 / F7), each a whole panel asked again;
+                                          * the classic build's pace (BLE_MIDI_PER_EVENT notifications an event) ran clean */
 #endif
 
 /* ---- link layer */
