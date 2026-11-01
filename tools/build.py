@@ -54,6 +54,8 @@ APP_DIR holds the app (app.h, app.c, its sources) and its fm1.toml:
                              while an AUDIO mode is on, not static RAM (FM1B_BTA_MEM; plat.h plat_bta_mem): an app
                              whose arena gets them back while Bluetooth audio is off. Default "static"
   usb_audio_in = true        the FM-1 recordable over USB (FM1B_UAC; the default: true)
+  usb_audio_mem = "app"      the USB audio rings (in and out, 16 KB) lent by the app only while the computer streams, not
+                             static RAM (FM1B_UAC_MEM; plat.h plat_usb_audio_mem); "static" (the default)
   usb_audio_out = true       a computer plays through the FM-1 over USB (FM1B_UAC_OUT; the default: true)
   usb_audio_first = true     the USB audio streaming interfaces listed first in the audio control collection
                              (felucca-bsp FELUCCA_UAC_AS_FIRST, from Felucca 1.5.1): macOS then shows the FM-1 as an audio
@@ -708,6 +710,11 @@ def usb_audio_flags():
         flags.append(f"-DFM1B_UAC_OUT_FEEDBACK={int(bool(CONF['usb_audio_out_feedback']))}")
     if "usb_audio_out_24bit" in CONF:
         flags.append(f"-DFM1B_UAC_OUT_24={int(bool(CONF['usb_audio_out_24bit']))}")
+    v = CONF.get("usb_audio_mem", "static")
+    if v not in ("app", "static"):
+        raise SystemExit(f'build: fm1.toml usb_audio_mem = "{v}": "app" or "static"')
+    if v == "app":                                  # the rings lent by the app while the computer streams (plat_usb_audio_mem)
+        flags.append("-DFM1B_UAC_MEM=1")
     return flags + usb_audio_names()
 
 

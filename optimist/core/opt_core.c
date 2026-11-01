@@ -176,8 +176,19 @@ static void opt_ua_poll(void)
     ua.tx_packets = s.in_packets;
     ua_fb_now = s.out_feedback;
 }
-static int32_t opt_play[2u * HALF_FRAMES];         /* this render's computer's audio (plat_usb_audio_play), 24-bit */
-static int32_t opt_cap[UA_CAP_CHANNELS * HALF_FRAMES];   /* this render's capture, 24-bit, four channels a frame */
+#define OPT_UA_PLAY_N (2u * HALF_FRAMES)            /* the computer's audio of a render (plat_usb_audio_play), 24-bit */
+#define OPT_UA_CAP_N (UA_CAP_CHANNELS * HALF_FRAMES)  /* a render's capture, 24-bit, four channels a frame */
+#if OPT_LEND_UAC
+/* lent with USB audio's rings while the computer streams (core/opt_lend.h L_UAC, ui/opt_feat.h of_uac_lend: after the
+ * rings in the block), 0 while not: no capture, nothing played. A render reads them once, at its start */
+#define OPT_UA_OWN_BYTES ((OPT_UA_PLAY_N + OPT_UA_CAP_N) * 4u)
+static int32_t *volatile opt_play_p, *volatile opt_cap_p;
+#else
+static int32_t opt_play_s[OPT_UA_PLAY_N], opt_cap_s[OPT_UA_CAP_N];
+#define opt_play_p opt_play_s
+#define opt_cap_p opt_cap_s
+#endif
+static int32_t *opt_play, *opt_cap;                 /* this render's (opt_core_render) */
 static uint32_t opt_play_got, opt_play_at;
 static uint8_t opt_cap_on;                         /* the computer records this render (plat_usb_audio_rec) */
 /* the USB input track's next n frames (fx.c ut_mix, from mix_block: RAM code, through FAR), Q15; 0 = none */
@@ -319,9 +330,10 @@ void opt_core_render(int32_t *lr, uint32_t n, uint32_t master_q12, uint32_t keys
     if (opt_master_q12)                              /* (the mirror's client plays MASTER: ui/opt_editor.h) */
         song.master_q12 = opt_master_q12 - 1u;
 #if FELUCCA_USB_AUDIO
-    opt_cap_on = (uint8_t)(plat_usb_audio_rec() != 0);   /* (as audio.c's audio_block at its start: the stems this block) */
+    opt_play = opt_play_p, opt_cap = opt_cap_p;      /* (lent or not, for the whole render) */
+    opt_cap_on = (uint8_t)(opt_cap && plat_usb_audio_rec() != 0);   /* (as audio.c's audio_block at its start: the stems this block) */
     track_capture_on = opt_cap_on;
-    opt_play_got = (uint32_t)plat_usb_audio_play(opt_play, n <= HALF_FRAMES ? n : HALF_FRAMES);
+    opt_play_got = opt_play ? (uint32_t)plat_usb_audio_play(opt_play, n <= HALF_FRAMES ? n : HALF_FRAMES) : 0u;
     opt_play_at = 0;
     if (opt_play_got) {
         opt_play_t = fm1_ticks();

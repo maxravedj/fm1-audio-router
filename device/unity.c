@@ -20,6 +20,8 @@
  *   FM1B_UAC_DEEP 0         1: the USB audio input keeps a half more in hand, for renders that take most of
  *                           their time (its 4 KB ring in the app's pool; 5.8 ms more latency)
  *   FM1B_UAC_RING_POOL 0    1: the USB audio input's 2 KB ring in the pool, its RAM left to the app
+ *   FM1B_UAC_MEM 0          1: the USB audio rings (in and out) a block the app lends only while the computer streams
+ *                           (fm1.toml usb_audio_mem = "app": plat.h plat_usb_audio_mem), not static RAM
  *   FM1B_UAC_OUT 1          USB audio output: the computer plays through the FM-1, mixed after the app, at MASTER
  *                           (an app with APP_USB_PLAY mixes it itself: plat_usb_audio_play)
  *   FM1B_UAC_CH 2           the USB audio input's channels (fm1.toml usb_audio_in_channels, 1..8): 2 the master; any
@@ -166,6 +168,10 @@ static volatile uint32_t fm1_ms;  /* milliseconds since boot (TIMER4-based, TIME
 #if FM1B_UAC_DEEP || FM1B_UAC_RING_POOL
 #define FELUCCA_UAC_RING_ATTR PLAT_POOL
 #endif
+#ifndef FM1B_UAC_MEM
+#define FM1B_UAC_MEM 0            /* 1: the USB audio rings lent by the app while the computer streams (plat_usb_audio_mem) */
+#endif
+#define FELUCCA_UAC_MEM FM1B_UAC_MEM
 #ifndef FELUCCA_ID
 #define FELUCCA_ID "FM-1_000"     /* package identity (tools/build.py passes the firmware's) */
 #endif

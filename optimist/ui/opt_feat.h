@@ -26,7 +26,7 @@ static uint32_t of_bytes(uint32_t f)
 #endif
 #if MIR_LEND
     if (f == OF_MIR)
-        return MIR_BLE_RING;
+        return MIR_LEND_BYTES;                   /* (the ring and the encoder's segment hashes: ed_mirror.c) */
 #endif
 #if OPT_LEND_LINK
     if (f == OF_WIFI)
@@ -36,9 +36,36 @@ static uint32_t of_bytes(uint32_t f)
     if (f == OF_AP)
         return plat_wifi_ap_mem_bytes();
 #endif
+#if OPT_LEND_UAC
+    if (f == OF_UAC)
+        return plat_usb_audio_mem_bytes() + OPT_UA_OWN_BYTES;
+#endif
     (void)f;
     return 0u;
 }
+#if OPT_LEND_UAC
+/* USB audio's block (core/opt_lend.h L_UAC): wanted while the computer streams either way (an alt set), unless its
+ * question was answered NO (or it was switched off for room) since the stream started: then not until it stops. Lent:
+ * the rings (plat_usb_audio_mem) first, then the render's buffers (core/opt_core.c opt_play_p, opt_cap_p) */
+static uint8_t of_uac_no;
+static int of_uac_want(void)
+{
+    plat_usb_audio_stats_t s;
+    plat_usb_audio_stats(&s);
+    if (!s.in_alt && !s.out_alt) {
+        of_uac_no = 0;
+        return 0;
+    }
+    return !of_uac_no;
+}
+static void of_uac_lend(void *p)                 /* (the interrupts off: arb_set) */
+{
+    uint8_t *b = (uint8_t *)p;
+    plat_usb_audio_mem(b);
+    opt_play_p = b ? (int32_t *)(b + plat_usb_audio_mem_bytes()) : 0;
+    opt_cap_p = b ? (int32_t *)(b + plat_usb_audio_mem_bytes()) + OPT_UA_PLAY_N : 0;
+}
+#endif
 #if OPT_LEND_LINK || OPT_LEND_AP
 /* Link's node and the access point's state (plat.h plat_link_mem, plat_wifi_ap_mem): wanted while a Wi-Fi MODE (a MODE
  * AP) is chosen, and after it while fm1-base still runs them (its plat_*_mem(0) refuses), then given back. Link starts
@@ -75,6 +102,9 @@ static const uint8_t OF_LENT[] = {
 #if OPT_LEND_AP
     OF_AP,
 #endif
+#if OPT_LEND_UAC
+    OF_UAC,
+#endif
 };
 static uint32_t of_lend_bytes(uint32_t i) { return of_bytes(OF_LENT[i]); }
 static int of_lend_want(uint32_t i)
@@ -97,10 +127,18 @@ static int of_lend_want(uint32_t i)
                                   plat_wifi_ap_state() == WIFI_AP_STARTING || plat_wifi_ap_state() == WIFI_AP_UP,
                           plat_wifi_ap_mem);
 #endif
+#if OPT_LEND_UAC
+    if (i == L_UAC)
+        return of_uac_want();
+#endif
     return 0;
 }
 static void of_lend_set(uint32_t i, void *p)    /* (the interrupts off: arb_set) */
 {
+#if OPT_LEND_UAC
+    if (i == L_UAC)
+        of_uac_lend(p);
+#endif
 #if OPT_LEND_BTA
     if (i == L_BTA)
         bta_lend(p);
@@ -150,7 +188,11 @@ static int of_on(uint32_t f)
 #endif
 #if FELUCCA_USB_AUDIO
     case OF_UAC:
+#if OPT_LEND_UAC
+        return of_uac_want();                    /* (its block held only while it streams: on is that, never on and idle) */
+#else
         return 1;                                /* (no setting yet: always on) */
+#endif
 #endif
 #if FELUCCA_WIFI
     case OF_WIFI:
@@ -212,6 +254,12 @@ static int of_idle(uint32_t f)
 }
 static void of_off(uint32_t f)                   /* (only the lendable ones are ever switched off here) */
 {
+#if OPT_LEND_UAC
+    if (f == OF_UAC) {
+        of_uac_no = 1;                           /* (its question's NO: silent to the computer until the stream stops) */
+        return;
+    }
+#endif
 #if MIR_LEND
     if (f == OF_MIR) {
         mir_lend_off();                          /* (the Bluetooth mirror ends; asked again once the central has gone) */

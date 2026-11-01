@@ -1523,6 +1523,8 @@ void plat_usb_audio_stats(plat_usb_audio_stats_t *s)
     s->out_alt = (uint8_t)(usb_play_buf != 0);
     s->in_alt = (uint8_t)(usb_rec_f != 0);
 }
+uint32_t plat_usb_audio_mem_bytes(void) { return 0u; }   /* (the simulator: no rings, one clock) */
+void plat_usb_audio_mem(void *p) { (void)p; }
 int plat_usb_audio_play(int32_t *lr, uint32_t n)
 {
 #ifdef APP_USB_PLAY

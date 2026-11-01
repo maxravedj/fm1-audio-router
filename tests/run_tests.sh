@@ -51,6 +51,15 @@ run usb-audio sh -c "$CC -std=c11 -O1 -Wall -Wextra -Werror -Wno-unused-function
     -o $OUT/uac_test_split bsp/tests/uac_test.c -lm && $OUT/uac_test_split && \
     $CC -std=c11 -O1 -Wall -Wextra -Werror -Wno-unused-function -Wno-unused-variable -Wno-missing-field-initializers \
     -Ibsp/chip -DTEST_SPLIT=1 -DTEST_NAMEFN=1 -o $OUT/uac_test_namefn bsp/tests/uac_test.c -lm && $OUT/uac_test_namefn"
+# the rings a block the app lends (usb_audio_mem = "app": FELUCCA_UAC_MEM, TEST_MEM): not lent, silence in and nothing played;
+# lent, every test above on it; taken back and freed (ASan: never touched after), 20 lend / take-back cycles; as fm1-base's
+# default and as Optimist builds it (4 channels, 24-bit, the feedback, split)
+run usb-audio-mem sh -c "$CC -std=c11 -O1 -g -fsanitize=address -fno-sanitize-recover=all -Wall -Wextra -Werror \
+    -Wno-unused-function -Wno-unused-variable -Wno-missing-field-initializers -Ibsp/chip -DTEST_MEM=1 \
+    -o $OUT/uac_test_mem bsp/tests/uac_test.c -lm && $OUT/uac_test_mem && \
+    $CC -std=c11 -O1 -g -fsanitize=address -fno-sanitize-recover=all -Wall -Wextra -Werror -Wno-unused-function \
+    -Wno-unused-variable -Wno-missing-field-initializers -Ibsp/chip -DTEST_MEM=1 -DTEST_SPLIT=1 -DTEST_FB=1 -DTEST_O24=1 \
+    -DTEST_CH=4 -DTEST_24=1 -o $OUT/uac_test_mem4 bsp/tests/uac_test.c -lm && $OUT/uac_test_mem4"
 # "FM1-XXXX": the four hex digits from the flash's unique ID (plat_uid.h), the name built from them
 run dev-name sh -c "$CC -std=c11 -Wall -Wextra -Werror -O1 -o $OUT/dev_name_test tests/dev_name_test.c && $OUT/dev_name_test"
 # the cache RAM (felucca-bsp's chip/fm1_cache_ram.h, fm1.toml cache_ram_ways) on a model of the cache's registers, tags and

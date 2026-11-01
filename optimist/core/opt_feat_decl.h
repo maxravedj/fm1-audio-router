@@ -20,7 +20,7 @@ static void of_off(uint32_t f);
 #define OF_K(on, i) ((on) ? ARB_K(ARB_LEND0 + (i)) : FMEM_NO_K)   /* (a lent block's arena client, core/opt_lend.h) */
 #define FMEM_FEATS                                                                                                      \
     {"BT AUDIO", "SYSTEM > BT", OF_K(OPT_LEND_BTA, L_BTA)}, {"BT MIDI", "SYSTEM > BT", FMEM_NO_K},                 \
-    {"USB AUDIO", "SYSTEM > USB", FMEM_NO_K}, {"WI-FI", "SYSTEM > WI-FI", OF_K(OPT_LEND_LINK, L_LINK)},             \
+    {"USB AUDIO", "SYSTEM > USB", OF_K(OPT_LEND_UAC, L_UAC)}, {"WI-FI", "SYSTEM > WI-FI", OF_K(OPT_LEND_LINK, L_LINK)},             \
     {"WI-FI AP", "SYSTEM > WI-FI", OF_K(OPT_LEND_AP, L_AP)}, {"EDITOR", "SYSTEM > USB", FMEM_NO_K},                               \
     {"USB HOST", "SYSTEM > USB", FMEM_NO_K}, {"MIRROR", "", OF_K(MIR_LEND, L_MIR)}
 /* the pause of a YES to a feature's PACK, and the UNLOAD of a NOFIT (ui/opt_feat.h) */

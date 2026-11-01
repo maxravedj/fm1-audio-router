@@ -364,7 +364,7 @@ def ram_code_allow(flags):
 def conf():
     """--conf (fm1.toml conf_gen, run by tools/build.py before the build): fm1.toml's ble and bt_audio from the chosen
     configuration's BLE and BT_AUDIO (a profile with neither builds without the stack; OPT_PROFILE=none: neither),
-    bt_audio_mem = "app" and wifi_mem = "app" with an arena (ARENA: Bluetooth audio's buffers, Link's node and the access
+    bt_audio_mem = "app", wifi_mem = "app" and usb_audio_mem = "app" (USB_AUDIO) with an arena (ARENA: Bluetooth audio's buffers, Link's node and the access
     point's state lent by it), and
     ble_central from its BLE_CENTRAL, usb_host from its USB_HOST, cache_ram_ways from its CACHE_RAM"""
     prof = profile()
@@ -414,6 +414,9 @@ def conf():
         # USB audio as Optimist's own presents it (fm1.toml): two devices, named, the output on the FM-1's clock
         print("usb_audio_out_feedback = true", "usb_audio_split = true",
               'usb_audio_in_channel_names = ["CH1", "CH2", "CH3", "CH4"]', sep="\n")   # (the devices' names follow usb_name_fn: "FM1-XXXX In" / "Out")
+        if flags.get("FELUCCA_USB_AUDIO", 0) and flags.get("FELUCCA_ARENA_KB", 0):
+            print('usb_audio_mem = "app"')            # (its rings lent by the arena only while the computer streams, with
+                                                         # the render's own buffers: core/opt_lend.h L_UAC; else static)
     import json
     print("ram_code_allow =", json.dumps(ram_code_allow(flags)))   # (the engines' places, FAST_ALLOW; ut_mix with USB audio)
     return 0
