@@ -169,7 +169,18 @@ static int ldr_prog(uint32_t off, const void *p, uint32_t n)
     return 0;
 }
 static void ldr_record_clear(void) { record_cleared++; }
-static void ldr_progress(uint32_t done, uint32_t total) { (void)done; (void)total; }
+/* the bar's steps in a session: how many, the first, the second (after the head and, fast, the table), the last, the
+ * scale, any going back */
+static uint32_t pg_n, pg_first, pg_second, pg_last, pg_total, pg_back;
+static void ldr_progress(uint32_t done, uint32_t total)
+{
+    if (pg_n == 0) pg_first = done;
+    if (pg_n == 1) pg_second = done;
+    if (pg_n && (done < pg_last || total != pg_total)) pg_back++;
+    pg_n++;
+    pg_last = done;
+    pg_total = total;
+}
 #ifdef LDR_FAST_CHUNK
 static int ldr_erase_begin(uint32_t off) { int rc = ldr_erase(off); er_on = !rc; return rc; }
 static int ldr_erase_end(void) { if (!er_on) return -1; er_on = 0; return 0; }
@@ -358,6 +369,7 @@ int main(int argc, char **argv)
     }
     wire_in = wire_out = progs = 0;
     notes_reset();
+    pg_n = pg_back = 0;
     rc = session();
     printf("  rc %d, %u requests, %u sector erases, %u page programs, wire: %u B to the FM-1, %u B from it (%s)\n", rc,
            requests, erases, progs, wire_in, wire_out, FAST ? "fast" : "classic");
@@ -367,6 +379,13 @@ int main(int argc, char **argv)
                       : "classic: no 0x32 frame",
                  FAST ? notes && !note_bad && note_k == LDR_NSEC && note_n == LDR_NSEC && note_max_gap <= 8u
                       : notes == 0 && !note_bad);
+    printf("  bar: %u steps, first %u, then %u, last %u of %u, %u back\n", pg_n, pg_first, pg_second, pg_last, pg_total,
+           pg_back);
+    bad += check(FAST ? "fast: the bar from the table's bytes (< 1 %), a step a sector, never back, to the end"
+                      : "classic: the bar from the first 4 KiB, never back, to the end",
+                 FAST ? pg_first * 100u < pg_total && pg_first == (pg_total - (0x93000u - 0x4000u)) &&
+                            pg_n == 1u + LDR_NSEC && !pg_back && pg_last == pg_total
+                      : pg_first == 0x1000u && !pg_back && pg_last == pg_total);
     bad += check("app area == the new package's flash.bin", !memcmp(nor + 0x4000, logical + nfo + 0x4000, 0x93000 - 0x4000));
     bad += check("flash head [0, 0x4000) untouched", !memcmp(nor, head, sizeof head));
     bad += check("finish asked (0xF0000000)", f0_asked >= 1);
