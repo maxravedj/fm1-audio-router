@@ -49,7 +49,7 @@ MARKER = "# ---- the trial:"                   # (the copy's line where the tria
 GENERATORS = [("gen_tables.py", "felucca_tables.h"), ("gen_samples.py", "felucca_samples.h"),
               ("gen_drumkits.py", "felucca_drumkits.h"), ("gen_x0x_drums.py", "x0x_drum_samples.h"),
               ("gen_wavetables.py", "felucca_wavetables.h"), ("gen_colors.py", "felucca_colors.h"),
-              ("gen_param_help.py", "felucca_param_help.h")]
+              ("gen_param_help.py", "felucca_param_help.h"), ("gen_bank_order.py", "felucca_bank.h")]
 
 
 def optimist_tree():
