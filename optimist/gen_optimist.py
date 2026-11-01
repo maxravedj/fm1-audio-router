@@ -340,11 +340,18 @@ SEQ_ALLOW_EV = ["events_block?", "events_block_?"]   # (SEQ_RAM 1: the events; 2
 #                                                    inner function under CPU TIMES' timer, SYS_DEBUG)
 SEQ_ALLOW = ["seq_step?", "gen_eff?", "gen_deff_of?", "lock_apply?", "sa_locks_off?", "rec_hold?",
              "seq_out_on?", "trk_note_on?", "trk_note_on_?", "trk_note_chord?", "voice_start?", "mono_play?"]
+# the insert effects' kernels in XIP (Optimist's builder item INS_RAM 0, FELUCCA_INS_RAM: core.h FAST2(ins), FAST_CALL(insx, f)):
+# the kernels that call through FAR are no RAM code then (out of the list), and the RAM code that calls them does it through
+# FAR: the dispatchers (ifx_run, ifx_part, ifx_bus, ifx_st, dins_one, already there) and mix_part, a function of its own
+# where a build does not inline it into mix_block / dual_run ("?")
+INS_XIP_OUT = ["ifx_gater", "ifx_lim_run", "ifx_drive", "ifx_ts_run?"]
+INS_XIP_IN = ["mix_part?"]
 
 
 def ram_code_allow(flags):
     """fm1.toml's ram_code_allow for this configuration: the file's, the engines' names by their places (FAST_ALLOW),
-    the sequencer's (SEQ_ALLOW) with its step code in RAM, without ut_mix when there is no USB audio (the serial console)"""
+    the sequencer's (SEQ_ALLOW) with its step code in RAM, the insert kernels' callers with the kernels in XIP (INS_XIP_*),
+    without ut_mix when there is no USB audio (the serial console)"""
     import tomllib
     allow = tomllib.loads((APP / "fm1.toml").read_text())["ram_code_allow"]
     out = list(allow)
@@ -356,6 +363,8 @@ def ram_code_allow(flags):
                 out += [f for f in names if f not in out]
     seq_ram = flags.get("FELUCCA_SEQ_RAM", 0)
     out += [f for f in (SEQ_ALLOW_EV if seq_ram >= 1 else []) + (SEQ_ALLOW if seq_ram >= 2 else []) if f not in out]
+    if not flags.get("FELUCCA_INS_RAM", 1):
+        out = [f for f in out if f not in INS_XIP_OUT] + [f for f in INS_XIP_IN if f not in out]
     if flags.get("FELUCCA_CDC", 0):
         out = [f for f in out if f != "ut_mix"]       # (ut_mix, the USB input track's mix, is not built without USB audio)
     return out
