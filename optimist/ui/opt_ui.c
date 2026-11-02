@@ -76,7 +76,7 @@ static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint1
 #ifndef FELUCCA_CANVAS_STRIP
 #define FELUCCA_CANVAS_STRIP 2
 #endif
-_Static_assert(CV_MAX == 240u * (FELUCCA_CANVAS_STRIP == 2 ? 31u : FELUCCA_CANVAS_STRIP == 1 ? 62u : 124u),
+_Static_assert(CV_MAX == 240u * (FELUCCA_CANVAS_STRIP == 3 ? 16u : FELUCCA_CANVAS_STRIP == 2 ? 31u : FELUCCA_CANVAS_STRIP == 1 ? 62u : 124u),
                "the canvas: app.h's rows (opt_dim.h OPT_CANVAS_ROWS) are the build's CANVAS_STRIP (felucca_config.h): "
                "gen_optimist.py dim_header");
 #define CV_ROWS (CV_MAX / 240u)                    /* (as Optimist's display/gfx.c: the UI's passes, op_graph.c cv_tall) */
