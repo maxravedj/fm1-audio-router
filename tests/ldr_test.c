@@ -17,6 +17,24 @@ static uint8_t nor[0x100000], *logical;
 static size_t logical_len;
 static uint8_t rx[5000];
 static uint32_t served, cut_after, wire_in, wire_out, progs, er_on, damage_at;   /* (the fast install's tests) */
+/* the fast install's cmd 0x32 frames [compared, all]: how many, the last, the widest and narrowest step, any out of
+ * order or malformed; read_ms: each flash read takes that long (the 100 ms rule) */
+static uint32_t notes, note_k, note_n, note_max_gap, note_min_gap, note_bad, read_ms;
+static void notes_reset(void) { notes = note_k = note_n = note_max_gap = note_bad = 0; note_min_gap = ~0u; }
+static void note_take(const uint8_t *u, uint32_t n)
+{
+    uint32_t k, all, s = 0, i;
+    for (i = 6; i < 10 && i < n; i++) s += u[i];
+    if (n != 11 || u[3] != 4 || u[4] || u[5] || (uint8_t)~s != u[10]) { note_bad++; return; }
+    k = u[6] | u[7] << 8;
+    all = u[8] | u[9] << 8;
+    if (k <= note_k || k > all || (note_n && all != note_n)) note_bad++;
+    if (k - note_k > note_max_gap) note_max_gap = k - note_k;
+    if (k != all && k - note_k < note_min_gap) note_min_gap = k - note_k;   /* (the last may be nearer) */
+    note_k = k;
+    note_n = all;
+    notes++;
+}
 static uint32_t t_crc16(const uint8_t *p, uint32_t n)
 {
     uint32_t c = 0, i;
@@ -66,8 +84,9 @@ static int ota_wire_send(const uint8_t *p, uint32_t n)
     static uint8_t m[4200];
     uint8_t u[64];
     uint32_t addr, len, i, s = 0;
-    unpack7h(p + 1, n - 2, u);
+    i = unpack7h(p + 1, n - 2, u);
     if (u[2] == 0x11 || u[2] == 0x31) return 0;
+    if (u[2] == 0x32) { note_take(u, i); return 0; }
     addr = u[7] | u[8] << 8 | u[9] << 16 | (uint32_t)u[10] << 24;
     len = u[11] | u[12] << 8 | u[13] << 16;
     requests++;
@@ -124,7 +143,7 @@ static void no_erase_on(const char *what)
 {
     if (er_on) { printf("FLASH %s WHILE AN ERASE RUNS\n", what); exit(1); }
 }
-static int ldr_fread(uint32_t off, void *p, uint32_t n) { no_erase_on("READ"); memcpy(p, nor + off, n); return 0; }
+static int ldr_fread(uint32_t off, void *p, uint32_t n) { no_erase_on("READ"); memcpy(p, nor + off, n); now_ms += read_ms; return 0; }
 static int ldr_erase(uint32_t off)
 {
     no_erase_on("ERASE");
@@ -150,7 +169,18 @@ static int ldr_prog(uint32_t off, const void *p, uint32_t n)
     return 0;
 }
 static void ldr_record_clear(void) { record_cleared++; }
-static void ldr_progress(uint32_t done, uint32_t total) { (void)done; (void)total; }
+/* the bar's steps in a session: how many, the first, the second (after the head and, fast, the table), the last, the
+ * scale, any going back */
+static uint32_t pg_n, pg_first, pg_second, pg_last, pg_total, pg_back;
+static void ldr_progress(uint32_t done, uint32_t total)
+{
+    if (pg_n == 0) pg_first = done;
+    if (pg_n == 1) pg_second = done;
+    if (pg_n && (done < pg_last || total != pg_total)) pg_back++;
+    pg_n++;
+    pg_last = done;
+    pg_total = total;
+}
 #ifdef LDR_FAST_CHUNK
 static int ldr_erase_begin(uint32_t off) { int rc = ldr_erase(off); er_on = !rc; return rc; }
 static int ldr_erase_end(void) { if (!er_on) return -1; er_on = 0; return 0; }
@@ -338,10 +368,24 @@ int main(int argc, char **argv)
         memcpy(nor + 0xE4F00, r, sizeof r);
     }
     wire_in = wire_out = progs = 0;
+    notes_reset();
+    pg_n = pg_back = 0;
     rc = session();
     printf("  rc %d, %u requests, %u sector erases, %u page programs, wire: %u B to the FM-1, %u B from it (%s)\n", rc,
            requests, erases, progs, wire_in, wire_out, FAST ? "fast" : "classic");
     bad += check("install completes", rc == 0);
+    printf("  0x32 frames: %u, last [%u, %u], steps %u..%u\n", notes, note_k, note_n, note_min_gap, note_max_gap);
+    bad += check(FAST ? "fast: 0x32 frames in order, at most 8 sectors apart, the last [all, all]"
+                      : "classic: no 0x32 frame",
+                 FAST ? notes && !note_bad && note_k == LDR_NSEC && note_n == LDR_NSEC && note_max_gap <= 8u
+                      : notes == 0 && !note_bad);
+    printf("  bar: %u steps, first %u, then %u, last %u of %u, %u back\n", pg_n, pg_first, pg_second, pg_last, pg_total,
+           pg_back);
+    bad += check(FAST ? "fast: the bar from the table's bytes (< 1 %), a step a sector, never back, to the end"
+                      : "classic: the bar from the first 4 KiB, never back, to the end",
+                 FAST ? pg_first * 100u < pg_total && pg_first == (pg_total - (0x93000u - 0x4000u)) &&
+                            pg_n == 1u + LDR_NSEC && !pg_back && pg_last == pg_total
+                      : pg_first == 0x1000u && !pg_back && pg_last == pg_total);
     bad += check("app area == the new package's flash.bin", !memcmp(nor + 0x4000, logical + nfo + 0x4000, 0x93000 - 0x4000));
     bad += check("flash head [0, 0x4000) untouched", !memcmp(nor, head, sizeof head));
     bad += check("finish asked (0xF0000000)", f0_asked >= 1);
@@ -349,6 +393,7 @@ int main(int argc, char **argv)
     bad += check("no write outside the allowed windows", bad_range == 0);
     /* same package again: nothing to erase */
     erases = 0; requests = 0;
+    notes_reset();
     rc = session();
     bad += check("re-run with the same package erases nothing", rc == 0 && erases == 0);
 #ifdef LDR_FAST_CHUNK
@@ -356,8 +401,19 @@ int main(int argc, char **argv)
         static const uint8_t VEC[12] = {98, 4, 162, 95, 146, 95, 92, 197, 155, 40, 53, 131};   /* the hosts' vector */
         uint8_t v[0x2000], t[12];
         uint32_t k;
-        printf("  re-run: %u requests\n", requests);
+        printf("  re-run: %u requests, %u 0x32 frames\n", requests, notes);
         bad += check("fast: a re-run sends no sector (header, app head, table, finish)", requests <= 5u);
+        bad += check("fast: a re-run's 0x32 frames: one every 8 sectors and the last",
+                     !note_bad && notes == (LDR_NSEC + 7u) / 8u && note_min_gap == 8u && note_max_gap == 8u &&
+                     note_k == LDR_NSEC);
+        /* slow flash reads (40 ms a sector): a frame every 100 ms, so every 3 sectors */
+        read_ms = 40u;
+        notes_reset();
+        rc = session();
+        read_ms = 0;
+        printf("  slow re-run: %u 0x32 frames, steps %u..%u\n", notes, note_min_gap, note_max_gap);
+        bad += check("fast: 40 ms a sector: a 0x32 frame every 3 sectors (100 ms)", rc == 0 && !note_bad &&
+                     note_min_gap == 3u && note_max_gap == 3u && note_k == LDR_NSEC);
         for (k = 0; k < sizeof v; k++)
             v[k] = (uint8_t)((k * 31u) ^ (k >> 8));
         for (k = 0; k < 2u; k++) {
