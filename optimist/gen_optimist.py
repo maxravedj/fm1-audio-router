@@ -342,7 +342,8 @@ FAST_ALLOW = {
 SEQ_ALLOW_EV = ["events_block?", "events_block_?"]   # (SEQ_RAM 1: the events; 2: and the hot core, SEQ_ALLOW too; "_": the
 #                                                    inner function under CPU TIMES' timer, SYS_DEBUG)
 SEQ_ALLOW = ["seq_step?", "gen_eff?", "gen_deff_of?", "lock_apply?", "sa_locks_off?", "rec_hold?",
-             "seq_out_on?", "trk_note_on?", "trk_note_on_?", "trk_note_chord?", "voice_start?", "mono_play?"]
+             "seq_out_on?", "trk_note_on?", "trk_note_on_?", "trk_note_chord?", "voice_start?", "mono_play?",
+             "dl_smp_fx?"]   # (dl_smp_fx: a drum hit's CUT, ds_onepole through FAR)
 # the insert effects' kernels in XIP (Optimist's builder item INS_RAM 0, FELUCCA_INS_RAM: core.h FAST2(ins), FAST_CALL(insx, f)):
 # the kernels that call through FAR are no RAM code then (out of the list), and the RAM code that calls them does it through
 # FAR: the dispatchers (ifx_run, ifx_part, ifx_bus, ifx_st, dins_one, already there) and mix_part, a function of its own

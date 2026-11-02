@@ -10,11 +10,15 @@ audio path), with the flash on; it may call, but only code that is in RAM too, s
     followed in turn (the RAM code it reaches calls only RAM code, to any depth);
   - a call through a pointer ('call rN', 'goto rN') is one the build cannot follow: refused, with the XIP functions
     whose addresses that function loads (the likely targets: a pointer to XIP code is a call into XIP);
-  - fm1.toml ram_code_allow = ["fn", ...] names the RAM functions whose calls out of RAM, or through a pointer, the
-    app vouches for (a cold path, a pointer that only ever holds RAM code): each is printed with every build, and a
+  - fm1.toml ram_code_allow = ["fn", ...] names the RAM functions whose calls through a pointer the app vouches for
+    (FAR to a cold path in XIP, a pointer that only ever holds RAM code): each is printed with every build, and a
     name that matches no function in RAM is an error (the list stays what the code is). "fn?" names one an app's
     switch may leave out, or a build may place in XIP (its RAM placement switched off): absent or in XIP it is said in a
-    note (XIP code makes no call out of RAM to vouch for); a plain "fn" must be RAM code.
+    note (XIP code makes no call out of RAM to vouch for); a plain "fn" must be RAM code;
+  - a direct call between the app's RAM code and XIP, either way, is refused, ram_code_allow or not: RAM and the
+    flash are ~2 MiB apart, the edge of a direct call's reach (R_PI32V2_LONG_JUMP_23M2, +-2 MiB), so one that links
+    today fails at the link once the image grows or the RAM code moves (SEQ_RAM 2, 2026-11-02: trk_note_on ->
+    drum_voice, 2,132,756 B). Such a call goes through a pointer (FAR, an app's FAST_CALL), or the callee is RAM code.
 
 Constants are not checked: .app_ram code may read .rodata in XIP, so it does not run with the flash off (nothing
 but the flash driver does: its windows hold the interrupts off).
@@ -82,6 +86,22 @@ def functions(dis):
     return starts, [found[a][0] for a in starts], [found[a][1] for a in starts]
 
 
+def into_app_ram(starts, names, edges, ar, in_ram, code_starts):
+    """-> errors for the direct calls from XIP code into the app's RAM code (.app_ram): as far out of reach as the
+    other way (fm1-base's own XIP calls into the rest of .ram_text, the flash driver, are fm1-base's: not these)"""
+    out = {}
+    for i, a in enumerate(starts):
+        if in_ram(a) or names[i].startswith(".GJTI"):
+            continue
+        for pc, t, _ in edges(i):
+            if t is not None and ar[0] <= t < ar[1] and t in code_starts:
+                out.setdefault((i, t), []).append(pc)
+    by_start = {a: n for a, n in zip(starts, names)}
+    return [f"XIP code calls RAM code directly: {names[i]} at {', '.join(f'{pc:#x}' for pc in pcs[:3])} -> "
+            f"{by_start[t]} ({t:#x}): out of a direct call's reach as the image grows (FAR / FAST_CALL)"
+            for (i, t), pcs in sorted(out.items())]
+
+
 def check(syms, dis, allow=()):
     """-> (errors, notes) for the code between _ar_start and _ar_end (none there: nothing to say)"""
     ar = symbol(syms, "_ar_start"), symbol(syms, "_ar_end")
@@ -124,7 +144,7 @@ def check(syms, dis, allow=()):
     def at(pcs):
         return ", ".join(f"{pc:#x}" for pc in pcs[:3]) + (f" (+{len(pcs) - 3} more)" if len(pcs) > 3 else "")
 
-    errors, used = [], set()
+    errors, used, direct = [], set(), {}
     roots = [i for i, a in enumerate(starts) if ar[0] <= a < ar[1]]
     seen, path_of = set(roots), {i: [names[i]] for i in roots}
     todo = list(roots)
@@ -133,8 +153,11 @@ def check(syms, dis, allow=()):
         path = path_of[i]
         ptr, xip = [], {}                     # this function's calls through a pointer; into XIP, by target
         for pc, t, text in edges(i):
-            if names[i] in allow and (t is None or not in_ram(t)):
+            if names[i] in allow and t is None:
                 used.add(names[i])
+            elif names[i] in allow and not in_ram(t):
+                if t in code_starts:      # (vouched for or not: a direct call out of RAM is at the edge of its reach)
+                    direct.setdefault((i, t), []).append(pc)
             elif t is None:
                 ptr.append(pc)
             elif not in_ram(t):
@@ -155,6 +178,12 @@ def check(syms, dis, allow=()):
             errors.append(f"RAM code calls through a pointer: {' > '.join(path)} at {at(ptr)}"
                           + (f"; it takes the address of XIP code {', '.join(xf)}" if xf else "; the target is not known")
                           + " (fm1.toml ram_code_allow if it is RAM code)")
+    for (i, t), pcs in sorted(direct.items()):
+        j = owner(t)
+        errors.append(f"RAM code calls XIP code directly: {' > '.join(path_of[i])} at {at(pcs)} -> "
+                      f"{names[j] if j is not None else '?'} ({t:#x}): ram_code_allow vouches for calls through a "
+                      f"pointer only (a direct call is at the edge of its reach: FAR / FAST_CALL, or the callee in RAM)")
+    errors += into_app_ram(starts, names, edges, ar, in_ram, code_starts)
     in_xip = []
     for n in allow:
         if n not in by_name or not in_ram(starts[by_name[n]]):

@@ -138,6 +138,20 @@ errs, _ = run(TBH)
 ok(len(errs) == 1 and "RAM code calls XIP code: render at 0x1c0002c -> xip_helper" in errs[0],
    f"a tbh table's entries are no pointer call; the code after it is still read ({errs})")
 
+# ram_code_allow vouches for pointer calls only: a direct call out of an allowed function still fails (RAM and XIP sit at
+# the edge of a direct call's reach: SEQ_RAM 2's trk_note_on -> drum_voice, 2026-11-02), its pointer calls pass
+BOTH = PTR.replace(" 1c00028:    81 00             \trts", " 1c00028:    80 ea 08 00       \tcall 1048528 <xip_helper : 2000200 >")
+errs, notes = run(BOTH, allow=["render"])
+ok(len(errs) == 1 and "RAM code calls XIP code directly: render at 0x1c00028 -> xip_helper" in errs[0]
+   and any("allowed in render" in n for n in notes), f"an allowed function's direct call out of RAM fails ({errs})")
+
+# a direct call from XIP code into the app's RAM code fails too (fx.c dins_restart -> dins_rest, the same day)
+INTO = RAM_TO_RAM.replace("goto -48 <fl_wait : 1c00000 >", "goto -48 <fl_wait : 1c00000 >\n\nxip_caller:\n"
+                          " 2000300:    80 ea 08 00       \tcall -4194016 <mix : 1c0002c >\n 2000304:    81 00             \trts")
+errs, _ = run(INTO)
+ok(len(errs) == 1 and "XIP code calls RAM code directly: xip_caller at 0x2000300 -> mix (0x1c0002c)" in errs[0],
+   f"XIP -> the app's RAM code fails ({errs})")
+
 # the flash driver's .ram_text is no root: its code is only followed when RAM code calls it
 errs, notes = run(RAM_TO_RAM, ar_end=0x1c00020)
 ok(errs == [] and notes == [], f"no .app_ram: nothing checked, nothing said ({errs}, {notes})")
