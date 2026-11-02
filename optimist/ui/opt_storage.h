@@ -115,8 +115,8 @@ static int st_prog(uint32_t off, const void *src, uint32_t n)
 #if FELUCCA_NB_LIST
 #include "storage/nbank.c"                      /* the FM6 / CZ native collections in PRESETS */
 #endif
-/* the platform's own store object OBJ_PANEL sits at 0xD8000 / 0xD9000 (app.h APP_STORE_MAP; the SD card mode: 0xCE000 /
- * 0xCF000): nothing of Optimist's there.
+/* the platform's own store object OBJ_PANEL sits at 0xD8000 / 0xD9000 in every MEMORY step but the SD card mode's L1
+ * (app.h APP_STORE_MAP; L1: 0xCE000 / 0xCF000): nothing of Optimist's there.
  * The areas that end at it: the user sample slots (USR3 ends at SMP_USR3_END), the snapshots and the CZ collection
  * below SMP_BANKS; the kit bank starts above it. The objects' own sectors: opt_storage_hits_panel (the host's check) */
 #if FELUCCA_LAYOUT == 1
@@ -128,7 +128,8 @@ _Static_assert(FM1B_APP_END == 0xCE000u && OPT_PANEL_HI <= FL_DATA_LO && PLAT_DA
 #else
 #define OPT_PANEL_LO 0xD8000u
 #define OPT_PANEL_HI 0xDA000u
-_Static_assert(FM1B_APP_END == 0x93000u, "the normal layout on fm1-base's normal slot");
+_Static_assert(FM1B_APP_END == FL_APP_HI && (FELUCCA_LAYOUT == 0 ? FM1B_APP_END == 0x93000u : PLAT_DATA_LO == FL_DATA_LO),
+               "the MEMORY step on fm1-base's slot to its end (normal: 0x93000; the others: Optimist's store from there)");
 _Static_assert(SMP_USR3_END <= OPT_PANEL_LO && SMP_BANKS == OPT_PANEL_LO && ST_UKIT_SECTOR >= OPT_PANEL_HI,
                "Optimist's data off the platform's OBJ_PANEL (0xD8000 / 0xD9000)");
 #endif

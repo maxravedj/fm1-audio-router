@@ -130,7 +130,7 @@ def config(tree, prof):
         if out == "felucca_config.h":
             host_dual(0 if os.environ.get("OPT_HOST_DUAL") == "0" else configure.flags(cfg)[0].get("FELUCCA_DUAL", 0), GEN / out)
             host_sd(configure.flags(cfg)[0], GEN / out)
-            slot_check(configure.flags(cfg)[0].get("FELUCCA_LAYOUT", 0), prof)
+            slot_check(configure.flags(cfg)[0].get("FELUCCA_LAYOUT", 0), prof, tree)
             host_bt(configure.flags(cfg)[0], GEN / out)
             host_wifi(configure.flags(cfg)[0], GEN / out)
             ble_peers_define(configure.flags(cfg)[0], GEN / out)
@@ -154,26 +154,29 @@ def dim_header(flags, path):
 
 
 SD_APP_END = 0xCE000                           # the SD card mode's slot (LAYOUT 1): fm1-base's app_end, OBJ_PANEL above it
-S0_APP_END = 0xB5000                           # MEMORY no user samples (LAYOUT 3, Optimist's tools/flash_layout.py STEPS):
-                                               # the same end as the classic build, OBJ_PANEL kept at 0xD8000; not built
-                                               # until fm1-base's update loader and app_end take the steps' table
-                                               # (Optimist's docs/SD-MODE-DESIGN.md 9.4: fm1-base's pr/app-end-table)
-APP_ENDS = {0: 0x93000, 1: SD_APP_END, 3: S0_APP_END}
 
 
-def slot_check(layout, prof):
-    """the build's app slot as the profile's flash layout needs it: Optimist's SD card mode (LAYOUT 1: its code past
-    0x93000, its store from 0xD0000) on fm1-base's bigger slot, FM1B_APP_END=0xCE000 in the environment (app.h puts
-    OBJ_PANEL at 0xCE000 then); the normal layout on the normal slot. LAYOUT 3 (no user samples) is refused: its end
-    is set (S0_APP_END), fm1-base's loader cannot switch to it safely yet"""
-    if layout not in APP_ENDS:
-        raise SystemExit(f"gen_optimist: {prof.name}: LAYOUT {layout} has no app end here ({sorted(APP_ENDS)})")
-    if layout == 3:
-        raise SystemExit(f"gen_optimist: {prof.name}: LAYOUT 3 (MEMORY no user samples, app end {S0_APP_END:#x}) is not "
-                         "built for fm1-base yet: its update loader's slot switch does not take the MEMORY steps' table")
+def slot_check(layout, prof, tree):
+    """the build's app slot as the profile's flash layout (its MEMORY step) needs it: FM1B_APP_END in the environment
+    = the step's release end in Optimist's one table (tools/flash_layout.py STEPS release_end: the normal slot 0x93000,
+    the SD card mode's L1 0xCE000 with OBJ_PANEL just above it, every other step's end at its FM6 voices, OBJ_PANEL at
+    0xD8000: app.h, ui/opt_storage.h check it); and fm1.toml app_steps (the update loader's switch rule) the table's
+    every known end, so a package of any step clears what the step it replaces kept elsewhere"""
+    sys.path.insert(0, str(tree / "tools"))
+    import flash_layout
+    if layout not in flash_layout.STEPS:
+        raise SystemExit(f"gen_optimist: {prof.name}: LAYOUT {layout} has no app end ({sorted(flash_layout.STEPS)})")
+    want = flash_layout.STEPS[layout].release_end
+    if layout == 1 and want != SD_APP_END:
+        raise SystemExit(f"gen_optimist: Optimist's L1 release end {want:#x} is not SD_APP_END {SD_APP_END:#x}")
+    import tomllib
+    conf = tomllib.loads((APP / "fm1.toml").read_text())
+    steps = {int(e): (int(s), int(r)) for e, s, r in conf.get("app_steps", [])}
+    if steps != flash_layout.known_ends() or conf.get("app_clear_top") != flash_layout.CLEAR_TOP:
+        raise SystemExit("gen_optimist: fm1.toml app_steps / app_clear_top are not Optimist's tools/flash_layout.py "
+                         f"known_ends() / CLEAR_TOP: {[[hex(e), s, hex(r)] for e, (s, r) in flash_layout.known_ends().items()]}")
     v = os.environ.get("FM1B_APP_END", "")
     end = int(v, 0) if v else 0x93000
-    want = APP_ENDS[layout]
     if end != want:
         raise SystemExit(f"gen_optimist: {prof.name} (LAYOUT {layout}) needs FM1B_APP_END={want:#x}"
                          f" in the environment, not {end:#x}")

@@ -52,12 +52,20 @@ stack_bounds = ["f6_width=7", "f6_place=7", "ph_put=7", "sdm_rmdir=2"]   # Optim
                                # it), sd_mode.c sdm_rmdir (a project's folder and one level in it: its depth argument,
                                # 1 from its one caller, sdm_do; a deeper folder is refused, FR_DENIED)
 app_end = 0x93000              # the normal slot, said: the update loader compares slots before an install (fm1-base's
-                               # LDR_SLOT_SWITCH), so a normal build over the SD card mode's erases its code above
-                               # 0x93000. The SD card mode (its profile copy: LAYOUT 1) builds with FM1B_APP_END=0xCE000
-                               # (gen_optimist.py checks it): its code to 0xCE000, OBJ_PANEL at 0xCE000 (app.h)
-app_clear_end = 0xDA000        # an SD card mode install over a normal one erases [0xCE000, 0xDA000) first: Optimist's
-                               # squeezed store's sectors (its one project's section log, autosave A, the presets' FM6
-                               # voices), which the normal layout used for user samples (as Optimist's own loader does)
+                               # LDR_SLOT_SWITCH). A profile with another MEMORY step (its LAYOUT) builds with
+                               # FM1B_APP_END = that step's end (gen_optimist.py checks it against Optimist's
+                               # tools/flash_layout.py STEPS release_end): the SD card mode's L1 0xCE000 (OBJ_PANEL at
+                               # 0xCE000, app.h), the other steps' at their FM6 voices (OBJ_PANEL at 0xD8000)
+app_steps = [[0x93000, 0, 0x93000], [0xA5000, 2, 0xC8000], [0xA6000, 6, 0xB4000], [0xAA000, 7, 0xB4000], [0xB5000, 3, 0xD8000], [0xBA000, 4, 0xC8000], [0xBE000, 5, 0xC8000], [0xCA000, 8, 0xD8000], [0xCE000, 1, 0xDA000], [0xD0000, 1, 0xDA000]]
+                               # every app end an FM-1 may have of Optimist's (its MEMORY steps, the release's and the
+                               # classic build's: Optimist's tools/flash_layout.py known_ends, gen_optimist.py refuses a
+                               # build when the two differ), each [end, step (its LAYOUT), R (the top of what that step
+                               # keeps elsewhere than normal)]. The update loader erases [app_end, max(R_old, R)) after
+                               # another step's app (the project log, autosave A and the FM6 voices move), only the
+                               # longer code's tail after another build of its own step (the classic L1's 0xD0000 under
+                               # the release's 0xCE000), [app_end, app_clear_top) after an end not listed (Optimist's
+                               # docs/SD-MODE-DESIGN.md 9.3; felucca-bsp ldr_core.c LDR_STEPS)
+app_clear_top = 0xDA000        # no switch clears at or past it: the kits (0xDA000), the presets and up are kept
 sd = true                      # the SD card on the LCD's bus (fm1-base's plat_sd_*: a hardware mod), Optimist's SD card
                                # mode on it (ui/opt_sd.h, core/opt_sd_mmc.c; the profile copy's SD items); without a
                                # card it finds none

@@ -30,9 +30,11 @@
  * (milestone 1's): Optimist's user preset bank A, which an FM-1's presets would have lost */
 /* With Optimist's SD card mode (its LAYOUT 1: the store from 0xD0000, the presets' FM6 voices at 0xD8000) the build has
  * fm1-base's bigger slot (app_end, FM1B_APP_END=0xCE000: gen_optimist.py checks it) and OBJ_PANEL takes the two sectors
- * just above it, 0xCE000 / 0xCF000 (ui/opt_storage.h checks it) */
+ * just above it, 0xCE000 / 0xCF000 (ui/opt_storage.h checks it). Every other MEMORY step (its LAYOUT 2..8: the slot to
+ * its FM6 voices, the store stacked above up to 0xD8000 at most) keeps OBJ_PANEL at 0xD8000, so the calibration
+ * survives a switch between them (Optimist's docs/SD-MODE-DESIGN.md 9.1) */
 enum { OBJ_PANEL, OBJ_NOBJ };
-#if FM1B_APP_END > 0x97000u
+#if FM1B_APP_END == 0xCE000u
 #define APP_STORE_MAP {FM1B_APP_END}
 #else
 #define APP_STORE_MAP {0xD8000u}
