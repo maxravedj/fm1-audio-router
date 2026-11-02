@@ -34,7 +34,7 @@ guard0 = int(re.search(r"_guard0 = (0x[0-9A-Fa-f]+);", APP).group(1), 16)
 ok(sorted(r) == ["CACHE", "NOINIT", "SRAM", "XIP"], f"app.ld: XIP, SRAM, NOINIT and CACHE only ({sorted(r)})")
 ok(r["SRAM"][0] == 0x01C00000 and sum(r["SRAM"]) == guard0 == 0x01C74000,
    f"SRAM from 0x01C00000 to the stacks' guard band ({r['SRAM']})")
-ok(r["NOINIT"] == (0x01C7C000, 0x3D50) and r["XIP"] == (0x02000120, 0x8DFBC), "NOINIT and XIP unchanged")
+ok(r["NOINIT"] == (0x01C7C000, 0x3D50) and r["XIP"] == (0x02000120, 0x9DFBC), "NOINIT unchanged, XIP the app slot and 64 KB (the image before boot_pack)")
 ok(r["CACHE"] == (0x01F28000, 0x7000) and w_cache(APP), "CACHE: the data-cache ways 0..6 (fm1.toml cache_ram_ways), .cache_ram NOLOAD there")
 heads = [(m.start(), m.group(1)) for m in re.finditer(r"^\s*(\.\w+)\s*(?:\(NOLOAD\))?\s*:", APP, re.M)]
 order = [[n for at, n in heads if at < m.start()][-1] for m in re.finditer(r"\}\s*>\s*SRAM\b", APP)]

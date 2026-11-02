@@ -10,7 +10,7 @@
 // loader. Step 2: the loader reads the whole image and writes it. In both steps
 // the device sends cmd 0x30 read requests on the logical image and we answer.
 
-import { PORT_NAMES, usualName, livePorts, outputFor, pairs, askAll } from "./fm1ports.js";
+import { PORT_NAMES, usualName, livePorts, outputFor, pairs, askAll, IS_BLUETOOTH } from "./fm1ports.js";
 
 const HS_QUERY = [0xF0, 0x00, 0x32, 0x45, 0x00, 0x00, 0x00, 0x40, 0x7F, 0xF7];
 const UPGRADE = [0xF0, 0x22, 0x24, 0x35, 0x7F, 0xF7];
@@ -213,7 +213,7 @@ export class Updater {
 
   // never probe other gear: a usual name, a port the user allowed or that answered a HELLO, or one that appeared during
   // an update
-  askable(name) { return this.usual(name) || this.allowed.has(name) || (!!this.baseline && !this.baseline.has(name || "")); }
+  askable(name) { return !IS_BLUETOOTH(name) && (this.usual(name) || this.allowed.has(name) || (!!this.baseline && !this.baseline.has(name || ""))); }
 
   // FM-1s on ports of any name: the ones that answer the screen reader's HELLO (fm1ports.js askAll; every fm1-base
   // firmware does), allowed from then on -> their port names (also kept in this.answered)
