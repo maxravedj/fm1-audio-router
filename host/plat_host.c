@@ -1063,7 +1063,7 @@ static uint32_t data_writes;            /* every erase and write */
 static void data_init(void)
 {
     if (!data_ready) {
-        memset(data_area, 0xFF, PLAT_XDATA1_HI - DATA_BASE);
+        memset(data_area, 0xFF, DATA_TOP - DATA_BASE);
         data_ready = 1;
     }
 }
