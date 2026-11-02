@@ -114,6 +114,13 @@ APP_DIR holds the app (app.h, app.c, its sources) and its fm1.toml:
                              install (LDR_SLOT_SWITCH): after a bigger app, the old code above app_end is erased
   app_clear_end = 0xDA000    with app_end: what an install over an app with a smaller slot erases first, [app_end,
                              app_clear_end) (the data the other app kept where this one keeps its own)
+  app_steps = [[0x93000, 0, 0x93000], [0xB5000, 3, 0xD8000], [0xCE000, 1, 0xDA000]]
+                             with app_end: every end the app may have been installed with, each [end, step, R] (R: the
+                             top of what that step keeps elsewhere than the first, normal one); the loader then uses one
+                             rule for every pair instead of app_clear_end: another step's app before, [app_end, max(R_old,
+                             R)) erased; another build of its own step, only its longer code's tail; an end not listed,
+                             [app_end, app_clear_top) (felucca-bsp ldr_core.c LDR_STEPS)
+  app_clear_top = 0xDA000    with app_steps: no switch clears at or past it
   mirror = true              the screen and panel mirrored over USB (FM1B_MIRROR: device/mirror.c; web/mirror/,
                              tools/fm1_mirror.py), the panel played from the host; FM1B_MIRROR=1 in the environment
                              builds it in whatever fm1.toml says (an app's demo build), FM1B_POOL_SPARE=N the
@@ -288,7 +295,8 @@ def read_conf(path):
 
 
 def parse_conf(text, path):
-    """fm1.toml: key = "string" | number | true | false | ["string", ...] (a list may go on over several lines),
+    """fm1.toml: key = "string" | number | true | false | ["string", ...] | [[number, ...], ...] (a list may go on over
+    several lines),
     # comments (the little TOML a firmware needs)"""
     conf = {}
     pending, start = "", 0
@@ -298,7 +306,7 @@ def parse_conf(text, path):
             continue
         if pending:                                  # a list's next line
             line, no = pending + " " + line, start
-        if re.match(r"[A-Za-z_][A-Za-z0-9_]*\s*=\s*\[", line) and "]" not in line:
+        if re.match(r"[A-Za-z_][A-Za-z0-9_]*\s*=\s*\[", line) and line.count("[") > line.count("]"):
             pending, start = line, no
             continue
         pending = ""
@@ -306,7 +314,10 @@ def parse_conf(text, path):
         if not m:
             raise SystemExit(f"{path}:{no}: not key = value")
         v = m.group(2)
-        if v.startswith("["):
+        if v.startswith("[["):                       # a list of number lists (app_steps)
+            conf[m.group(1)] = [[int(x, 0) for x in row.split(",") if x.strip()]
+                                for row in re.findall(r"\[([^\[\]]*)\]", v[1:-1])]
+        elif v.startswith("["):
             conf[m.group(1)] = re.findall(r'"([^"]*)"', v)
         elif v.startswith('"'):
             conf[m.group(1)] = v.strip('"')
@@ -493,7 +504,8 @@ def build_loader():
     flags = [*CFLAGS, *inc(BSP / "chip", BSP / "boards" / "fm1")]
     if app_end():                 # the app's slot: the loader writes it, and compares it with the installed app's
         flags += [f"-DFL_APP_END={app_end():#x}u", "-DLDR_SLOT_SWITCH=1",
-                  *([f"-DLDR_CLEAR_END={CONF['app_clear_end']:#x}u"] if CONF.get("app_clear_end") else [])]
+                  *([f"-DLDR_CLEAR_END={CONF['app_clear_end']:#x}u"] if CONF.get("app_clear_end") else []),
+                  *ldr_step_flags()]
     tc_all(("cc", "-c", src / "crt0_ldr.S", "-o", LDR / "crt0_ldr.o"),
            ("cc", *flags, "-c", src / "loader.c", "-o", LDR / "loader.o"))
     elf = LDR / "loader.elf"
@@ -828,7 +840,7 @@ def write_sizes(img, syms):
         mm = re.search(r"^([0-9a-f]+) .*\s" + name + r"$", syms, re.M)
         return int(mm.group(1), 16) if mm else 0
     sizes = {"flash": len(img), "ram": sym("_bss_end") - sym("_data_start"), "pool": sym("_pool_end") - sym("_pool_start"),
-             "ramtext": sym("_rt_end") - sym("_rt_start"), "app_slot": APP_SLOT}
+             "ramtext": sym("_rt_end") - sym("_rt_start"), "app_slot": app_slot()}
     (OUT / "sizes.json").write_text(json.dumps(sizes, indent=1) + "\n")
 
 
@@ -1376,6 +1388,44 @@ def app_end():
     if clear is not None and (clear % 0x1000 or not end < clear <= 0xE0000):
         raise SystemExit(f"app_clear_end {clear:#x}: a 4 KiB boundary above app_end ({end:#x}), up to 0xe0000")
     return end
+
+
+def app_steps():
+    """fm1.toml app_steps: [[end, step, R], ...] every app end the app may have been installed with (its own builds and
+    others' of the same app), each its step (a number the app chooses) and R (the top of what that step keeps elsewhere
+    than the first, normal, step); [] without. app_end must be one of the ends; app_clear_top (no switch clears past
+    it) goes with it"""
+    steps = CONF.get("app_steps") or []
+    if not steps:
+        return []
+    out = []
+    for row in steps:
+        if len(row) != 3:
+            raise SystemExit(f"app_steps: {row}: [end, step, R]")
+        end, step, reloc = (int(v, 0) if isinstance(v, str) else int(v) for v in row)
+        if end % 0x1000 or reloc % 0x1000 or not APP_END <= end <= reloc <= 0xE0000:
+            raise SystemExit(f"app_steps: [{end:#x}, {step}, {reloc:#x}]: 4 KiB boundaries, {APP_END:#x} <= end <= R <= 0xe0000")
+        out.append((end, step, reloc))
+    if len({e for e, _, _ in out}) != len(out):
+        raise SystemExit("app_steps: one end twice")
+    top = CONF.get("app_clear_top")
+    if top is None or top % 0x1000 or not max(r for _, _, r in out) <= top <= 0xE0000:
+        raise SystemExit("app_steps needs app_clear_top: a 4 KiB boundary at or above every step's R, up to 0xe0000")
+    if (app_end() or APP_END) not in {e for e, _, _ in out}:
+        raise SystemExit(f"app_end {app_end() or APP_END:#x} is none of app_steps' ends")
+    return out
+
+
+def ldr_step_flags():
+    """the update loader's steps (felucca-bsp ldr_core.c LDR_STEPS): the app's one switch rule for every pair"""
+    steps = app_steps()
+    if not steps:
+        return []
+    end = app_end() or APP_END
+    step, reloc = next((s, r) for e, s, r in steps if e == end)
+    lst = " ".join(f"X({e:#x}u,{s},{r:#x}u)" for e, s, r in steps)
+    return [f"-DLDR_STEPS(X)={lst}", f"-DLDR_STEP={step}", f"-DLDR_RELOC_HI={reloc:#x}u",
+            f"-DLDR_CLEAR_TOP={CONF['app_clear_top']:#x}u"]
 
 
 def app_slot():
