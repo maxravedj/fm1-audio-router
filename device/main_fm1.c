@@ -1614,7 +1614,7 @@ _Static_assert(BOOT_LZMA_PROBS * 2u <= 65536u, "the boot decoder's tables fit th
 
 void fm1_cstart(void)
 {
-    uint32_t *d, p3, src, wdt;
+    uint32_t *s, *d, p3, src, wdt;
 #if FM1B_CPU2
     fm1_cpu1_stop();                                /* a second core that a reset left running would read the RAM
                                                      * cleared below: held (registers only) */
