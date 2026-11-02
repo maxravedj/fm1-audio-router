@@ -121,6 +121,23 @@ render:
 errs, _ = run(TABLE)
 ok(errs == [], f"a table word that reads as a call to no function passes ({errs})")
 
+# a switch's tbh table with no label of its own (pi32v2-llvm, 2026-11-02: TRIO's trio_pass): its entries are data, one
+# (0x00c5) decodes as 'call r5'; the table ends at its nearest case (start + 2 x the smallest entry), the code after is code
+TBH = """
+render:
+ 1c00020:    15 01             \ttbh [r5]
+ 1c00022:    05 00              <unknown instruction>
+ 1c00024:    c5 00             \tcall r5
+ 1c00026:    06 00              <unknown instruction>
+ 1c00028:    00 2a             \tr0 = r0 + r0
+ 1c0002a:    00 2a             \tr0 = r0 + r0
+ 1c0002c:    80 ea 08 00       \tcall 1048528 <xip_helper : 2000200 >
+ 1c00030:    81 00             \trts
+"""
+errs, _ = run(TBH)
+ok(len(errs) == 1 and "RAM code calls XIP code: render at 0x1c0002c -> xip_helper" in errs[0],
+   f"a tbh table's entries are no pointer call; the code after it is still read ({errs})")
+
 # the flash driver's .ram_text is no root: its code is only followed when RAM code calls it
 errs, notes = run(RAM_TO_RAM, ar_end=0x1c00020)
 ok(errs == [] and notes == [], f"no .app_ram: nothing checked, nothing said ({errs}, {notes})")

@@ -31,6 +31,8 @@ LINE = re.compile(r"^\s*([0-9a-f]+):\s+((?:[0-9a-f]{2} )+)\s*\t(.*)$")
 LABEL = re.compile(r"^([A-Za-z_$][\w.$]*):\s*$")
 DIRECT = re.compile(r"\b(?:call|goto) (-?\d+)(?: <[^>]*: ([0-9a-f]+) >)?")
 INDIRECT = re.compile(r"\b(?:call|goto) r\d+\b")
+RAW = re.compile(r"^\s*([0-9a-f]+):\s+((?:[0-9a-f]{2} )+)\s*(.*)$")
+TB = re.compile(r"^tb[bh] \[r\d+\]")
 ADDR_LOAD = re.compile(r"= -?\d+ <([A-Za-z_$][\w.$]*) : ([0-9a-f]+) >")
 
 
@@ -42,23 +44,40 @@ def symbol(syms, name):
 
 def functions(dis):
     """-> (starts, names, insns): the functions' start addresses (sorted), their names, and each one's instructions
-    as (pc, length, text)"""
+    as (pc, length, text). A switch's 'tbh [rN]' / 'tbb [rN]' table after its instruction is data, not code (objdump
+    decodes its entries as instructions: an entry 0x00c5 reads as 'call r5'): left out, up to its nearest target (each
+    entry the halfwords from the table to its case), as tools/stack_depth.py reads it"""
     found, cur = {}, None
-    pending = None
+    pending, tab = None, None
     for ln in dis.splitlines():
         m = LABEL.match(ln.strip())
         if m:
-            pending = m.group(1)
+            pending, tab = m.group(1), None
             continue
-        mm = LINE.match(ln)
+        mm = LINE.match(ln) or (RAW.match(ln) if tab is not None else None)   # (a table's '<unknown instruction>')
         if not mm:
             continue
-        pc, size, text = int(mm.group(1), 16), len(mm.group(2).split()), mm.group(3)
+        pc, raw, text = int(mm.group(1), 16), bytes(int(x, 16) for x in mm.group(2).split()), mm.group(3)
+        size = len(raw)
+        if tab is not None and tab["start"] <= pc < tab["end"]:
+            tab["bytes"] += raw
+            w, bs = tab["unit"], tab["bytes"]
+            while tab["k"] + w <= len(bs) and tab["start"] + tab["k"] < tab["end"]:
+                e = int.from_bytes(bs[tab["k"]:tab["k"] + w], "little")
+                if e:
+                    tab["end"] = min(tab["end"], tab["start"] + 2 * e)
+                tab["k"] += w
+            continue
+        tab = None
         if pending is not None:
             cur = found.setdefault(pc, (pending, []))
             pending = None
         if cur is not None:
             cur[1].append((pc, size, text))
+        if TB.match(text.strip()):
+            st = pc + size
+            tab = {"start": st, "end": st + 0x20000, "unit": 2 if text.strip().startswith("tbh") else 1, "k": 0,
+                   "bytes": b""}
     starts = sorted(found)
     return starts, [found[a][0] for a in starts], [found[a][1] for a in starts]
 
