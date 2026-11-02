@@ -347,7 +347,7 @@ SEQ_ALLOW = ["seq_step?", "gen_eff?", "gen_deff_of?", "lock_apply?", "sa_locks_o
 # the kernels that call through FAR are no RAM code then (out of the list), and the RAM code that calls them does it through
 # FAR: the dispatchers (ifx_run, ifx_part, ifx_bus, ifx_st, dins_one, already there) and mix_part, a function of its own
 # where a build does not inline it into mix_block / dual_run ("?")
-INS_XIP_OUT = ["ifx_gater", "ifx_lim_run", "ifx_drive", "ifx_ts_run?"]
+INS_XIP_OUT = ["ifx_gater?", "ifx_lim_run", "ifx_drive?", "ifx_ts_run?"]   # (fm1.toml's names as written)
 INS_XIP_IN = ["mix_part?"]
 
 

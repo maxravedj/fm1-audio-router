@@ -102,13 +102,15 @@ ram_code_allow = [
     # the effect buses (fx.c): the reverb's rare clear and parameters, the delay's block, the returns' zeroing, the
     # distortion's gains, the drum inserts' rest; rev_run: rev_bus's per-block worker (the reverb type's parameters through
     # its table, as rev_bus), a function of its own when not inlined ("?": some builds inline it); dins_one: dins_of's
-    # per-insert worker, the same calls (JieLi's compiler inlines it, pi32v2-llvm keeps it a function: "?")
-    "rev_post", "rev_bus", "rev_run?", "dly_run", "fx_ret_block", "dist_run", "dins_of", "dins_one?",
+    # per-insert worker, the same calls (JieLi's compiler inlines it, pi32v2-llvm keeps it a function: "?"); rev_bus: "?",
+    # with ROOM the only reverb built it is fx.c's FX_STEP, inlined into mix_block (REV_BUS_FN)
+    "rev_post", "rev_bus?", "rev_run?", "dly_run", "fx_ret_block", "dist_run", "dins_of", "dins_one?",
     # the insert effects (insfx/*.c): their marks and widths, the gater's block, the limiter's chorus, the drive's gains,
     # TAPE / SPIT's block coefficients (tapespit.c ifx_ts_block through FAR, once a block: tsvf_coef_k divides; "?":
     # a profile with TAPE / SPIT off builds no ifx_ts_run); ifx_run: ifx_part's and ifx_bus's per-slot worker, the
-    # same calls (inlined by JieLi's compiler, a function of its own with pi32v2-llvm: "?")
-    "ifx_st", "ifx_part", "ifx_quiet_part", "ifx_bus", "ifx_gater", "ifx_lim_run", "ifx_drive", "ifx_ts_run?", "ifx_run?",
+    # same calls (inlined by JieLi's compiler, a function of its own with pi32v2-llvm: "?"); ifx_gater and ifx_drive: "?",
+    # a profile without GATER (INS_GATER) or without the shapers (IFX_DRV: FOLD, FUZZ, ...) builds neither
+    "ifx_st", "ifx_part", "ifx_quiet_part", "ifx_bus", "ifx_gater?", "ifx_lim_run", "ifx_drive?", "ifx_ts_run?", "ifx_run?",
     # the USB input track (fx.c ut_mix): the computer's audio through FAR(ua_take), RAM code here (core/opt_core.c, HOT;
     # usb_audio_stream.c's, XIP, on Optimist), so the call stays in RAM; the checker cannot see a pointer's target
     "ut_mix",
