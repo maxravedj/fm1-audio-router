@@ -5,7 +5,8 @@
 // answers an update. Such a port is never asked, not even when the user allowed it or it appeared during an update,
 // and is not offered in the list to Try; the USB port of the same FM-1 is still found.
 //   node tests/installer_bluetooth_test.mjs
-import { Updater, IS_BLUETOOTH, pack7 } from "../web/fm1ota.js";
+import { Updater, pack7 } from "../web/fm1ota.js";
+import { IS_BLUETOOTH } from "../web/fm1ports.js";
 
 let fails = 0;
 const check = (ok, msg) => { console.log(`${msg.padEnd(64)} ${ok ? "ok" : "FAIL"}`); if (!ok) fails++; };

@@ -74,6 +74,8 @@
  *                                environment: the simulator starts with that flash
  *   sd FILE | sd out             (FM1B_SD) an SD card image in (its 512-byte blocks read and written in place), or the
  *                                card out; the app finds it at its next plat_sd_init (FM1B_SD=FILE: in from the start)
+ *   res 0|1                      (FM1B_RES) the resource region there (1, at start) or not (0: an FM-1 updated
+ *                                without it; plat_res 0)
  *   fbdump FILE                  the screen's pixels raw (240 x 240 RGB565, high byte first) into FILE
  *   flash_fail 0|1               every store save fails (1) or works (0); expect store_tries counts the attempts
  *   clock N [MS]                 N MIDI clocks in (F8) over USB, MS apart (default 21: 119 bpm)
@@ -139,6 +141,9 @@
 #ifndef FM1B_MIRROR
 #define FM1B_MIRROR 0                           /* fm1.toml mirror = true (tools/build.py) */
 #endif
+#ifndef FM1B_RES
+#define FM1B_RES 0                              /* fm1.toml resources = FILE */
+#endif
 #ifndef FM1B_BACKUP
 #define FM1B_BACKUP 0                           /* fm1.toml backup = true */
 #endif
@@ -164,7 +169,12 @@
 #define __attribute__(x)
 
 /* ------------------------------------------------------------ screen --- */
+#ifdef PLAT_FB
+static uint16_t *const fb = PLAT_FB;    /* the embedder's own (host/rfm1.c: the panel's LCD) */
+#else
 static uint16_t fb[240 * 240];          /* RGB565, byte-swapped as the panel takes it (gfx.c) */
+#endif
+static uint32_t lcd_changes;            /* every fill and blit (host/rfm1.c: the panel's lcd_writes) */
 static void lcd_sync(void) {}
 #if FM1B_MIRROR
 /* screen mirroring over USB (device/mirror.c), as lcd.c copies each blit and fill to it */
@@ -180,6 +190,7 @@ static void lcd_fill(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint16_t c)
     if (mirror_on && w && h && x < 240u && y < 240u)
         mirror_fill(x, y, x + w > 240u ? 240u - x : w, y + h > 240u ? 240u - y : h, c);
 #endif
+    lcd_changes++;
     for (j = y; j < y + h && j < 240u; j++)
         for (i = x; i < x + w && i < 240u; i++)
             fb[j * 240u + i] = sc;
@@ -189,6 +200,7 @@ static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint1
 {
     uint32_t i, j;
     blits++;
+    lcd_changes++;
     for (j = 0; j < h; j++)
         for (i = 0; i < w; i++)
             if (x + i < 240u && y + j < 240u)
@@ -247,6 +259,8 @@ static void mirror_leds(uint32_t buttons, uint32_t keys) { (void)buttons, (void)
 static uint32_t now_ms, held_btn, held_keys, master = 2048;
 static int32_t enc_acc[NE];
 static uint32_t lit_btn, lit_keys, dim_btn, dim_keys;
+static uint32_t lights_b, lights_db;    /* plat_lights' buttons as given (PLAY's green apart), and its glow */
+static int lights_glow;
 
 uint32_t plat_ms(void) { return now_ms; }
 uint32_t plat_buttons(void) { return held_btn | mirror_in_buttons(); }   /* (+ the host's: the mirror's remote) */
@@ -261,7 +275,11 @@ int32_t plat_enc(int role)
     return v;
 }
 uint32_t plat_master(void) { return mirror_in_master(master); }
-int plat_battery(void) { return 3; }   /* (the host and the emulator: full) */
+#ifdef __EMSCRIPTEN__
+int plat_battery(void) { return -1; }  /* the browser emulator has no battery: not read, so none is shown */
+#else
+int plat_battery(void) { return 3; }   /* (the host simulator: full) */
+#endif
 static int host_hp;                                /* the headphone jack: a script's "jack in" / "jack out" (0: none) */
 int plat_headphones(void) { return host_hp; }   /* (debounced on the device: here the script's state at once) */
 #ifdef APP_BATTERY_RAW
@@ -280,6 +298,7 @@ static uint32_t dim_pulse(void) { return dim_ns_app ? dim_ns_app : dim_glow == 1
 /* the lights ("leds"): bright, and dim (glow 0: none); PLAY's green counts as PLAY */
 void plat_lights(uint32_t b, uint32_t k, uint32_t db, uint32_t dk, int glow)
 {
+    lights_b = b, lights_db = db, lights_glow = glow;
 #ifdef APP_DIM_LEVELS
     dim_glow = glow > 0 ? (uint32_t)glow : 0u;
 #endif
@@ -1033,13 +1052,18 @@ void plat_log(const char *line) { ble_say(line); }
 #define DATA_TOP PLAT_XDATA1_HI
 #define DATA_STORE_HIT(off, n) 0
 #endif
+#ifdef PLAT_DATA_AREA
+static uint8_t *const data_area = PLAT_DATA_AREA;   /* the embedder's own (host/rfm1.c: in its flash image) */
+#else
 static uint8_t data_area[DATA_TOP - DATA_BASE];
+#endif
 static uint8_t data_ready;
 static int data_cmd_rc;                   /* the last script data_erase / data_write: what it returned (expect data_rc) */
+static uint32_t data_writes;            /* every erase and write */
 static void data_init(void)
 {
     if (!data_ready) {
-        memset(data_area, 0xFF, sizeof data_area);
+        memset(data_area, 0xFF, PLAT_XDATA1_HI - DATA_BASE);
         data_ready = 1;
     }
 }
@@ -1074,6 +1098,7 @@ int plat_data_erase(uint32_t off)
     if ((off & 0xFFFu) || !PLAT_DATA_OK(off, 0x1000u) || DATA_STORE_HIT(off, 0x1000u))
         return -1;
     memset(&data_area[off - DATA_BASE], 0xFF, 0x1000u);
+    data_writes++;
     return 0;
 }
 int plat_data_write(uint32_t off, const void *src, uint32_t n)
@@ -1084,6 +1109,7 @@ int plat_data_write(uint32_t off, const void *src, uint32_t n)
         return -1;
     for (i = 0; i < n; i++)                       /* as flash: bits only go from 1 to 0 */
         data_area[off - DATA_BASE + i] &= ((const uint8_t *)src)[i];
+    data_writes++;
     return 0;
 }
 /* the app's SysEx to the computer (plat_sysex_send): the computer reads it at once; each frame is kept for the script
@@ -1476,6 +1502,16 @@ static int expect_console(const char *t, int unwanted)   /* 0: the reply has T i
         printf("  ok %s \"%s\"\n", unwanted ? "unexpect_console" : "expect_console", t);
     return bad;
 }
+#if FM1B_RES
+#include "fm1_res_data.h"                             /* fm1b_res_data: the build's resources (build.py, from the file) */
+static int res_there = 1;                             /* (script "res 0": an FM-1 without them) */
+const uint8_t *plat_res(uint32_t *len)
+{
+    if (len)
+        *len = res_there ? (uint32_t)sizeof fm1b_res_data : 0u;
+    return res_there ? fm1b_res_data : 0;
+}
+#endif
 /* no host to pull from (an app's transfer is tested on its own, or by writing the flash: "data") */
 int plat_host_read(uint32_t addr, uint8_t *dst, uint32_t n) { (void)addr, (void)dst, (void)n; return -1; }
 void plat_host_patience(uint32_t try_ms, uint32_t total_ms) { (void)try_ms, (void)total_ms; }
@@ -1536,6 +1572,8 @@ int plat_usb_audio_play(int32_t *lr, uint32_t n)
     return 0;
 #endif
 }
+static uint32_t usb_play_q12 = 4096u;            /* plat_usb_play_gain: no USB audio on the host; kept for a test */
+void plat_usb_play_gain(uint32_t q12) { usb_play_q12 = q12 > 4096u ? 4096u : q12; }
 
 /* flash: one buffer per object, kept across a simulated reboot */
 static uint8_t store[OBJ_NOBJ][PLAT_STORE_MAX];
@@ -1582,6 +1620,7 @@ int plat_store_size(uint32_t obj)
     store_ready();
     return obj >= OBJ_NOBJ || store_len[obj] <= 0 ? -1 : store_len[obj];
 }
+int plat_store_room(void) { return -1; }   /* (the simulator's store has no pool) */
 int plat_store_save(uint32_t obj, const void *src, uint32_t len)
 {
     store_ready();
@@ -2283,6 +2322,101 @@ void plat_restart(void) { restart_req = 1; }
 static uint8_t web_down;                            /* the browser emulator's restart or update mode: the app is not run,
                                                      * the sound is silence (the page's part "reboot", web/emu/parts) */
 #endif
+/* one millisecond of the device, in three steps (run_ms; host/rfm1.c calls them on its host's clock): the clock and
+ * what runs before the render (sim_ms_begin), the APP_BLOCK-frame renders that have fallen due (sim_render, each),
+ * then the UI (sim_ms_end: a frame every 16 ms, else the input only) */
+static void sim_ms_begin(uint32_t ms)
+{
+    now_ms = ms;
+    ble_tick();
+#if FM1B_BT_AUDIO
+    bta_tick();
+#endif
+#if FM1B_WIFI
+    wifi_tick();
+#endif
+#if defined APP_KEY_SENSE
+    if (sense_on)
+        app_host_tick();                        /* the keys' readings, as the scan hands them over */
+#endif
+#ifdef APP_TICK
+    app_tick();                                 /* 1 kHz, as the device's timer runs it */
+#endif
+#ifdef APP_LOOP
+    app_loop();
+#endif
+}
+
+static void sim_render(int32_t *blk)            /* one APP_BLOCK-frame block, as the device renders it */
+{
+    double t0 = now_ns(), dt;
+    uint32_t k;
+    usb_rec_now = usb_rec_f != 0;               /* (the device reads it at the render's start) */
+    app_render(blk, APP_BLOCK, uac_full ? 4096u : APP_GAIN(master));
+#ifndef APP_USB_PLAY
+    if (FM1B_UAC_OUT && usb_play_buf) {         /* the computer's audio at MASTER and plat_usb_play_gain, as uac_mix.h */
+        static int32_t pl[2 * APP_BLOCK];
+        const float g = (float)(uac_full ? 4096u : master * master >> 12) * (float)usb_play_q12 * (1.0f / (4096.0f * 4096.0f));
+        if (usb_play_take(pl, APP_BLOCK))
+            for (k = 0; k < 2u * APP_BLOCK; k++)
+                blk[k] += (int32_t)((float)pl[k] * g);
+    }
+#endif
+    if (FM1B_UAC && usb_rec_f && !usbh_port()) {   /* the USB audio input: the app's channels, or the master */
+#ifdef APP_USB_CAPTURE
+        usb_rec_put(app_usb_capture(blk, APP_BLOCK), APP_BLOCK);
+#else
+        usb_rec_put(blk, APP_BLOCK);
+#endif
+    }
+    if (uac_full) {                             /* (the USB audio input took it at full level) the speaker: MASTER */
+        const float g = (float)APP_GAIN(master) * (1.0f / 4096.0f);
+        for (k = 0; k < 2u * APP_BLOCK; k++)
+            blk[k] = (int32_t)((float)blk[k] * g);
+    }
+    dt = now_ns() - t0;
+    render_ns_total += dt;
+    render_budget_ns_total += APP_BLOCK * 1e9 / 44100.0;
+    cpu_pct = (uint32_t)(100.0 * dt / (APP_BLOCK * 1e9 / 44100.0));
+}
+
+static void sim_ms_end(int frame)
+{
+    ds_poll(now_ms - hcr_boot_ms, 0u, 0u);       /* (the debug stats: main_fm1.c's pass, once a millisecond) */
+    if (sim_listen && now_ms % 2000u == 0) {        /* the reader's HELLO, as it sends it */
+        static const uint8_t HELLO[] = {ANN_H0, ANN_H1, ANN_H2, ANN_HELLO, ANN_VER};
+        ann_frame(HELLO, sizeof HELLO, now_ms);
+    }
+    if (frame)
+        app_frame();
+    else
+        app_input_only();
+#if FM1B_MIRROR
+    mirror_step();
+    host_mirror_ms();
+#endif
+#if FM1B_COMPANION
+    comp_step();
+#endif
+    hsx_ms();
+#ifdef APP_HOST_MS
+    app_host_ms();
+#endif
+    if (restart_req) {                          /* (as "reboot": the flash kept, the app's RAM forgotten) */
+        restart_req = 0;
+        restarts++;
+#if FM1B_EMU_REBOOT                             /* (no printf: the browser's stdout takes nothing, it never returns) */
+        web_down = 1;                           /* (the page starts the app again from a fresh wasm: the app's RAM
+                                                 * forgotten as the FM-1's, the saved data kept) */
+#else
+        printf("  restart (plat_restart) at %u ms\n", now_ms);
+#ifdef APP_HOST_REBOOT
+        app_host_reboot();
+#endif
+        boot();
+#endif
+    }
+}
 
 static void run_ms(uint32_t ms)
 {
@@ -2300,56 +2434,12 @@ static void run_ms(uint32_t ms)
             continue;
         }
 #endif
-        now_ms++;
-        ble_tick();
-#if FM1B_BT_AUDIO
-        bta_tick();
-#endif
-#if FM1B_WIFI
-        wifi_tick();
-#endif
-#if defined APP_KEY_SENSE
-        if (sense_on)
-            app_host_tick();                        /* the keys' readings, as the scan hands them over */
-#endif
-#ifdef APP_TICK
-        app_tick();                                 /* 1 kHz, as the device's timer runs it */
-#endif
-#ifdef APP_LOOP
-        app_loop();
-#endif
+        sim_ms_begin(now_ms + 1u);
         while (audio_due_ms <= (double)now_ms) {      /* APP_BLOCK-frame blocks, as the device renders them */
-            double t0 = now_ns(), dt;
-            usb_rec_now = usb_rec_f != 0;           /* (the device reads it at the render's start) */
-            app_render(blk, APP_BLOCK, uac_full ? 4096u : APP_GAIN(master));
-#ifndef APP_USB_PLAY
-            if (FM1B_UAC_OUT && usb_play_buf) {     /* the computer's audio at MASTER, as main_fm1.c's uac_play */
-                static int32_t pl[2 * APP_BLOCK];
-                const float g = (float)(uac_full ? 4096u : master * master >> 12) * (1.0f / 4096.0f);
-                if (usb_play_take(pl, APP_BLOCK))
-                    for (k = 0; k < 2u * APP_BLOCK; k++)
-                        blk[k] += (int32_t)((float)pl[k] * g);
-            }
-#endif
-            if (FM1B_UAC && usb_rec_f && !usbh_port()) {   /* the USB audio input: the app's channels, or the master */
-#ifdef APP_USB_CAPTURE
-                usb_rec_put(app_usb_capture(blk, APP_BLOCK), APP_BLOCK);
-#else
-                usb_rec_put(blk, APP_BLOCK);
-#endif
-            }
-            if (uac_full) {                         /* (the USB audio input took it at full level) the speaker: MASTER */
-                const float g = (float)APP_GAIN(master) * (1.0f / 4096.0f);
-                for (k = 0; k < 2u * APP_BLOCK; k++)
-                    blk[k] = (int32_t)((float)blk[k] * g);
-            }
+            sim_render(blk);
 #ifdef PLAT_WEB
             web_audio(blk, APP_BLOCK);
 #endif
-            dt = now_ns() - t0;
-            render_ns_total += dt;
-            render_budget_ns_total += APP_BLOCK * 1e9 / 44100.0;
-            cpu_pct = (uint32_t)(100.0 * dt / (APP_BLOCK * 1e9 / 44100.0));
             for (k = 0; k < APP_BLOCK; k++) {
                 float l = (float)blk[2 * k] / 8388608.0f, r = (float)blk[2 * k + 1] / 8388608.0f;
                 int16_t s[2];
@@ -2367,41 +2457,11 @@ static void run_ms(uint32_t ms)
             audio_due_ms += APP_BLOCK * 1000.0 / 44100.0;
             hds_halves++;
         }
-        ds_poll(now_ms - hcr_boot_ms, 0u, 0u);       /* (the debug stats: main_fm1.c's pass, once a millisecond) */
-        if (sim_listen && now_ms % 2000u == 0) {        /* the reader's HELLO, as it sends it */
-            static const uint8_t HELLO[] = {ANN_H0, ANN_H1, ANN_H2, ANN_HELLO, ANN_VER};
-            ann_frame(HELLO, sizeof HELLO, now_ms);
-        }
         if (now_ms >= ui_due) {
             ui_due = now_ms + 16;
-            app_frame();
+            sim_ms_end(1);
         } else {
-            app_input_only();
-        }
-#if FM1B_MIRROR
-        mirror_step();
-        host_mirror_ms();
-#endif
-#if FM1B_COMPANION
-        comp_step();
-#endif
-        hsx_ms();
-#ifdef APP_HOST_MS
-        app_host_ms();
-#endif
-        if (restart_req) {                          /* (as "reboot": the flash kept, the app's RAM forgotten) */
-            restart_req = 0;
-            restarts++;
-#if FM1B_EMU_REBOOT                                 /* (no printf: the browser's stdout takes nothing, it never returns) */
-            web_down = 1;                           /* (the page starts the app again from a fresh wasm: the app's RAM
-                                                     * forgotten as the FM-1's, the saved data kept) */
-#else
-            printf("  restart (plat_restart) at %u ms\n", now_ms);
-#ifdef APP_HOST_REBOOT
-            app_host_reboot();
-#endif
-            boot();
-#endif
+            sim_ms_end(0);
         }
     }
 }
@@ -2540,6 +2600,10 @@ static int expect(const char *what, const char *val)
 #endif
     else if (!strcmp(what, "clocks_out"))
         got = (int)clock_out_count;
+    else if (!strcmp(what, "usb_play_gain"))        /* plat_usb_play_gain's level, 0..4096 */
+        got = (int)usb_play_q12;
+    else if (!strcmp(what, "usb_audio_full"))       /* plat_usb_audio_full: 1 full, 0 at MASTER */
+        got = uac_full;
     else if (!strcmp(what, "midi_out"))
         got = (int)midi_out_count;
     else if (!strcmp(what, "midi_in_from"))         /* plat_midi_in_from: 1 USB, 2 BLE, 8 BLE-DEV, 0 TRS */
@@ -3052,6 +3116,10 @@ int main(int argc, char **argv)
             printf("\n");
         } else if (!strcmp(cmd, "expect"))
             fails += expect(a, b);
+#if FM1B_RES
+        else if (!strcmp(cmd, "res"))             /* res 0|1: the resource region there or not */
+            res_there = atoi(a) != 0;
+#endif
         else if (!strcmp(cmd, "data_erase"))      /* data_erase OFFSET: plat_data_erase, as an app calls it */
             data_cmd_rc = plat_data_erase((uint32_t)strtoul(a, 0, 0));
         else if (!strcmp(cmd, "data_write")) {    /* data_write OFFSET HEX: plat_data_write of those bytes */

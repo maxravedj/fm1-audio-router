@@ -31,8 +31,9 @@ parts it has.
 | Pairing on the own stack (LE legacy pairing, the bond kept) | `ble_pairing = true`, with `ble_stack = "own"` | nothing |
 | Bluetooth MIDI in by the sender's time (for an app that follows a clock by time) | `ble_midi_time = true`, with `ble_stack = "own"` | `plat_midi_in_t24` after `plat_midi_in` |
 | Bluetooth audio to headphones and speakers (A2DP) | `bt_audio = true`, with `ble_stack = "own"`; `bt_log = true` puts its set-up on the radio's log | `plat_bta_on`, `plat_bta_scan`, `plat_bta_found`, `plat_bta_known`, `plat_bta_pick`, `plat_bta_reconnect`, `plat_bta_forget`, `plat_bta_hangup`, `plat_bta_state` |
-| USB audio: the FM-1 recorded over the cable | on unless `usb_audio_in = false` | nothing: the master output |
-| USB audio: a computer plays through the FM-1 | on unless `usb_audio_out = false` (needs the input too) | nothing: mixed after the app, at MASTER |
+| USB audio: the FM-1 recorded over the cable | on unless `usb_audio_in = false` | nothing: the app's output at MASTER, without the computer's audio (taken before it is mixed in) |
+| USB audio: a computer plays through the FM-1 | on unless `usb_audio_out = false` (needs the input too) | nothing: mixed after the app and after the recording's tap, at MASTER; `plat_usb_play_gain` (0 muted .. 4096, the default) for the app's own setting |
+| USB MIDI after the USB audio interfaces, so macOS 13-15 show the audio device | on with the USB audio input, unless `usb_midi_last = false` | nothing |
 | Velocity and pressure from the keys | `#define APP_TOUCH` in app.h | `touch_on`, `touch_poll`, `touch_keys`, `touch_vel`, `touch_pressure` (lib/touch.h) |
 | WiFi: a station on the networks around, with lwIP's sockets | `wifi = true` (not with `ble`, yet), and `net = [...]` for the app's network code | `plat_wifi_on`, `plat_wifi_state`, `plat_wifi_scan`, `plat_wifi_found`, `plat_wifi_join`, `plat_wifi_saved`, `plat_wifi_forget`, `plat_net_task` |
 | WiFi on fm1-base's own stack, beside Bluetooth: a WPA2 station, UDP (below) | `wifi_stack = "own"`, with `wifi` and `ble_stack = "own"` | the calls above but `plat_net_task`, and `plat_wifi_mode`, `plat_wifi_step`, `plat_wifi_found_ap`, `plat_wifi_join_ssid`, `plat_wifi_leave`; `plat_net_udp_open`, `plat_net_udp_send`, `plat_net_udp_close`, `plat_net_join` |
@@ -55,6 +56,7 @@ parts it has.
 | The USB host's device by name (its product string), for the app's own page | `#define APP_USB_HOST_NAME` in app.h, with `usb_host` | `plat_usb_host_name` |
 | Lower case in the big fonts | `font_full = ["L"]` | the fonts as ever |
 | The browser emulator's own parts (`tools/build.py --web`): web/emu/parts, each file saying what it does; without any, the page and app.wasm are as before | `emu = ["name", ...]` (or `FM1B_EMU="name ..."` for one build) | nothing, unless a part says so |
+| The firmware as an `.rfm1` for host apps (RemoteFM1 for iOS), below | `tools/build.py APP_DIR --rfm1` | nothing |
 
 Every firmware also counts each port's MIDI messages, in and out: `plat_midi_count(PORT_*, out)` for counters,
 `plat_midi_ago` for activity lights.
@@ -233,10 +235,42 @@ regions: 24 KB of RAM code, 128 KB of RAM, a 304 KB pool). Measured on the templ
 MASTER, and reads back what the screen says (the screen reader's channel), the last crash and the radio's log; with
 WiFi, it turns it on and off, joins networks and reads its state (`wifi ...`).
 For example, `tools/fm1_remote.py listen tap REC wait 3000 screen log`.
+It finds the FM-1 as the web pages do (`tools/fm1ports.py`, the same rules as `web/fm1ports.js`): a port with an
+FM-1's usual name, or else one that answers the screen reader's HELLO, whatever it is called; `--port NAME` picks one.
+`tools/fm1_install.py`, `fm1_backup.py`, `fm1_mirror.py` and `fm1_debug.py` find it the same way.
 
 The site's installer page (`tools/make_site.py`, from `web/installer.html`) reads the same crash record and log in
 Chrome or Edge: "Report a problem" shows them, ready to copy, so a player can send them without Python. The record
 survives a restart, not switching off.
+
+The pages find the FM-1 with `web/fm1ports.js`, under any port name: a port with one of the FM-1's usual names, one
+the player picked (Try), or one that answers the screen reader's HELLO, which every fm1-base firmware does. Only the
+HELLO goes to other ports, three times: its ID, 7D, is the one for non-commercial use, which other gear ignores.
+The [FM-1 Screen Reader](https://github.com/charlesvestal/fm1-reader)'s page uses the same file, as a copy.
+
+The screen reader's firmware side lives here too: `device/announce.c` and `tools/gen_words.py` (MPL-2.0, like the
+rest; see LICENSING.md) are the one copy. fm1-reader keeps the page, the voice, the protocol (its PROTOCOL.md), the audit and the skill, and its
+`tools/sync_announce.sh` copies these two files into the firmwares not on fm1-base.
+
+## .rfm1: your firmware in host apps
+
+An `.rfm1` file is your firmware built to run inside an app instead of on the FM-1: RemoteFM1 for iOS first, as
+an instrument or an AUv3. It is the host simulator compiled to WebAssembly, the same app as on the FM-1, with a
+manifest (name, version, licence, the source at its commit), your credits and the licence texts. Users download it
+from your release and put it in the app's firmware folder. The format is RemoteFM1IOS's
+[docs/RFM1-FORMAT.md](https://github.com/Quixotic7/RemoteFM1IOS/blob/main/docs/RFM1-FORMAT.md).
+
+    tools/build.py APP_DIR --rfm1 [--release X.Y]    # APP_DIR/build/rfm1/ID-VERSION.rfm1 (emcc, as --web)
+
+The ID is fm1.toml's `name` in lower case. Without `--release` the version is `dev+` and the app repository's commit.
+The manifest's `source_url` is fm1.toml's `repo` at that commit, so commit (and push) what you build. Its `license`
+is fm1.toml's `licence`, and its authors are `authors = ["..."]` or the repository's first author. The memory is fixed
+at 8 MiB (`rfm1_memory_mib`, at most 32). The build checks the module against the format before it writes the file.
+
+In the app, the panel, screen, LEDs, sound, MIDI both ways, velocity and pressure (`APP_TOUCH`) and the screen
+reader (over SysEx) work as in the browser emulator. Saved objects and the data area are kept by the app with its
+state. There is no radio, no USB host and no environment (`getenv` returns nothing). `tests/rfm1_test.mjs FILE`
+drives a file as a host app does.
 
 ## Moving a Felucca-based firmware here
 

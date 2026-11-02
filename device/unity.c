@@ -22,7 +22,8 @@
  *   FM1B_UAC_RING_POOL 0    1: the USB audio input's 2 KB ring in the pool, its RAM left to the app
  *   FM1B_UAC_MEM 0          1: the USB audio rings (in and out) a block the app lends only while the computer streams
  *                           (fm1.toml usb_audio_mem = "app": plat.h plat_usb_audio_mem), not static RAM
- *   FM1B_UAC_OUT 1          USB audio output: the computer plays through the FM-1, mixed after the app, at MASTER
+ *   FM1B_UAC_OUT 1          USB audio output: the computer plays through the FM-1, mixed after the app and after the
+ *                           USB recording's tap, at MASTER and plat_usb_play_gain (device/uac_mix.h)
  *                           (an app with APP_USB_PLAY mixes it itself: plat_usb_audio_play)
  *   FM1B_UAC_CH 2           the USB audio input's channels (fm1.toml usb_audio_in_channels, 1..8): 2 the master; any
  *                           other count the app's own (APP_USB_CAPTURE: app_usb_capture), 2 may be too
@@ -42,6 +43,7 @@
  *   FM1B_BLE 0              Bluetooth MIDI (fm1.toml ble = true; tools/build.py --no-ble leaves it out)
  *   FM1B_MIRROR 0           the screen and panel mirrored over USB (fm1.toml mirror = true: mirror.c)
  *   FM1B_BACKUP 0           backup and restore of the app's objects over USB (fm1.toml backup = true: backup.c)
+ *   FM1B_RES 0              the resource region (fm1.toml resources = FILE: res.c; with backup)
  *   FM1B_CPU2 0             the second core (fm1.toml cpu2 = true: cpu2.c, felucca-bsp's fm1_cpu1.h)
  *   FM1B_COMPANION 0        the companion services over USB (fm1.toml companion = true: companion.c)
  *   FM1B_ERASE_SLICED 1     the store's and plat_data's erases in windows of about 1 ms, the sound on (felucca-bsp's
@@ -177,6 +179,9 @@ static volatile uint32_t fm1_ms;  /* milliseconds since boot (TIMER4-based, TIME
 #endif
 #ifndef FM1B_MIRROR
 #define FM1B_MIRROR 0
+#endif
+#ifndef FM1B_RES
+#define FM1B_RES 0
 #endif
 #ifndef FM1B_BACKUP
 #define FM1B_BACKUP 0
@@ -388,6 +393,11 @@ static void rs_begin(void)                          /* a backup is coming: patie
     ota_try_ms = 5000u;
     ota_deadline = ota_now_ms() + 120000u;
 }
+static void rs_show(uint32_t pct);
+#if FM1B_RES
+#include "fm1_res.h"              /* FM1B_RES_LEN, FM1B_RES_CRC: the build's resources (build.py, from the file) */
+#include "res.c"                  /* the resource region (tools/fm1_resources.py) */
+#endif
 static void rs_show(uint32_t pct)
 {
     char b[8];

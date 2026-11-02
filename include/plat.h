@@ -659,6 +659,11 @@ uint32_t plat_console_write(const void *p, uint32_t n);   /* -> the bytes taken 
 void plat_console_present(int on);        /* the console presented (the default) or not, e.g. from a setting: in app_init
                                            * before USB starts; later, the FM-1 leaves the bus and comes back as the
                                            * other device */
+/* the resource region (fm1.toml resources = FILE, FM1B_RES; app.h APP_RES_BASE, APP_RES_SECTORS: device/res.c):
+ * the file's bytes read in place, *len their count; 0 (and *len 0) while the FM-1 does not hold this build's (not
+ * yet written after an update, torn, another build's): the app does without. The host writes it
+ * (tools/fm1_resources.py; the installer after an update); a sound reading it is stopped first (app_panic) */
+const uint8_t *plat_res(uint32_t *len);
 
 /* the app's own commands in the update's SysEx framing (F0 pack7(00 59 cmd len24 body ~sum) F7: felucca-bsp ota.c),
  * an app with APP_USB_CMD: app_usb_cmd(d, n) gets each frame whose cmd the platform does not take (d: the decoded
@@ -702,6 +707,12 @@ void plat_usb_audio_stats(plat_usb_audio_stats_t *s);
  *                               streams prime again from silence */
 uint32_t plat_usb_audio_mem_bytes(void);
 void plat_usb_audio_mem(void *p);
+/* the computer's audio (FM1B_UAC_OUT, usb_audio_out: the computer plays through the FM-1): the level it is mixed in
+ * at, 0 muted .. 4096 as sent (the default; above is 4096), times MASTER. Muted, the FM-1 still takes the stream, so
+ * the computer sees no change and turning it up again starts in step. The USB recording (usb_audio_in) is taken
+ * before the computer's audio is mixed in, whatever this is: recording the FM-1 never records the computer's own
+ * playback (device/uac_mix.h). Without usb_audio_out, nothing */
+void plat_usb_play_gain(uint32_t q12);
 
 /* the keys' velocity and pressure (an app with APP_KEY_SENSE): on, the scan reads the keys on the analog rows and
  * hands each reading to the app (app_key_sample, app_key_probe); off by default */
@@ -725,9 +736,16 @@ int plat_store_head(uint32_t obj, void *dst, uint32_t n);     /* its first n byt
                                                                * shorter */
 int plat_store_size(uint32_t obj);                           /* its length in bytes, < 0 = none / bad (an app that
                                                                * wants it whole or not at all checks it first) */
-int plat_store_save(uint32_t obj, const void *src, uint32_t len);   /* 0 = ok */
+int plat_store_save(uint32_t obj, const void *src, uint32_t len);   /* 0 = ok; -8: the pool is full (nothing written) */
+/* an app with a pool (app.h APP_STORE_POOL: storage.c): the sectors free for its pooled objects' next copies (a save
+ * of n objects that finds n keeps every previous copy); -1 no pool */
+int plat_store_room(void);
 #define PLAT_STORE_MAX 3840u           /* bytes per object */
-/* The objects are the app's (app.h): an enum that includes OBJ_PANEL (the panel calibration, the platform's) and
+/* An app may pool some objects (APP_STORE_POOL, APP_STORE_POOL_BASE / _N / _OBJ0 / _OBJN / _OLD: storage.c): those
+ * share sectors instead of a pair each, and APP_STORE_MAP's entries for them are not used. APP_STORE_POOL_EMPTY(obj, p,
+ * n), if the app defines it: true for an old copy that holds nothing worth a sector (a placeholder of the layout
+ * before the pool): the move into the pool drops the object instead (every copy of it erased).
+ * The objects are the app's (app.h): an enum that includes OBJ_PANEL (the panel calibration, the platform's) and
  * ends with OBJ_NOBJ, and APP_STORE_MAP, each object's flash offset: two 4 KiB sectors (A/B) from there, inside the
  * data area (0x97000..0xDFFFF) or Felucca's settings sector pair at 0xFC000. An object's number is written in its
  * record, so an app keeps its numbering from one release to the next. app.h `#define APP_STORE_BOUNCE 1`: the store

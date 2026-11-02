@@ -9,6 +9,9 @@
   tools/build.py APP_DIR --web         the browser emulator instead: APP_DIR/build/emu/ (emcc); the page is the
                                        simulator alone (panel, screen, sound, screen reader), for a site to link or frame;
                                        an app may bring its own (APP_DIR/web/emu/index.html, worklet.js)
+  tools/build.py APP_DIR --rfm1        the app as an .rfm1 instead: APP_DIR/build/rfm1/ID-VERSION.rfm1 (emcc), the
+                                       host simulator in WebAssembly for host apps (RemoteFM1 for iOS: RemoteFM1IOS's
+                                       docs/RFM1-FORMAT.md); host/rfm1.c, tools/rfm1_pack.py
 
 APP_DIR holds the app (app.h, app.c, its sources) and its fm1.toml:
   name = "TEMPLATE"          the build's file names (lower case)
@@ -21,6 +24,8 @@ APP_DIR holds the app (app.h, app.c, its sources) and its fm1.toml:
                              (plat.h plat_dev_id, plat_dev_name: "FM1-XXXX"); the manufacturer stays usb_manufacturer's
   o2 = ["dsp/engine.c"]      separate units compiled at -O2 (the app's DSP), relative to APP_DIR (globs too); each with
                              its own directory on the include path
+  unity_opt = "z"            the unity build (the platform, the app but its o2 units) at -Oz instead of -Os: smaller,
+                             a little slower (what runs in the audio interrupt outside the o2 units, too)
   o2_cflags = ["-DX=1"]      more flags for those; o2_include = ["lib/prefix.h"]: a header included first in each
   include = ["dsp/lib"]      more include directories, relative to APP_DIR
   device_include = ["inc"]   include directories for the firmware only (headers the toolchain lacks)
@@ -33,6 +38,8 @@ APP_DIR holds the app (app.h, app.c, its sources) and its fm1.toml:
   vendored = ["third_party/"]   other people's libraries, compiled for the FM-1 with their machine-specific code off
                              by flags: the register check skips them entirely (it reads the text: x86 asm behind
                              an #if would fail it)
+  rfm1_memory_mib = 8        the .rfm1's fixed memory (MiB, 1..32; default 8)
+  authors = ["Name"]         the .rfm1 manifest's authors (default: the app repository's first commit's author)
   words = "words.tsv"        the screen reader's words (fm1-reader), relative to APP_DIR
   font_full = ["L"]          font roles with lower case too (by default M and L have capitals and digits only)
   font_trim = true           each glyph stored as its lit box only (tools/gen_font.py FM1_FONT_TRIM): the same
@@ -59,7 +66,16 @@ APP_DIR holds the app (app.h, app.c, its sources) and its fm1.toml:
   usb_audio_out = true       a computer plays through the FM-1 over USB (FM1B_UAC_OUT; the default: true)
   usb_audio_first = true     the USB audio streaming interfaces listed first in the audio control collection
                              (felucca-bsp FELUCCA_UAC_AS_FIRST, from Felucca 1.5.1): macOS then shows the FM-1 as an audio
-                             device beside its MIDI; bcdDevice +0.08 (a changed device to the computer)
+                             device beside its MIDI; bcdDevice +0.08 (a changed device to the computer). Not enough
+                             for macOS 13-15 (fm1-loom#7, Felucca #67): usb_midi_last is; with it this changes nothing
+  usb_midi_last = false      the USB MIDI interface after the audio streaming ones (felucca-bsp FELUCCA_UAC_MIDI_LAST;
+                             the default: true with usb_audio_in, false with usb_audio_split, which has its own interface order): audio control, audio in, audio out, MIDI, and the
+                             audio control collection in that order. macOS 13-15 show no USB audio device while MIDI is
+                             interface 1, between audio control and audio streaming (bisected by darosh on macOS 15.8.1);
+                             bcdDevice +0.20 x 1 in its high byte (felucca-bsp's own +0.80 is usb_audio_out_feedback's here). false: the order of fm1-base before 2026-10-31 (MIDI interface 1).
+                             2: MIDI left out of the collection too (a test build: no USB MIDI on Linux)
+  usb_iad = true             without the USB console, an interface association descriptor over the audio function, the
+                             device then misc / IAD (felucca-bsp FELUCCA_UAC_IAD; the default: false; not with usb_audio_split); bcdDevice +0.60 in the high byte
   usb_audio_in_channels = 4  the USB audio input's channels, 1..8 (FM1B_UAC_CH; default 2, the master): the app gives
                              them (app.h APP_USB_CAPTURE, plat.h)
   usb_audio_in_24bit = true  the USB audio input in 24-bit too (FM1B_UAC_24: a second alt setting, 16-bit stays)
@@ -110,6 +126,12 @@ APP_DIR holds the app (app.h, app.c, its sources) and its fm1.toml:
                              tools/fm1_backup.py); app.h gives APP_BACKUP_OBJS, _MAGIC, _VERSION and the app_backup_* hooks
   companion = true           the companion services over USB (FM1B_COMPANION: device/companion.c, docs/COMPANION.md;
                              tools/fm1_companion.py): what the firmware is and has, for a generic page or tool
+  resources = "FILE"         the resource region (FM1B_RES: device/res.c, plat_res in plat.h; with backup): FILE (relative
+                             to APP_DIR, {gen} the generated headers' directory: an app's gen step may make it) kept out
+                             of the image in app.h's APP_RES_BASE, APP_RES_SECTORS, written by the host after an update
+                             (tools/fm1_resources.py, fm1_install.py and the installer page: build/NAME-res.bin beside
+                             the package); the host and web builds have it compiled in. resources_what (and
+                             resources_what_ja): what it holds, in the installer's words ("the 909 cymbals")
   cpu2 = true               the second core (FM1B_CPU2: device/cpu2.c, plat_cpu2_* in plat.h, on felucca-bsp's
                              chip/fm1_cpu1.*): a worker for a part of the render. A failure of it (a misread, a
                              fault, a late job) restarts the FM-1, the reason in the crash record (Melodee's releases)
@@ -143,6 +165,9 @@ APP_DIR holds the app (app.h, app.c, its sources) and its fm1.toml:
                              refused to plat_data_erase / plat_data_write
 Optional parts: only what an fm1.toml asks for is built in (Bluetooth, USB audio; an app's lib/touch by APP_TOUCH in
 app.h); the build prints what it has.
+  boot_pack = true           .ram_text and .data stored LZMA-packed (tools/boot_pack.py, Melodee's; device/boot_lzma.h): the
+                             boot unpacks them, the decoder's tables in the pool before it is cleared (about 9 KB of
+                             flash back on a large app)
   ble_stack = "own"          with ble: Optimist's own Bluetooth stack (bt/: Henri David's, docs/bt/BLE-STACK.md;
                              FM1B_BLE_OWN) instead of JieLi's libraries: nothing of the SDK's linked, no shim
   ble_pairing = true         with ble_stack = "own": pairing and an encrypted link (LE legacy pairing, Just Works),
@@ -186,12 +211,6 @@ app.h); the build prints what it has.
                              `ir_pass IN.ll OUT.ll [UNIT]` (UNIT: an o2 unit's path relative to APP_DIR; none for
                              unity.c), then compiles OUT.ll at the unit's level (an app marking its cold code
                              minsize: Melodee's idea). Without changes the round trip makes the same code
-  boot_pack = "tools/pack.py"   the app's coder for what the start copies into RAM (relative to APP_DIR): the build
-                             runs `boot_pack OUT DATA RAMTEXT` (.data's initial values and .ram_text, each a binary
-                             file; OUT the coded stream to write) and puts OUT in the image right after the code
-                             (_etext) instead of the two copies; the app's app_boot_unpack (plat.h) decodes it at the
-                             start (FM1B_BOOT_PACK). The linker's load addresses for the two are then outside the
-                             image (a PACK region), so only the stream counts against the slot
 The app's own code that runs from RAM (out of the XIP cache's way: an audio path) goes in section .app_ram (plat.h
 PLAT_RAM_CODE): copied at boot with .ram_text, inside the guard's RAM code window (between _ar_start and _ar_end). It
 may call only RAM code, to any depth, and nothing through a pointer (tools/ramcode.py, over the disassembly). XIP code
@@ -228,6 +247,7 @@ CONF = {}
 LAYOUT = {}                                       # the linked script's MEMORY regions: {name: (origin, length)}
 sys.path.insert(0, str(SRC / "tools"))
 import fm1pkg_make  # noqa: E402
+import boot_pack  # noqa: E402
 import lz4blk  # noqa: E402
 
 APP_XIP = 0x02000120                # app.bin offset 0 in the XIP map; the SPL jumps here
@@ -397,6 +417,43 @@ def generate():
         if r.returncode:
             sys.stderr.write(r.stderr)
             raise SystemExit(f"build: {c[0]} failed")
+    if CONF.get("resources"):
+        gen_resources()
+
+
+RES_MAGIC = 0x31534552                        # "RES1" (device/res.c)
+
+
+def res_payload():
+    """the resource region's payload: fm1.toml resources = FILE"""
+    f = APP / CONF["resources"].replace("{gen}", str(GEN))
+    if not f.is_file():
+        raise SystemExit(f"build: fm1.toml resources {CONF['resources']!r}: no such file ({f})")
+    return f.read_bytes()
+
+
+def res_file(payload):
+    """NAME-res.bin: the region as the FM-1 holds it, its header (the commit record) then the payload"""
+    import zlib
+    crc = zlib.crc32(payload)
+    head = struct.pack("<7I", RES_MAGIC, len(payload), crc, 0, 0, 0, 0)
+    return head + struct.pack("<I", zlib.crc32(head)) + payload
+
+
+def gen_resources():
+    """fm1_res.h (the payload's length and CRC-32: device/res.c checks the region against them) and fm1_res_data.h
+    (the payload itself, for the host and web builds)"""
+    import zlib
+    if not CONF.get("backup"):
+        raise SystemExit("build: fm1.toml resources needs backup = true (the transfer is the restore's)")
+    p = res_payload()
+    if not p:
+        raise SystemExit("build: fm1.toml resources: an empty file")
+    (GEN / "fm1_res.h").write_text("/* generated by tools/build.py from fm1.toml resources: device/res.c */\n#pragma once\n"
+                                   f"#define FM1B_RES_LEN {len(p)}u\n#define FM1B_RES_CRC {zlib.crc32(p):#010x}u\n")
+    rows = ",\n".join(",".join(str(b) for b in p[i:i + 32]) for i in range(0, len(p), 32))
+    (GEN / "fm1_res_data.h").write_text("/* generated by tools/build.py from fm1.toml resources: host/plat_host.c */\n"
+                                        "#pragma once\nstatic const uint8_t fm1b_res_data[] = {\n" + rows + "};\n")
 
 
 # ---- update loader
@@ -794,6 +851,9 @@ def wifi_own_flags(host=False):
     return f
 
 
+BOOT_PACKED = None                                # (raw, packed) bytes of the boot-packed load images, or None
+
+
 def build_app():
     flags = [*CFLAGS, *FPU, *inc(BSP / "chip", BSP / "boards" / "fm1", SRC / "device", SRC / "include", SRC / "lib", APP, GEN,
                                  *(APP / d for d in CONF.get("include", []) + CONF.get("device_include", [])))]
@@ -833,6 +893,14 @@ def build_app():
             raise SystemExit("build: usb_console's endpoint (EP3) is usb_audio_out_feedback's and usb_audio_split's: "
                              "not with them")
         flags.append("-DFM1B_CDC=1")              # the USB serial console (device/console.c)
+    midi_last = CONF.get("usb_midi_last", not CONF.get("usb_audio_split"))   # (the bsp leaves it out without the USB audio input)
+    if midi_last not in (True, False, 0, 1, 2):
+        raise SystemExit(f"fm1.toml: usb_midi_last is true, false or 2, not {midi_last!r}")
+    if CONF.get("usb_audio_split") and (midi_last or CONF.get("usb_iad")):
+        raise SystemExit("build: usb_audio_split has its own interface order and IADs: not with usb_midi_last or usb_iad")
+    flags.append(f"-DFELUCCA_UAC_MIDI_LAST={int(midi_last)}")
+    if CONF.get("usb_iad"):
+        flags.append("-DFELUCCA_UAC_IAD=1")
     for flag in ("FM1B_CDC", "FM1B_UAC", "FM1B_UAC_OUT", "FM1B_TRS", "FM1B_ERASE_SLICED"):
         v = os.environ.get(flag)    # unset: fm1.toml's, the app's (app.h) or the platform's default (device/unity.c)
         if v in ("0", "1"):
@@ -848,13 +916,15 @@ def build_app():
         flags.append(f"-DFELUCCA_USB_NAME_FN={fn}")
     if VERSION:
         flags.append(f'-DAPP_VERSION="{VERSION}"')
-    if CONF.get("boot_pack"):                     # the app decodes what the start copies into RAM (app_boot_unpack)
-        flags.append("-DFM1B_BOOT_PACK=1")
     flags.append(f"-DFM1B_BUILD={build_id():#010x}u")   # (the crash history's records carry it: device/crashlog.c)
     if CPU2:
         flags += ["-DFM1_CPU1=1", f"-DFM1_CPU1_FALLBACK={int(bool(CONF.get('cpu2_fallback')))}"]
         flags += cpu2_stack_flags()
     o2 = [f if f != "-Os" else "-O2" for f in flags]
+    unity_opt = CONF.get("unity_opt", "s")        # the unity build's level: -Os, or -Oz (the o2 units stay -O2)
+    if unity_opt not in ("s", "z"):
+        raise SystemExit(f"fm1.toml: unity_opt is \"s\" or \"z\", not {unity_opt!r}")
+    flags = [f"-O{unity_opt}" if f == "-Os" else f for f in flags]
     ir = CONF.get("ir_pass")                      # the app's pass over the IR (see the top)
     ir_out = ["-S", "-emit-llvm", "-Xclang", "-disable-llvm-optzns"] if ir else ["-c"]   # (IR: -S, so no -c: clang warns "-c unused")
     units = [("cc", "-c", BSP / "chip" / "crt0.S", "-o", OUT / "crt0.o"),
@@ -895,7 +965,7 @@ def build_app():
             ir_pass(o.with_suffix(".ll"), o.with_suffix(".pass.ll"), str(f.relative_to(APP)))
         opt = [f for f in flags if not f.startswith(("-I", "-D", "-W"))]
         cg = [("cc", *opt, "-c", OUT / "unity.pass.ll", "-o", OUT / "unity.o"),
-              *[("cc", *[f if f != "-Os" else "-O2" for f in opt], "-c", o.with_suffix(".pass.ll"), "-o", o)
+              *[("cc", *[f if f not in ("-Os", "-Oz") else "-O2" for f in opt], "-c", o.with_suffix(".pass.ll"), "-o", o)
                 for _, o in o2_units]]
         if os.environ.get("FM1B_OPT_IR") == "1" or CONF.get("stack_check"):   # each unit's IR as its code is made from it (the optimiser's
             # output, the backend's input: Optimist's tools/stack_depth.py resolves the indirect calls on it)
@@ -910,17 +980,18 @@ def build_app():
     global LAYOUT
     ld = SRC / "device" / ("app_wifi.ld" if WIFI else "app.ld")
     if app_slot() != APP_SLOT:    # a bigger slot (app_end): the script with XIP that long
-        text, n = re.subn(r"(XIP\s*\(rx\)\s*:\s*ORIGIN = 0x02000120, LENGTH = )0x8DFBC", rf"\g<1>{app_slot():#X}".replace("0X", "0x"),
-                          ld.read_text())
+        text = ld.read_text()
+        room = 0x10000 if "_app_xip_end" in text else 0   # (app.ld: the slot and 64 KB, the image before boot_pack packs it)
+        text, n = re.subn(r"(XIP\s*\(rx\)\s*:\s*ORIGIN = 0x02000120, LENGTH = )0x[0-9A-Fa-f]+",
+                          rf"\g<1>{app_slot() + room:#X}".replace("0X", "0x"), text)
         if n != 1:
             raise SystemExit(f"build: {ld.name}: no XIP line to give the slot")
+        text = text.replace("ORIGIN(XIP) + 0x8DFBC;", f"ORIGIN(XIP) + {app_slot():#x};")
         ld = OUT / ld.name
         ld.write_text(text)
     if not WIFI and stacks() != STACKS:          # (other stack sizes: the SRAM's end and the bands moved)
         ld = stack_script(ld)
     LAYOUT = memory_regions(ld.read_text())
-    if CONF.get("boot_pack"):                     # the RAM copies' load addresses out of the image: the stream is there
-        ld = pack_script(ld)
     tc("pi32v2/bin/ld", *lto, "--gc-sections", "-e", "_start", "-T", ld, *objs, *b_objs,
        *b_libs, "-o", elf)
     for sect in ("text.bin", "data.bin", "ramtext.bin"):
@@ -936,8 +1007,17 @@ def build_app():
     def symv(name):
         return int(re.search(r"^([0-9a-f]+) .*\s" + name + r"$", syms, re.M).group(1), 16)
     img = bytearray((OUT / "text.bin").read_bytes())
-    if CONF.get("boot_pack"):
-        img += boot_stream(symv("_etext") - APP_XIP - len(img))
+    if CONF.get("boot_pack"):                     # boot_pack = true: .ram_text and .data stored LZMA-packed from _rt_load
+        global BOOT_PACKED                        # (tools/boot_pack.py, Melodee's), main_fm1.c unpacks them
+        raw = [(OUT / sect).read_bytes() if (OUT / sect).exists() else b"" for sect in boot_pack.SECTIONS]
+        load = symv("_rt_load")
+        if load % 4 or load - APP_XIP < len(img):
+            raise SystemExit(f"_rt_load {load:#x}: not word aligned, or over the image")
+        img += b"\xff" * (load - APP_XIP - len(img))
+        packed = boot_pack.pack_images(raw)
+        img += packed
+        BOOT_PACKED = (sum(map(len, raw)), len(packed))
+        img += b"\xff" * (-len(img) % 4)
         (OUT / (NAME + ".bin")).write_bytes(img)
         return bytes(img), syms, dis, rt
     # .ram_text and .data follow .text at their load addresses; crt0 copies them by words
@@ -1018,41 +1098,6 @@ def stack_check(dis):
         else:
             notes.append(line)
     return errors, notes
-
-
-def pack_script(ld):
-    """-> OUT/NAME_pack.ld: the linker script with the RAM copies' load addresses in a region of their own (PACK, past
-    anything mapped: never written), for a build whose image holds the app's coded stream instead (boot_pack)"""
-    text = ld.read_text()
-    if "AT > XIP" not in text:
-        raise SystemExit(f"build: {ld.name} has no load address in XIP to move (boot_pack)")
-    text = re.sub(r"(\bMEMORY\s*\{)", r"\1\n    PACK   (r)   : ORIGIN = 0x10000000, LENGTH = 0x100000", text, count=1)
-    out = OUT / (NAME + "_pack.ld")
-    out.write_text(text.replace("AT > XIP", "AT > PACK"))
-    return out
-
-
-def boot_stream(gap):
-    """the app's coded stream of .data and .ram_text (fm1.toml boot_pack), padded to the word: what follows the code
-    (gap: _etext's distance from the end of .text.bin, 0 but for the alignment)"""
-    out = OUT / "boot_pack.bin"
-    out.unlink(missing_ok=True)
-    blobs = [OUT / s for s in ("data.bin", "ramtext.bin")]
-    for b in blobs:
-        if not b.exists():
-            b.write_bytes(b"")
-    r = subprocess.run([sys.executable, str(APP / CONF["boot_pack"]), str(out), *map(str, blobs)],
-                       capture_output=True, text=True)
-    sys.stdout.write(r.stdout)
-    if r.returncode or not out.exists():
-        sys.stderr.write(r.stderr)
-        raise SystemExit(f"build: {CONF['boot_pack']} failed")
-    stream = out.read_bytes()
-    raw = sum(b.stat().st_size for b in blobs)
-    print(f"boot     {raw:,} B copied into RAM at the start (.data, .ram_text), {len(stream):,} B in the image "
-          f"({CONF['boot_pack']})")
-    data = b"\xff" * gap + stream
-    return data + b"\xff" * (-len(data) % 4)
 
 
 def memory_regions(script):
@@ -1203,6 +1248,9 @@ def check(img, syms, dis, rt):
                      f"{cr_ways * 4096 - cr_used} B for the app (plat_cache_ram, after its test at the start)")
     if os.environ.get("FM1B_POOL_SPARE", "").isdigit():   # an app's own build for itself (a demo build with mirror)
         spare = int(os.environ["FM1B_POOL_SPARE"])
+    if BOOT_PACKED:                               # the boot decoder runs from the flash alone (tools/boot_pack.py)
+        errors += boot_pack.check_decoder(syms, dis, APP_XIP, APP_XIP + app_slot())
+        notes.append(f"boot_pack: .ram_text + .data {BOOT_PACKED[0]} B stored as {BOOT_PACKED[1]} B (LZMA, unpacked at boot)")
     if "SRAM" in LAYOUT:                          # device/app.ld: one packed region, one budget
         org, size = LAYOUT["SRAM"]
         used = sym("_pool_end") - org
@@ -1344,7 +1392,7 @@ def slot_flags():
 def opt_flags():
     """the optional parts an fm1.toml turns on that need no SDK: the same on the device, the host and the web"""
     flags = [f"-D{flag}=1" for key, flag in (("mirror", "FM1B_MIRROR"), ("backup", "FM1B_BACKUP"), ("cpu2", "FM1B_CPU2"), ("usb_host", "FM1B_USB_HOST"), ("companion", "FM1B_COMPANION"),
-                                                       ("xdata2", "FM1B_XDATA2"), ("sd", "FM1B_SD"), ("crk_diag", "FM1B_CRK_DIAG"))
+                                                       ("resources", "FM1B_RES"), ("xdata2", "FM1B_XDATA2"), ("sd", "FM1B_SD"), ("crk_diag", "FM1B_CRK_DIAG"))
              if (CONF.get(key) and os.environ.get(flag) != "0") or os.environ.get(flag) == "1"]   # (FM1B_MIRROR=1: a build with it, fm1.toml as it is; FM1B_BACKUP=0: without)
     if "-DFM1B_COMPANION=1" in flags and PRODUCT:
         flags.append(f'-DFELUCCA_ID="{PRODUCT}"')   # (the capability query's identity in the simulator and the browser too:
@@ -1503,6 +1551,109 @@ def build_web():
     return 0
 
 
+def git(*args, cwd=None):
+    r = subprocess.run(["git", *args], cwd=cwd or APP, capture_output=True, text=True)
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+
+def c_str(s):
+    """a C string literal (split by line, so a long text stays readable in the header)"""
+    def esc(t):
+        return t.replace("\\", "\\\\").replace('"', '\\"').replace("\t", "\\t").replace("?", "\\?")
+    lines = s.split("\n")
+    return " \\\n".join('"' + esc(ln) + ("\\n" if i < len(lines) - 1 else "") + '"' for i, ln in enumerate(lines))
+
+
+def build_rfm1():
+    """the host simulator in WebAssembly with host/rfm1.c's exports, packed as an .rfm1 (tools/rfm1_pack.py): the
+    manifest from fm1.toml, app.h and git; the credits and licence texts of the app, fm1-base, felucca-bsp and
+    Emscripten's runtime"""
+    out = OUT / "rfm1"
+    out.mkdir(parents=True, exist_ok=True)
+    repo = Path(git("rev-parse", "--show-toplevel") or APP.parent)
+    head = git("rev-parse", "HEAD")
+    if git("status", "--porcelain", "--untracked-files=no"):
+        print("rfm1: the app's repository has changes not committed: source_url names HEAD, which is not what was built")
+    app_name = next((m[1] for h in sorted(APP.glob("*.h"))
+                     for m in [re.search(r'^#define APP_NAME "([^"]*)"', h.read_text(errors="ignore"), re.M)] if m),
+                    CONF.get("name", NAME))
+    rid = re.sub(r"[^a-z0-9_]", "_", NAME)[:31]
+    version = VERSION or "dev+" + (head[:7] or "local")
+    url = CONF.get("repo") or re.sub(r"^git@github\.com:", "https://github.com/", git("remote", "get-url", "origin"))
+    url = re.sub(r"\.git$", "", url)
+    source_url = f"{url}@{head}" if head else url
+    base_head = git("rev-parse", "HEAD", cwd=SRC)
+    emver = subprocess.run(["emcc", "--version"], capture_output=True, text=True).stdout.splitlines()[0]
+    emver = re.search(r"\) ([0-9][^ ]*)", emver)[1] if re.search(r"\) ([0-9][^ ]*)", emver) else emver
+    authors = CONF.get("authors") or [a for a in [git("log", "--reverse", "--format=%an", cwd=repo).split("\n")[0]] if a]
+    mem = int(CONF.get("rfm1_memory_mib", 8))
+    if not 1 <= mem <= 32:
+        raise SystemExit(f"fm1.toml rfm1_memory_mib {mem}: 1 .. 32")
+    # credits: the app's (CREDITS.md, or fm1.toml credits), then fm1-base's
+    credits = []
+    if (repo / "CREDITS.md").exists():
+        credits.append((repo / "CREDITS.md").read_text().strip())
+    elif CONF.get("credits"):
+        credits.append(f"{app_name}: {CONF['credits']}")
+    credits.append((SRC / "CREDITS.md").read_text().strip())
+    credits = "\n\n".join(credits) + "\n"
+    (out / "credits.txt").write_text(credits)
+    licence = CONF.get("licence", "MPL-2.0")
+    (GEN / "rfm1_info.h").write_text(
+        "/* tools/build.py --rfm1: the descriptor's strings (the manifest's) */\n"
+        f"#define RFM1_ID {c_str(rid)}\n#define RFM1_NAME {c_str(app_name)}\n#define RFM1_VERSION {c_str(version)}\n"
+        f"#define RFM1_SOURCE_URL {c_str(source_url)}\n#define RFM1_LICENSE {c_str(licence)}\n"
+        f"#define RFM1_CREDITS \\\n{c_str(credits)}\n")
+    # the licence texts: the app's, fm1-base's, felucca-bsp's, Emscripten's (its runtime and musl are compiled in)
+    lic = []
+    for f in [repo / "LICENSE", repo / "COPYING", *sorted((repo / "LICENSES").glob("*")), repo / "LICENSING.md"]:
+        if f.is_file():
+            lic.append((f"{app_name}: {f.relative_to(repo)}", f))
+    lic += [("fm1-base: LICENSE (MPL-2.0)", SRC / "LICENSE"), ("felucca-bsp: LICENSE", BSP / "LICENSE")]
+    em_root = subprocess.run(["em-config", "EMSCRIPTEN_ROOT"], capture_output=True, text=True).stdout.strip()
+    em_lic = next((d / "LICENSE" for d in (Path(em_root), Path(em_root).parent) if em_root and (d / "LICENSE").exists()), None)
+    if em_lic:
+        lic.append(("Emscripten (its runtime, compiled in): LICENSE", em_lic))
+        musl = Path(em_root) / "system" / "lib" / "libc" / "musl" / "COPYRIGHT"
+        if musl.exists():
+            lic.append(("musl libc (in Emscripten's runtime): COPYRIGHT", musl))
+    else:
+        print("rfm1: Emscripten's LICENSE not found (em-config EMSCRIPTEN_ROOT): the file goes without it")
+    lic = [(n, f) for n, f in lic if f.is_file()]
+    feats = ["-mcpu=mvp", "-msign-ext", "-mnontrapping-fptoint", "-mbulk-memory", "-mmutable-globals"]   # wasm3 0.5.0's
+    inc = [f"-I{d}" for d in (SRC / "host", SRC / "device", SRC / "include", SRC / "lib", APP, GEN, *(APP / d for d in CONF.get("include", [])))]
+    defs = ["-DPLAT_HOST", "-DPLAT_WEB", "-DPLAT_RFM1", *opt_flags(), *["-DFM1B_BLE=1"] * BLE,
+            *["-DFM1B_BLE_CENTRAL=1"] * (BLE and bool(CONF.get("ble_central"))), *["-DFM1B_WIFI=1"] * WIFI,
+            *(f'-DAPP_VERSION="{VERSION}"',) * bool(VERSION)]
+    o2_objs = o2_objects("emcc", [*feats, "-O2", "-ffp-contract=off", "-std=gnu99", "-w", *defs, *inc], out / "o2")
+    wasm = out / "app.wasm"
+    cmd = ["emcc", *feats, "-O2", "-ffp-contract=off", "-std=gnu99", "-Wall", "-Wno-unused-function",
+           "-Wno-unused-parameter", "-Wno-unused-variable", *defs, *inc,
+           "--no-entry", "-sSTANDALONE_WASM", "-sFILESYSTEM=0", "-sSTACK_SIZE=1048576",
+           f"-sINITIAL_MEMORY={mem << 20}", "-sALLOW_MEMORY_GROWTH=0",
+           "-o", str(wasm), str(SRC / "host" / "rfm1.c"), *o2_objs]
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    sys.stderr.write(r.stderr)
+    if r.returncode:
+        raise SystemExit("build: the .rfm1 did not compile (emcc: Emscripten; rfm1_memory_mib if the data does not fit)")
+    manifest = {"rfm1": 1, "abi": 6, "id": rid, "name": app_name, "version": version, "license": licence,
+                "source_url": source_url, "authors": authors,
+                "glue_url": f"https://github.com/charlesvestal/fm1-base/tree/{base_head}" if base_head else None,
+                "built_by": f"fm1-base {base_head[:7]} tools/build.py --rfm1, emcc {emver}", "memory_mib": mem}
+    manifest = {k: v for k, v in manifest.items() if v}
+    import json
+    (out / "manifest.json").write_text(json.dumps(manifest, indent=1, ensure_ascii=False))
+    dst = out / f"{rid}-{version}.rfm1"
+    r = subprocess.run([sys.executable, str(SRC / "tools" / "rfm1_pack.py"), str(wasm), str(dst),
+                        "--manifest", str(out / "manifest.json"), "--credits", str(out / "credits.txt"),
+                        *[a for n, f in lic for a in ("--license", f"{n}={f}")]], capture_output=True, text=True)
+    sys.stdout.write(r.stdout)
+    sys.stderr.write(r.stderr)
+    if r.returncode:
+        raise SystemExit("build: the .rfm1 is not to the format (tools/rfm1_pack.py)")
+    return 0
+
+
 def main():
     global PRODUCT, VERSION, APP, OUT, GEN, LDR, ROOT, CONF, NAME, BLE, OWN, WIFI, WIFI_OWN, LINK, WIFI_AP, CPU2, STEM
     ap = argparse.ArgumentParser()
@@ -1512,6 +1663,7 @@ def main():
     ap.add_argument("--sdk", type=Path, help="JieLi AC79 SDK checkout (default: $AC79_SDK)")
     ap.add_argument("--host", action="store_true", help="build the host simulator instead of the firmware")
     ap.add_argument("--web", action="store_true", help="build the browser emulator instead of the firmware")
+    ap.add_argument("--rfm1", action="store_true", help="build an .rfm1 (host apps) instead of the firmware")
     a = ap.parse_args()
     APP = a.app.resolve()
     CONF = read_conf(APP / "fm1.toml")
@@ -1569,9 +1721,9 @@ def main():
         PRODUCT = prefix + "%02d%02d%02d" % (int(m[1]), int(m[2]), int(m[3] or 0))
         VERSION = a.release.upper()
         name = f"{STEM}-{a.release}.fwsc"
-    if a.host or a.web:
+    if a.host or a.web or a.rfm1:
         generate()
-        return build_host() if a.host else build_web()
+        return build_host() if a.host else build_web() if a.web else build_rfm1()
     fm1pkg_make.SDK = a.sdk
     for rel, sha in SDK_SHA256.items():          # fail early without the SDK
         if hashlib.sha256(fm1pkg_make.sdk_file(rel)).hexdigest() != sha:
@@ -1613,6 +1765,10 @@ def main():
     pkg = fm1pkg_make.ufw(fm1pkg_make.flash_image(img, fm1pkg_make.KEY, app_end() or APP_END), ota, PRODUCT)
     (OUT / name).write_bytes(pkg)
     print(f"app      {OUT / (NAME + '.bin')}  {len(img)} B")
+    if CONF.get("resources"):                 # the resource region beside the package: the installer writes it after
+        res = OUT / (Path(name).stem + "-res.bin")   # the firmware (fm1_install.py, the installer page)
+        res.write_bytes(res_file(res_payload()))
+        print(f"res      {res}  {res.stat().st_size} B (written after an update: tools/fm1_resources.py)")
     print(f"loader   {LDR / 'ota.bin'}  {len(ota)} B")
     print(f"package  {OUT / name}  {len(pkg)} B, identity {PRODUCT}")
     print(f"build    {build_id():08X}  (FM1B_BUILD: the build a crash record names, fm1_remote.py crashes)")

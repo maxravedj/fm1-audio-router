@@ -4,7 +4,9 @@
 """Drive an FM-1 running an fm1-base firmware over USB-MIDI, as a player would, and read it back: for testing by hand
 or by a program (an agent). Needs mido with python-rtmidi.
 
-  tools/fm1_remote.py COMMAND ...           one or more commands, run in order:
+  tools/fm1_remote.py [--port NAME] COMMAND ...
+  one or more commands, run in order. --port: the FM-1's MIDI port (part of its name); else it is found by its name
+  or by its answer to the screen reader's HELLO (tools/fm1ports.py), whatever its port is called:
     press BTN | release BTN | tap BTN       a button (FX SEL ENV LFO EDIT GLO HOME SAVE ARP SEQ PLAY REC OCT- OCT+)
     key K down | key K up | tapkey K        a key, 0..26 (0 = F3), as pressed (no velocity reading)
     turn ENC N                              an encoder, N detents (SELECT ALGO PRESET K1 K2 K3 K4)
@@ -72,6 +74,9 @@ import re
 import struct
 import sys
 import time
+
+
+import fm1ports
 
 BTN = ["FX", "SEL", "ENV", "LFO", "EDIT", "GLO", "HOME", "SAVE", "ARP", "SEQ", "PLAY", "REC", "OCT-", "OCT+"]
 ENC = ["SELECT", "ALGO", "PRESET", "K1", "K2", "K3", "K4"]
@@ -258,22 +263,14 @@ def format_crash(r, elf=None):
     return lines
 
 
-def fm1_ports(names):
-    """the USB-MIDI ports of an FM-1 among names: "FM1-XXXX" (four hex digits: Optimist's name since 2026-10-29), "Optimist"
-    (a device on older firmware), or "FM-1" in it (the stock names); never a Bluetooth port, never other gear"""
-    return [n for n in names if "bluetooth" not in n.lower() and
-            (re.search(r"FM1-[0-9A-Fa-f]{4}", n) or "FM-1" in n or "optimist" in n.lower())]
-
-
 class FM1:
-    def __init__(self, elf=None):
+    def __init__(self, port=None, elf=None):
         import importlib
         self.mido = importlib.import_module("mido")   # (here: the parser above needs no MIDI)
-        names = fm1_ports(self.mido.get_output_names())
-        if not names:
-            raise SystemExit("no FM-1 on USB-MIDI")
-        self.out = self.mido.open_output(names[0])
-        self.inp = self.mido.open_input(fm1_ports(self.mido.get_input_names())[0])
+        try:
+            self.inp, self.out, self.name = fm1ports.connect(port, mido=self.mido)
+        except LookupError as e:
+            raise SystemExit(f"fm1_remote: {e}")
         self.btn = self.keys = 0
         self.listening = False
         self.elf = ElfSymbols(elf) if elf else None
@@ -460,9 +457,10 @@ class FM1:
                 raise SystemExit(f"unknown command {c!r}\n\n{__doc__}")
 
 
-if __name__ == "__main__":
-    argv = sys.argv[1:]
-    elf_path = None
+def main(argv):
+    port = elf_path = None
+    if argv[:1] == ["--port"] and len(argv) > 1:
+        port, argv = argv[1], argv[2:]
     if "--elf" in argv:                          # (anywhere: the firmware's ELF for crashes' symbols)
         k = argv.index("--elf")
         if k + 1 >= len(argv):
@@ -471,4 +469,8 @@ if __name__ == "__main__":
         argv = argv[:k] + argv[k + 2:]
     if not argv:
         sys.exit(__doc__)
-    FM1(elf_path).run(argv)
+    FM1(port, elf_path).run(argv)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

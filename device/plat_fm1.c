@@ -379,6 +379,9 @@ int plat_usb_audio_play(int32_t *lr, uint32_t n)
     return 0;
 #endif
 }
+/* the computer's USB audio's level in the mix, 0..4096 (uac_mix.h; read by the render: one word, no lock) */
+static volatile uint32_t usb_play_q12 = 4096u;
+void plat_usb_play_gain(uint32_t q12) { usb_play_q12 = q12 > 4096u ? 4096u : q12; }
 void plat_yield(void)
 {
     ble_poll();                                   /* Bluetooth: its notifications go out while the screen draws */
@@ -539,6 +542,11 @@ int plat_store_load(uint32_t obj, void *dst, uint32_t max) { return flash_ok ? s
 int plat_store_head(uint32_t obj, void *dst, uint32_t n) { return flash_ok ? st_load_head(obj, dst, n) : -1; }
 int plat_store_size(uint32_t obj) { return flash_ok ? st_size(obj) : -1; }
 int plat_store_save(uint32_t obj, const void *src, uint32_t len) { return flash_ok ? st_save(obj, src, len) : -9; }
+#ifdef APP_STORE_POOL
+int plat_store_room(void) { return flash_ok ? st_pool_room() : 0; }
+#else
+int plat_store_room(void) { return -1; }
+#endif
 
 static volatile uint32_t audio_cpu_pct, audio_xruns;
 uint32_t plat_cpu_pct(void) { return audio_cpu_pct; }

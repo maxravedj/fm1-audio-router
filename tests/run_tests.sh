@@ -1,9 +1,10 @@
 #!/bin/sh
 # SPDX-License-Identifier: MPL-2.0
 # Copyright (C) 2026 Charles Vestal
-# fm1-base's tests: the platform's pieces on the host (encoder, TRS jack, storage, fastmath, backup and restore, the
-# screen mirror), the tools and web pages for them, the installer against a simulated FM-1, the update path against
-# the template's package (tools/build.py template first), and the template in the simulator (tests/basic.txt).
+# fm1-base's tests: the platform's pieces on the host (encoder, TRS jack, storage, fastmath, the screen reader's
+# announce.c, backup and restore, the screen mirror), the tools and web pages for them, the installer against a
+# simulated FM-1, the update path against the template's package (tools/build.py template first), and the template in
+# the simulator (tests/basic.txt).
 #   tests/run_tests.sh
 set -u
 cd "$(dirname "$0")/.."
@@ -25,6 +26,11 @@ run() {
 }
 run encoder sh -c "$CC -O2 -w -Ibsp/chip -Ibsp/boards/fm1 -o $OUT/encoder_test tests/encoder_test.c && $OUT/encoder_test"
 run trs sh -c "$CC -O2 -w -Ibsp/chip -Ibsp/boards/fm1 -Idevice -o $OUT/trs_test tests/trs_test.c && $OUT/trs_test"
+# USB audio around a render block (device/uac_mix.h) on felucca-bsp's usb.c: the recording without the computer's audio,
+# the computer's at plat_usb_play_gain and MASTER, muted still read; and without usb_audio_out
+run uac-mix sh -c "$CC -std=c99 -O2 -w -Ibsp/chip -Ibsp/boards/fm1 -o $OUT/uac_mix_test tests/uac_mix_test.c && \
+    $OUT/uac_mix_test && $CC -std=c99 -O2 -w -Ibsp/chip -Ibsp/boards/fm1 -DTEST_NO_OUT -o $OUT/uac_mix_test_noout \
+    tests/uac_mix_test.c && $OUT/uac_mix_test_noout"
 # plat_lock / plat_unlock over a simulated interrupt enable: inside an interrupt they leave interrupts off
 run lock sh -c "$CC -std=c99 -Wall -Wextra -Werror -O2 -Idevice -o $OUT/lock_test tests/lock_test.c && $OUT/lock_test"
 # shim_irq_save / shim_irq_restore (the radio's) over a simulated interrupt enable: inside an interrupt they leave
@@ -75,6 +81,8 @@ run storage sh -c "$CC -O2 -w -o $OUT/storage_test tests/storage_test.c && $OUT/
 run storage-bounce sh -c "$CC -O2 -w -DAPP_STORE_BOUNCE=1 -o $OUT/storage_bounce_test tests/storage_test.c && \
     $OUT/storage_bounce_test > $OUT/storage_bounce.txt && $OUT/storage_test > $OUT/storage_plain.txt && \
     cmp $OUT/storage_plain.txt $OUT/storage_bounce.txt"
+run storage-pool sh -c "$CC -O2 -std=c99 -Wall -Wextra -Werror -Wno-unused-function -o $OUT/storage_pool_test \
+    tests/storage_pool_test.c && $OUT/storage_pool_test"     # the pool (APP_STORE_POOL): the move, saves, cuts
 run fastmath sh -c "$CC -O2 -w -o $OUT/fastmath_test tests/fastmath_test.c -lm && $OUT/fastmath_test"
 run outside-hosts "$PY" tests/outside_hosts_test.py
 run installer "$PY" tests/install_test.py
@@ -86,13 +94,24 @@ run ramcode "$PY" tests/ramcode_test.py
 run romref "$PY" tests/romref_test.py
 # the build's check that a function is in the RAM code run, _rt_start.._rt_end wherever app.ld puts it (tools/ram_run.py)
 run ram-run "$PY" tests/ram_run_test.py
+run midi-rel sh -c "$CC -O2 -std=c99 -Wall -Wextra -Werror -o $OUT/midi_rel_test tests/midi_rel_test.c && $OUT/midi_rel_test"   # include/midi_rel.h
+run boot-pack sh tests/boot_pack_test.sh               # the boot's LZMA load images (boot_pack = true)
+# the screen reader's firmware side (device/announce.c, the one copy: fm1-reader's tools/sync_announce.sh copies it to
+# the firmwares not on fm1-base): the protocol, the SAY frames, ann_later's settling
+run announce sh -c "$CC -std=c99 -Wall -Wextra -Werror -Wno-unused-function -o $OUT/announce_test tests/announce_test.c && \
+    $OUT/announce_test"
+# finding the FM-1 from Python (tools/fm1ports.py, as web/fm1ports.js) and the tools that use it, on a fake mido
+run ports "$PY" tests/ports_test.py
+# the screen reader's words file (tools/gen_words.py): made, and refused over the reader's limits
+run gen-words "$PY" tests/gen_words_test.py
 # the web installer's m-bootloader step (web/fm1ota.js installBoot) against a simulated FM-1, and finding the FM-1 by
-# its port (unusual names, the loader under a new name, M-VAVE's Open firmware, resume's check, package checksums)
+# its port (unusual names, the loader under a new name, M-VAVE's Open firmware, resume's check, package checksums),
+# and writing the resource region after it
 if command -v node >/dev/null 2>&1; then
     run installer-boot node tests/installer_boot_test.mjs web/m-bootloader/fm1-uboot-1.2.fwsc
     run installer-ports node tests/installer_ports_test.mjs web/m-bootloader/fm1-uboot-1.2.fwsc
+    run installer-res node tests/installer_res_test.mjs   # the resource region after an install (Updater.installRes)
     run installer-bluetooth node tests/installer_bluetooth_test.mjs
-    run installer-family-ports node tests/installer_family_ports_test.mjs
     run installer-foreign-loader node tests/installer_foreign_loader_test.mjs
     run installer-stock node tests/installer_stock_test.mjs
     # FM1_STOCK_FWSC=<path to M-VAVE's FM-1_015.fwsc> adds the stock file's cases (that file is not in this repository)
@@ -106,6 +125,8 @@ fi
 # the tool's own conversation and a simulated FM-1 in JS
 run backup sh -c "$CC -std=c99 -Wall -Wextra -Werror -Wno-unused-function -O2 -o $OUT/backup_test tests/backup_test.c && \
     $OUT/backup_test $OUT/backup.bin"
+run backup-pool sh -c "$CC -std=c99 -Wall -Wextra -Werror -Wno-unused-function -O2 -DBACKUP_TEST_POOL \
+    -o $OUT/backup_pool_test tests/backup_test.c && $OUT/backup_pool_test"   # restore with a pooled store
 run backup-tool "$PY" tests/backup_tool_test.py $OUT/backup.bin
 if command -v node >/dev/null 2>&1; then
     run backup-page sh -c "$PY tests/backup_record.py $OUT/backup.bin $OUT/backup_transcript.json && \
@@ -146,8 +167,10 @@ run mirror sh -c "mkdir -p $OUT/mirror && $CC -std=c99 -Wall -Wextra -Werror -Wn
     -Itemplate/build/gen -o $OUT/mirror_test tests/mirror_test.c && $OUT/mirror_test --out $OUT/mirror"
 if command -v node >/dev/null 2>&1; then
     run mirror-viewer node tests/mirror_test.mjs $OUT/mirror
+    # the page finding the FM-1 (web/fm1ports.js): by name, the pick, a HELLO answer on another port; never other gear
+    run mirror-ports node tests/mirror_ports_test.mjs
 else
-    echo "  skip mirror-viewer (no node)"
+    echo "  skip mirror-viewer, mirror-ports (no node)"
 fi
 run mirror-png "$PY" tools/fm1_mirror.py $OUT/mirror.png --from $OUT/mirror/stream.syx
 # the trimmed fonts (fm1.toml font_trim) draw what the full ones draw, pixel for pixel (every face with lower case)
@@ -270,5 +293,13 @@ if sh tests/wifi/run.sh; then :; else FAIL=1; fi
 # the USB port as a MIDI host (usb_host, plat_usb_host, plat_usb_host_name) in the host simulator's model of it: tests/usbh_app
 run usbh-app sh -c "$PY tools/build.py tests/usbh_app --host && \
     tests/usbh_app/build/host/usbhtest_host tests/usbh_app/tests/usbh.txt tests/usbh_app/build/host"
+# the template as an .rfm1 (tools/build.py --rfm1: the host simulator in WebAssembly for host apps), driven as a host
+# app drives it: the descriptor, the screen, a chord, the reader over SysEx, the flash image booted from again
+if command -v emcc >/dev/null 2>&1 && command -v node >/dev/null 2>&1; then
+    rm -f template/build/rfm1/*.rfm1
+    run rfm1 sh -c "$PY tools/build.py template --rfm1 && node tests/rfm1_test.mjs template/build/rfm1/*.rfm1"
+else
+    echo "  skip rfm1 (no emcc or node)"
+fi
 [ $FAIL -eq 0 ] && echo "all tests passed" || echo "TESTS FAILED"
 exit $FAIL

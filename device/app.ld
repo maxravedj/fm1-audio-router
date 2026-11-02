@@ -21,7 +21,8 @@
  * the app runs. */
 MEMORY
 {
-    XIP    (rx)  : ORIGIN = 0x02000120, LENGTH = 0x8DFBC
+    XIP    (rx)  : ORIGIN = 0x02000120, LENGTH = 0x9DFBC   /* the app slot (0x8DFBC) and 64 KB: the image before
+                                                       * boot_pack packs it; build.py checks the slot */
     SRAM   (rwx) : ORIGIN = 0x01C00000, LENGTH = 0x74000    /* up to the stacks' first guard band (_guard0) */
     NOINIT (rw)  : ORIGIN = 0x01C7C000, LENGTH = 0x3D50
     CACHE  (rw)  : ORIGIN = 0x01F28000, LENGTH = 0x7000     /* data-cache ways 0..6 as RAM: only with fm1.toml cache_ram_ways
@@ -46,6 +47,8 @@ SECTIONS
                   _ar_start = .; *(.app_ram .app_ram.*) . = ALIGN(4); _ar_end = .;
                   _rt_end = .; } > SRAM AT > XIP
     _rt_load = LOADADDR(.ram_text);
+    _app_xip_end = ORIGIN(XIP) + 0x8DFBC;            /* the app slot's end (the boot's bound on the packed load
+                                                      * images: main_fm1.c) */
     .data : { . = ALIGN(4); _data_start = .; *(.data*) *(.sdata*) *(.*_data) . = ALIGN(4); _data_end = .; } > SRAM AT > XIP
     _data_load = LOADADDR(.data);
     .bss (NOLOAD) : { _bss_start = .; *(.bss*) *(.sbss*) *(COMMON) *(.*_bss) *(.bd_base) . = ALIGN(4); _bss_end = .; } > SRAM
