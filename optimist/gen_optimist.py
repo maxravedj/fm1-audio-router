@@ -354,7 +354,7 @@ INS_XIP_IN = ["mix_part?"]
 def ram_code_allow(flags):
     """fm1.toml's ram_code_allow for this configuration: the file's, the engines' names by their places (FAST_ALLOW),
     the sequencer's (SEQ_ALLOW) with its step code in RAM, the insert kernels' callers with the kernels in XIP (INS_XIP_*),
-    without ut_mix when there is no USB audio (the serial console)"""
+    without ut_mix when there is no USB audio (USB_AUDIO off, or the serial console)"""
     import tomllib
     allow = tomllib.loads((APP / "fm1.toml").read_text())["ram_code_allow"]
     out = list(allow)
@@ -368,8 +368,10 @@ def ram_code_allow(flags):
     out += [f for f in (SEQ_ALLOW_EV if seq_ram >= 1 else []) + (SEQ_ALLOW if seq_ram >= 2 else []) if f not in out]
     if not flags.get("FELUCCA_INS_RAM", 1):
         out = [f for f in out if f not in INS_XIP_OUT] + [f for f in INS_XIP_IN if f not in out]
-    if flags.get("FELUCCA_CDC", 0):
-        out = [f for f in out if f != "ut_mix"]       # (ut_mix, the USB input track's mix, is not built without USB audio)
+    # (ut_mix, the USB input track's mix, is built only with USB audio, fx.c FELUCCA_USB_AUDIO, and never beside the
+    # console, which takes its endpoint: synths and synths-2 have neither, "ut_mix is no function in RAM code", 2026-11-02)
+    if flags.get("FELUCCA_CDC", 0) or not flags.get("FELUCCA_USB_AUDIO", 0):
+        out = [f for f in out if f != "ut_mix"]
     return out
 
 
