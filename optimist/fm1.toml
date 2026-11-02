@@ -137,6 +137,10 @@ ram_code_allow = [
 # what the start copies into RAM (.data, the RAM code: 56 KB) stored LZMA-packed in the image and unpacked at the start
 # (fm1-base's boot_pack, tools/boot_pack.py, device/boot_lzma.h; Optimist's own LZB coder used before the merge of 2026-11-02)
 boot_pack = true
+# the unity build (fm1-base's platform, its Bluetooth stack, USB) at -Oz instead of -Os (tools/build.py unity_opt): a TEST
+# build (branch oz), smaller and a little slower in what runs in the radio, timer and USB interrupts; Optimist's own unit
+# (core/opt_core.c, its o2 units) unchanged
+unity_opt = "z"
 # the site (tools/make_site.py: site/landing.md, the manual built from Optimist's docs/guide at the site's build: tools/fm1base.py site)
 tagline = "a modular firmware for the M-VAVE FM-1"
 repo = "https://github.com/w0ts/optimist"
