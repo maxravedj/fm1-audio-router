@@ -713,6 +713,52 @@ void plat_usb_audio_mem(void *p);
  * before the computer's audio is mixed in, whatever this is: recording the FM-1 never records the computer's own
  * playback (device/uac_mix.h). Without usb_audio_out, nothing */
 void plat_usb_play_gain(uint32_t q12);
+/* APP_USB_INPUT_METER: main-loop snapshot of USB input sample peaks since the
+ * previous call, then clear. L/R unsigned 24-bit magnitudes, 8388608 = 0 dBFS.
+ * Before resampling, playback gain and MASTER; digital silence/no packets = 0.
+ * Call once per UI interval. Never consumes the playback ring or alters PCM. */
+void plat_usb_input_peaks(uint32_t lr[2]);
+/* APP_USB_INPUT_METER: independently enable input peaks and waveform history
+ * (the latter requires APP_USB_INPUT_WAVEFORM). Default both on. Disabled
+ * producers skip the sample work; changing waveform visibility invalidates
+ * history. Main thread only; never alters USB playback or its ring. */
+void plat_usb_input_observe(int peaks, int waveform);
+
+/* APP_USB_INPUT_SPECTRUM: read-only 4096-frame, 44.1-kHz stereo PCM window.
+ * Independent visibility gate; no spectral DSP in the IRQ. Main thread only.
+ * Snapshot returns 1 and its monotonic end position, or 0 for insufficient,
+ * stale, overwritten or restarted capture. A 0 return leaves output undefined. */
+#define PLAT_SPECTRUM_FRAMES 4096u
+void plat_usb_spectrum_enable(int enabled);
+int plat_usb_input_spectrum(int16_t (*out)[2], uint32_t *position);
+/* APP_MASTER_METER: main-loop snapshot/clear of stereo sample peaks after
+ * USB playback trim and MASTER gain, in the same unsigned 24-bit units as
+ * input peaks. Reads the post-MASTER mix before optional user mute/fade,
+ * without changing PCM or applying gain. This is before the analog codec. */
+void plat_master_peaks(uint32_t lr[2]);
+/* APP_MASTER_METER: skip hidden meter's sample scan. Clears pending peaks.
+ * Default on. Main thread only; never changes output PCM. */
+void plat_master_meter_enable(int enable);
+/* APP_MASTER_FADE: main-loop mute target for the final digital output.
+ * A ~100-ms audio-rate ramp follows MASTER and the meter tap. The input/history
+ * and pre-mute master meter continue normally. No gain is applied twice. */
+void plat_master_mute(int muted);
+/* Full-scale mute/solo fade duration, 0 (instant) .. 1000 ms; default 100 ms.
+ * May change during a fade without a gain discontinuity unless set to 0. */
+void plat_master_mute_fade_ms(uint32_t ms);
+/* Boot only, before audio starts: restore mute without a transient output. */
+void plat_master_mute_init(int muted);
+/* APP_USB_INPUT_WAVEFORM (also requires APP_USB_INPUT_METER): non-consuming
+ * pre-MASTER stereo history. Position is a wrapping 44.1 kHz frame counter.
+ * Main thread: width columns (1..240), span frames (1..352800 = 8 seconds),
+ * exclusive end position; future end positions show silence after input stops.
+ * Each column receives signed 16-bit L min/max, R min/max, with no triggering.
+ * Resolution selection preserves extrema; short locks cover one column
+ * (at most five bins with the gateway's 126-column display).
+ * Display observation only: this does not provide PCM to app_render. */
+uint32_t plat_usb_input_wave_position(void);
+void plat_usb_input_waveform(int16_t (*out)[4], uint32_t width,
+                            uint32_t span, uint32_t end);
 
 /* the keys' velocity and pressure (an app with APP_KEY_SENSE): on, the scan reads the keys on the analog rows and
  * hands each reading to the app (app_key_sample, app_key_probe); off by default */
@@ -799,6 +845,17 @@ typedef struct {
 
 /* audio load in % of the render budget, and xruns since boot (device: from the ISR) */
 uint32_t plat_cpu_pct(void);
+/* APP_CPU_WORKLOAD: measured audio + scan/USB IRQ + foreground work as a fraction
+ * of wall time (250-ms windows). Foreground brackets its real work with begin/end;
+ * idle polling is excluded. Nesting counts time once. Includes LCD bus waits,
+ * excludes uninstrumented housekeeping/ISR entry/exit. Host timing is not FM-1 performance. */
+void plat_cpu_work_reset(void);         /* boot, before audio starts */
+void plat_cpu_work_begin(void);
+void plat_cpu_work_end(void);
+uint32_t plat_cpu_work_pct(void);
+/* Second core's job time / wall time, independently sampled every 250 ms.
+ * Idle mailbox polling is excluded; the host simulates jobs synchronously. */
+uint32_t plat_cpu2_work_pct(void);
 uint32_t plat_cpu_khz(void);           /* the CPU's clock, kHz: 360000 when its registers hold the stock set-up (M-VAVE's
                                         * 360 MHz, which the start sets whichever boot loader ran: fm1_clock.h), 0 when
                                         * not (unknown: the start could not set it) and on the host. For an app that
@@ -898,6 +955,7 @@ int app_stats_quiet(void);
  *   APP_BATTERY_RAW (no function) plat_battery_raw and plat_battery_charging are built (the battery's reading, for
  *                   an app's own volts; whether 5 V is on the supply and the chip's charger runs)
  *   APP_CPU_KHZ     (no function) plat_cpu_khz is built (the CPU's clock)
+ *   APP_CPU_WORKLOAD (no function) audio/timer workload accounting and plat_cpu_work_* are built
  *   APP_DIM_LEVELS  (no function) plat_dim_ns is built (the dim lights at any of many brightnesses)
  *   APP_QUIET       void app_quiet(int32_t *lr, uint32_t n)   the render while the flash must not be read (the
  *                   radio's first second, FM1B_BLE): keep time without sound (default: silence)
@@ -931,6 +989,15 @@ int app_stats_quiet(void);
  *                   what Bluetooth should get. Audio interrupt, after each render (Bluetooth audio built). Without it
  *                   Bluetooth takes the output
  *   APP_USB_STATS   (no function) plat_usb_audio_stats is built (the app shows USB audio's counters)
+ *   APP_USB_INPUT_METER (no function) plat_usb_input_peaks is built (read-only stereo USB input meter)
+ *   APP_MASTER_METER (no function) plat_master_peaks is built (read-only post-MASTER stereo peaks)
+ *   APP_MASTER_FADE (no function) plat_master_mute is built (audio-rate output mute after meter tap)
+ *   APP_MASTER_DB   (no function) -60..0 dB MASTER taper in app render and USB playback (Q12)
+ *   APP_MASTER_FX_GAIN(position) optional float Q12 gain for app_master_process;
+ *                    lets an APP_MASTER_FX app retain precise quiet amplitudes
+ *                    below integer Q12 resolution. Default remains APP_GAIN.
+ *   APP_MASTER_LINEAR (no function) MASTER amplitude follows its position (50% position = 50% amplitude)
+ *   APP_USB_INPUT_WAVEFORM (no function) read-only stereo USB history (requires APP_USB_INPUT_METER)
  *   APP_USB_PLAY    (no function) the app mixes the computer's audio itself (plat_usb_audio_play in its render: a
  *                   mixer track) instead of the platform adding it at MASTER after the render
  *   APP_FAULT       void app_fault(const fm1_crash_t *c)   a crash, before the crash screen (c: the record): an app's
@@ -971,3 +1038,50 @@ int app_stats_quiet(void);
  * = there, -1 past the last), const char *app_param_group(g) (0 past the last), int32_t app_param_get(i),
  * int32_t app_param_set(i, v) (v within min .. max; -> the value now). Main loop: a value the render reads is shared
  * as the app's own UI shares it */
+
+/* Gateway Classic A2DP/SBC sink. Main thread controls; mix is bounded audio IRQ work.
+ * on: 0 success, -1 radio could not start. Pairing toggles inquiry visibility;
+ * bonded sources may reconnect while inquiry is disabled. */
+int plat_bt_receiver_on(int on);
+void plat_bt_receiver_pair(int on);
+int plat_bt_receiver_pairing(void);
+int plat_bt_receiver_connected(void);
+/* Negotiated codec, only while the receiver is connected and configured.
+ * NONE also covers pairing and a link with no accepted stream configuration. */
+enum { PLAT_BT_CODEC_NONE, PLAT_BT_CODEC_SBC, PLAT_BT_CODEC_AAC };
+int plat_bt_receiver_codec(void);
+void plat_bt_receiver_mix(int32_t *lr, uint32_t n, uint32_t gain_q12);
+
+/* Opt-in APP_DYNAMIC_DISPLAY: main-thread-only reusable scratch from unlinked
+ * SRAM, retaining 8 KiB headroom. Allocations are 8-byte aligned, not zeroed.
+ * Detach every ISR consumer before free. NULL/0 means insufficient capacity. */
+void *plat_work_alloc(uint32_t bytes);
+void *plat_work_alloc_top(uint32_t bytes); /* same scratch lifetime, high end: preserves contiguous graph space */
+void plat_work_free(void *p);
+uint32_t plat_work_available(void);
+/* Bind caller-owned display capture storage, NULL to detach (under IRQ lock).
+ * Bindings stop capture and invalidate old history. Enable capture separately. */
+uint32_t plat_usb_wave_mem_bytes(void);
+void plat_usb_wave_mem(void *p);
+uint32_t plat_usb_spectrum_mem_bytes(void);
+void plat_usb_spectrum_mem(void *p);
+
+/* Gateway telemetry selection: no change to audible routing. */
+enum { PLAT_MONITOR_USB, PLAT_MONITOR_BT, PLAT_MONITOR_MASTER, PLAT_MONITOR_OUT };
+/* Audio thread: final USB-send PCM; NULL advances OUT graphs with silence. */
+void plat_audio_monitor_out_samples(const int32_t *lr,uint32_t n);
+void plat_audio_monitor_source(int source);
+void plat_bt_input_peaks(uint32_t lr[2]);
+void plat_audio_monitor_bt_sample(int32_t l,int32_t r);
+void plat_audio_monitor_reset(int source);
+/* 0 AUTO, 1 AAC only, 2 SBC only. Main thread; applying a change drops the old stream. */
+void plat_bt_receiver_preference(int preference);
+
+/* APP_USB_STATUS: configured, non-suspended USB device connection; foreground read only. */
+int plat_usb_connected(void);
+
+/* APP_SCREENSHOT: main-thread, one-row redraw capture, no LCD writes between
+ * begin/end. Pixels returned in native RGB565; no allocation/audio IRQ work. */
+void plat_screenshot_begin(uint32_t row);
+void plat_screenshot_end(void);
+uint16_t plat_screenshot_pixel(uint32_t x);

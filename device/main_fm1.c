@@ -56,6 +56,9 @@ uint32_t plat_bta_job_inline(void) { return 0; }
 static void render_block(int32_t *o)                /* ALNK0: one half, measured */
 {
     uint32_t t0 = fm1_ticks(), us, budget = HALF_FRAMES * 1000000u / FS;
+#ifdef APP_CPU_WORKLOAD
+    plat_cpu_work_begin();
+#endif
     fm1b_dbg.in_audio = 1;
 #if FELUCCA_UAC
     if (!radio_quiet)                                 /* (USB audio's code is in the flash too: none while the radio
@@ -81,7 +84,12 @@ static void render_block(int32_t *o)                /* ALNK0: one half, measured
                     o[2u * k + i] = 0;
 #endif
             } else {
-                app_render(o + 2u * k, REND_FRAMES, full ? 4096u : gain);
+                app_render(o + 2u * k, REND_FRAMES,
+#ifdef APP_MASTER_FX
+                    4096u);
+#else
+                    full ? 4096u : gain);
+#endif
             }
             if (radio_quiet)
                 continue;
@@ -102,7 +110,9 @@ static void render_block(int32_t *o)                /* ALNK0: one half, measured
 #endif
         }
     }
-    us = (fm1_ticks() - t0) / FM1_TICKS_PER_US;
+    uint32_t elapsed=fm1_ticks()-t0;
+    us = elapsed / FM1_TICKS_PER_US;
+    plat_profile_add(PROFILE_AUDIO,elapsed);
 #ifdef APP_OVERLOAD
     if (us > budget * 9u / 10u)
         app_overload();                             /* over 90 % of its time: the app sheds what it can */
@@ -117,6 +127,9 @@ static void render_block(int32_t *o)                /* ALNK0: one half, measured
     if (us > fm1b_dbg.max_us)
         fm1b_dbg.max_us = us;
     fm1b_dbg.in_audio = 0;
+#ifdef APP_CPU_WORKLOAD
+    plat_cpu_work_end();
+#endif
 }
 
 #ifndef FM1B_AUDIO_ASIDE
@@ -194,7 +207,11 @@ static void audio_silence(void)                     /* IRQs off (flash erase): t
 static int data_erase(uint32_t off)
 {
     uint32_t took;
-#if FM1B_ERASE_SLICED
+#if FM1B_RAM_RUNTIME
+    /* All IRQ code/constants are in SRAM. Poll with IRQs enabled instead of
+     * suspending the erase or clearing the audio DMA buffer. */
+    return fl_erase4k(off, &took);
+#elif FM1B_ERASE_SLICED
     return fl_erase4k_sliced(off, &took, abuf, sizeof abuf / sizeof abuf[0]);
 #else
     audio_silence();
@@ -213,6 +230,9 @@ static uint32_t t5_gap_max, t5_late, t5_run_max;                /* the longest g
 void fm1_timer5_irq(void)
 {
     static uint32_t sub, t5_prev;
+#ifdef APP_CPU_WORKLOAD
+    plat_cpu_work_begin();
+#endif
     fm1_timer5_ack();
     {
         uint32_t now = fm1_ticks(), gap = (now - t5_prev) / FM1_TICKS_PER_US;
@@ -260,6 +280,11 @@ void fm1_timer5_irq(void)
         uart_midi_poll();                           /* the TRS jack: same context, same queue */
 #endif
     }
+#ifdef APP_BT_RESAMPLE_CPU2
+    /* Keep queued decoder work moving through foreground LCD/flash work.
+     * No allocation, waits, radio parsing or DSP in this bounded 2-kHz pump. */
+    if(sub%5u==0u && !radio_quiet && brl.on)btr_decode_poll_irq();
+#endif
 #ifdef APP_TICK
     if (sub == 0u) {                                /* 1 kHz: the app's tick (a clock, a sequencer) */
         in_tick = 1;
@@ -284,6 +309,9 @@ void fm1_timer5_irq(void)
             fm1_ms++;
         }
     }
+#ifdef APP_CPU_WORKLOAD
+    plat_cpu_work_end();
+#endif
 }
 extern void isr_timer5(void);
 
@@ -910,6 +938,13 @@ static int log_frame(const uint8_t *p, uint32_t n)
 #ifdef APP_LOG
     app_log(log_line_send);                          /* (the app's own lines) */
 #endif
+#ifdef APP_BT_RECEIVER
+    for (uint32_t row=0;row<36;row++) {
+        const char *line=br_debug_line(row);
+        if (!line) break;
+        log_line_send(line);
+    }
+#endif
     log_line_send("end");
     return 1;
 }
@@ -1296,6 +1331,9 @@ static void safe_main(void)
     fm1_timer5_start(isr_timer5, 1);
     fm1_guard_lock_top();
     fm1_irq_enable_all();
+#if FM1B_RAM_RUNTIME
+    fl_background_ready = 1;
+#endif
     play = 1u << panel.btn[B_PLAY];
     rec = 1u << panel.btn[B_REC];
     t0 = fm1_ms;
@@ -1451,6 +1489,9 @@ static void fm1_main(void)
     fm1_timer5_start(isr_timer5, 4);
     fm1_guard_lock_top();
     fm1_irq_enable_all();
+#if FM1B_RAM_RUNTIME
+    fl_background_ready = 1;
+#endif
     fm1_delay_ms(30);
     if ((fm1_in.buttons & 3u) == 3u)
         panel_setup();                              /* OCT- + OCT+ held at power-on */
@@ -1464,6 +1505,9 @@ static void fm1_main(void)
         ble_start();                                /* Bluetooth is on, as on the stock firmware (unless the app's
                                                      * setting says off: APP_BLE_AT_BOOT) */
 #ifdef APP_BOOT
+#ifdef APP_BT_RECEIVER
+    if (!radio_last_bad)                            /* preserve the radio crash guard; SAVE retries explicitly */
+#endif
     app_boot();                                     /* the app's own start (a radio), the platform up */
 #endif
     app_ui_init();
@@ -1614,7 +1658,10 @@ _Static_assert(BOOT_LZMA_PROBS * 2u <= 65536u, "the boot decoder's tables fit th
 
 void fm1_cstart(void)
 {
-    uint32_t *s, *d, p3, src, wdt;
+    uint32_t *d, p3, src, wdt;
+#if !FM1B_RAM_RUNTIME
+    uint32_t *s;
+#endif
 #if FM1B_CPU2
     fm1_cpu1_stop();                                /* a second core that a reset left running would read the RAM
                                                      * cleared below: held (registers only) */
@@ -1649,6 +1696,7 @@ void fm1_cstart(void)
     for (d = _bss_start; d < _bss_end; d++)
         *d = 0;
     uint32_t *pool_dirty_end = _pool_end;           /* (where the boot decoder's tables may have left the RAM dirty) */
+#if !FM1B_RAM_RUNTIME
     if (_rt_load[0] == BOOT_LZMA_MAGIC) {
         /* the load images boot-packed (fm1.toml boot_pack, tools/boot_pack.py), .ram_text's then .data's, the decoder's
          * tables in the pool, cleared after; one that does not unpack exactly: update mode */
@@ -1663,6 +1711,7 @@ void fm1_cstart(void)
         for (s = _rt_load, d = _rt_start; d < _rt_end; s++, d++)
             *d = *s;
     }
+#endif /* RAM runtime: the entry stub already copied code, constants and data */
     for (d = _pool_start; d < pool_dirty_end; d++)
         *d = 0;
 #if FM1B_CACHE_RAM

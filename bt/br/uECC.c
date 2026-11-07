@@ -371,6 +371,13 @@ uECC_VLI_API uECC_word_t uECC_vli_sub(uECC_word_t *result,
 #if !asm_mult || (uECC_SQUARE_FUNC && !asm_square) || \
     (uECC_SUPPORTS_secp256k1 && (uECC_OPTIMIZATION_LEVEL > 0) && \
         ((uECC_WORD_SIZE == 1) || (uECC_WORD_SIZE == 8)))
+#if defined(APP_BT_RECEIVER) && !defined(PLAT_HOST)
+/* WL82: isolate widening multiplication from memory loads (bsp/docs/CPU.md).
+ * The incoming SSP receiver is the first gateway build to link this path. */
+__attribute__((noinline)) static uECC_dword_t btr_ecc_product(uECC_word_t a, uECC_word_t b) {
+    return (uECC_dword_t)a * b;
+}
+#endif
 static void muladd(uECC_word_t a,
                    uECC_word_t b,
                    uECC_word_t *r0,
@@ -402,7 +409,11 @@ static void muladd(uECC_word_t a,
     *r1 += (p1 + (*r0 < p0));
     *r2 += ((*r1 < p1) || (*r1 == p1 && *r0 < p0));
 #else
+#if defined(APP_BT_RECEIVER) && !defined(PLAT_HOST)
+    uECC_dword_t p = btr_ecc_product(a, b);
+#else
     uECC_dword_t p = (uECC_dword_t)a * b;
+#endif
     uECC_dword_t r01 = ((uECC_dword_t)(*r1) << uECC_WORD_BITS) | *r0;
     r01 += p;
     *r2 += (r01 < p);

@@ -356,9 +356,15 @@ static void ble_poll(void)
 #endif
 #if FM1B_BT_AUDIO
     if (own_bta_attached) {
+#if defined(APP_BT_RECEIVER) && defined(APP_CPU_WORKLOAD)
+        plat_cpu_work_begin();                    /* foreground SBC/SSP is audio work too */
+#endif
         bti_poll();                               /* Bluetooth audio: the page, the link, the stream's packets */
         own_bta_poll();
         own_bta_keep();
+#if defined(APP_BT_RECEIVER) && defined(APP_CPU_WORKLOAD)
+        plat_cpu_work_end();
+#endif
         own_held(1);                              /* while it streams, the MIDI link asked to slow to 30-45 ms (the
                                                    * audio's air; ble_host.c ble_sig_audio: at 7.5-15 ms half the MIDI
                                                    * packets failed CRC beside the stream, 2026-10-26) */

@@ -29,6 +29,9 @@ enum { BTP_IDLE, BTP_IOCAP, BTP_PK_RX, BTP_PK_TX, BTP_CONFIRM, BTP_NUMBER, BTP_D
                                                          * on the link after it, 2026-10-20; bt_acl.c ba.fresh) */
 struct btp {
     uint8_t st, tid, pk_rx, pk_tx, reason;
+    uint8_t peripheral; /* incoming ACL: peer is the Central; it negotiates size and starts encryption */
+    uint8_t enc_pending; /* our Peripheral mode request may still receive a collision reply */
+    uint8_t auth_pending; /* Peripheral bond challenge: 1 outstanding, 2 yielded to Central */
     uint8_t init;                                       /* 1: we started it (btp_start): A is us, B the device */
     uint8_t bonded;                                     /* 1: the link key is a bond's, kept from an earlier pairing */
     uint8_t dev_authed;                                 /* 1: the device authenticated us (its au_rand answered) */
@@ -222,6 +225,18 @@ static void btp_i_encrypt(struct btp *p)                /* authenticated: we ask
     btp_put(p, BTL_ENCRYPTION_MODE_REQ, &on, 1);
     p->st = BTP_MODEREQ;
 }
+/* Part C 4.2.5.1 permits either LM to request encryption. For an incoming
+ * connection start our own transaction (TID 1), then leave key-size/EN_RAND
+ * negotiation to the Central. The receiver calls this once after authentication. */
+static void btp_peripheral_encrypt(struct btp *p)
+{
+    uint8_t on = 1;
+    if (!p->peripheral || p->st != BTP_AUTHED || (!p->dev_authed && !p->bonded)) return;
+    p->tid = 1;
+    p->enc_pending = 1;
+    btp_put(p, BTL_ENCRYPTION_MODE_REQ, &on, 1);
+    p->st = BTP_MODEREQ;
+}
 static void btp_keysize(struct btp *p)                  /* encryption on: our key size, 16 octets (the device may offer less) */
 {
     p->ksz = 16;
@@ -261,7 +276,8 @@ static void btp_bond(struct btp *p, const uint8_t lk[16])
 }
 static void btp_auth(struct btp *p)
 {
-    p->tid = 0;
+    p->tid = p->peripheral ? 1 : 0;
+    p->auth_pending = p->peripheral ? 1 : 0;
     (void)p->rng(p->au, 16);
     btp_put(p, BTL_AU_RAND, p->au, 16);
     p->st = BTP_AUTHING;
@@ -280,13 +296,19 @@ static void btp_start(struct btp *p)                    /* we start the pairing 
 }
 static int btp_in(struct btp *p, const uint8_t *pdu, uint32_t len)
 {
-    uint32_t tid = 0, op = btl_opcode(pdu, len, &tid), i;
+    uint32_t tid = 0, op, i;
+    if (!len) return 0;
+    op = btl_opcode(pdu, len, &tid);
+    if (!op) return 0;
     const uint8_t *par = pdu + (op >> 8 == BTL_ESCAPE ? 2 : 1);
     uint32_t n = len - (uint32_t)(par - pdu);
     switch (op) {
     case BTL_ESCAPE << 8 | BTL_X_IO_CAPABILITY_REQ:     /* the device starts pairing: our IO capability back */
         if (n < 3u)
             return 1;
+        /* An incoming fresh pairing replaces the session's saved-key mode,
+         * even if the phone forgot a bond that we still have in flash. */
+        if (p->peripheral) p->bonded = p->dev_authed = p->enc_pending = p->auth_pending = 0;
         p->tid = (uint8_t)tid;
         p->iocap_a[0] = par[0], p->iocap_a[1] = par[1], p->iocap_a[2] = par[2];
         p->iocap_b[0] = BTP_IOCAP_NOIO, p->iocap_b[1] = 0, p->iocap_b[2] = BTP_AUTH_GENERAL_BONDING;
@@ -317,8 +339,9 @@ static int btp_in(struct btp *p, const uint8_t *pdu, uint32_t len)
         btp_rev(p->cb, par, 16);
         btp_i_number(p);
         return 1;
-    case BTL_SRES:                                      /* (the initiator) its answer to our au_rand */
-        if (!p->init || p->st != BTP_AUTHING || n < 4u)
+    case BTL_SRES:                                      /* its answer to our au_rand (including fresh Peripheral SSP) */
+        if ((!p->init && !p->peripheral) || p->st != BTP_AUTHING || n < 4u ||
+            (p->peripheral && tid != p->tid))
             return 0;
         {
             uint8_t sres[4];
@@ -330,7 +353,8 @@ static int btp_in(struct btp *p, const uint8_t *pdu, uint32_t len)
             }
         }
         p->st = BTP_AUTHED;
-        if (p->dev_authed)                              /* the encryption only once it has authenticated us too (Part C
+        p->auth_pending = 0;
+        if (p->dev_authed && !p->peripheral)             /* the encryption only once it has authenticated us too (Part C
                                                          * 4.2.5.1: not before the authentication is done; asked while
                                                          * its au_rand was on its way, the AirPods never kept the bond
                                                          * and left every channel "authentication pending", 2026-10-21;
@@ -411,6 +435,23 @@ static int btp_in(struct btp *p, const uint8_t *pdu, uint32_t len)
     case BTL_AU_RAND:                                   /* the device authenticates us: SRES = E1(LK, AU_RAND, our address) */
         if (p->st < BTP_PAIRED || p->st == BTP_FAILED || n < 16u)
             return 0;
+        if (p->peripheral && p->st >= BTP_MODEREQ && p->st <= BTP_STARTING) {
+            /* Part C 4.2.5.1: no new authentication during encryption setup.
+             * Keep the agreed ACO and transaction ID for the pending key. */
+            uint8_t saved = p->tid, reject[2] = {BTL_AU_RAND, 0x24};
+            p->tid = (uint8_t)tid;
+            btp_put(p, BTL_NOT_ACCEPTED, reject, 2);
+            p->tid = saved;
+            return 1;
+        }
+        if (p->peripheral && p->bonded && p->auth_pending && tid == 0u) {
+            /* Part C 2.5.1: the Central's crossed authentication wins. Its
+             * challenge supplies the ACO; never overwrite it with a late
+             * SRES for our abandoned TID 1 challenge. The collision rejection
+             * may arrive before or after this challenge. */
+            p->auth_pending = 2;
+            p->st = BTP_PAIRED;
+        }
         {
             uint8_t sres[4];
             bts_e1(p->lk, par, p->own_addr, sres, p->aco);
@@ -418,18 +459,33 @@ static int btp_in(struct btp *p, const uint8_t *pdu, uint32_t len)
             btp_put(p, BTL_SRES, sres, 4);
         }
         p->dev_authed = 1;
-        if (p->st == BTP_PAIRED)
-            p->st = BTP_AUTHED;
+        if (p->st == BTP_PAIRED) {
+            if (p->peripheral && !p->bonded && !p->init) {
+                /* Core Vol 2 Part C 4.2.7.4: fresh SSP ends with mutual
+                 * authentication. Reply first (4.2.1.1), then challenge the
+                 * Central within the same pairing transaction. Do not set
+                 * init: SSP responder and radio role have not changed. The
+                 * SRES handler retains this second authentication's ACO and
+                 * is ready for encryption. Saved-bond reconnects
+                 * can still use a single authentication. */
+                (void)p->rng(p->au, 16);
+                btp_put(p, BTL_AU_RAND, p->au, 16);
+                p->st = BTP_AUTHING;
+            } else p->st = BTP_AUTHED;
+        }
         else if (p->init && p->st == BTP_AUTHED)
             btp_i_encrypt(p);                           /* (ours was done first: now the encryption) */
         return 1;
     case BTL_ENCRYPTION_MODE_REQ:                       /* the device asks for encryption: yes, and we start it (the master's) */
-        if (p->st < BTP_AUTHED || p->st == BTP_FAILED)
+        if (p->st < BTP_AUTHED || p->st >= BTP_ENCRYPTED || n != 1u || par[0] != 1u)
             return 0;
+        if (p->peripheral && (tid != 0u || p->st > BTP_MODEREQ)) return 0;
+        /* If requests crossed, the Central's transaction wins (Part C 2.5.1).
+         * Retain enc_pending to recognize its late rejection of our TID 1. */
         p->tid = (uint8_t)tid;
         btp_accept(p, op);
-        if (n && par[0])                                /* (on: the key size, 16 octets, then EN_RAND once it is taken) */
-            btp_keysize(p);
+        if (p->peripheral) { p->st = BTP_KEYSIZE; p->ksz = 16; }
+        else btp_keysize(p);
         return 1;
     case BTL_ACCEPTED:                                  /* the device took what we sent: our next step */
         if (n < 1u)
@@ -443,13 +499,18 @@ static int btp_in(struct btp *p, const uint8_t *pdu, uint32_t len)
                 btp_keys(p);                            /* (both keys exchanged: commitment) */
             return 1;
         }
-        if (par[0] == BTL_ENCRYPTION_MODE_REQ && p->st == BTP_MODEREQ) {   /* (the initiator: on, the key size next) */
+        if (p->peripheral && par[0] == BTL_ENCRYPTION_MODE_REQ && tid == 1u && p->enc_pending) {
+            p->enc_pending = 0;
+            if (p->st == BTP_MODEREQ) {p->st = BTP_KEYSIZE; p->ksz = 16;}
+            return 1;
+        }
+        if (par[0] == BTL_ENCRYPTION_MODE_REQ && p->st == BTP_MODEREQ && tid == p->tid && !p->peripheral) {
             btp_keysize(p);
             return 1;
         }
         if (par[0] == BTL_SIMPLE_PAIRING_NUMBER || par[0] == BTL_DHKEY_CHECK || par[0] == BTL_SIMPLE_PAIRING_CONFIRM)
             return 1;                                   /* (its acknowledgements of ours: nothing more to send) */
-        if (par[0] == BTL_ENCRYPTION_KEY_SIZE_REQ && p->st == BTP_KEYSIZE) {
+        if (par[0] == BTL_ENCRYPTION_KEY_SIZE_REQ && p->st == BTP_KEYSIZE && !p->peripheral && tid == p->tid) {
             btp_en_start(p);
             return 1;
         }
@@ -460,7 +521,7 @@ static int btp_in(struct btp *p, const uint8_t *pdu, uint32_t len)
         return 0;
     case BTL_ENCRYPTION_KEY_SIZE_REQ:                   /* the device's smaller key size for ours: taken from 7 octets
                                                          * (Part C 4.2.5.2: the master accepts it or refuses) */
-        if (p->st != BTP_KEYSIZE || n < 1u)
+        if (p->st != BTP_KEYSIZE || n < 1u || (p->peripheral && tid != p->tid))
             return 0;
         p->tid = (uint8_t)tid;
         if (par[0] < 7u || par[0] > p->ksz) {
@@ -469,9 +530,31 @@ static int btp_in(struct btp *p, const uint8_t *pdu, uint32_t len)
         }
         p->ksz = par[0];
         btp_accept(p, op);
-        btp_en_start(p);
+        if (!p->peripheral) btp_en_start(p);
+        return 1;
+    case BTL_START_ENCRYPTION_REQ:
+        if (!p->peripheral || p->st != BTP_KEYSIZE || n != 16u || tid != p->tid) return 0;
+        { uint8_t kc[16];
+          bts_e3(p->lk, par, p->aco, kc);
+          bts_kc_reduce(kc, p->ksz, p->kc);
+          btp_accept(p, op);
+          p->st = BTP_ENCRYPTED;
+          p->auth_pending = 0;
+        }
         return 1;
     case BTL_NOT_ACCEPTED:
+        if (p->peripheral && p->bonded && p->auth_pending && tid == 1u && n == 2u &&
+            par[0] == BTL_AU_RAND && par[1] == 0x23u) {
+            if (p->auth_pending == 1) {p->st = BTP_PAIRED; p->tid = 0;}
+            p->auth_pending = 2;
+            return 1;
+        }
+        if (p->peripheral && p->enc_pending && tid == 1u && n == 2u &&
+            par[0] == BTL_ENCRYPTION_MODE_REQ && par[1] == 0x23u) {
+            p->enc_pending = 0;
+            if (p->st == BTP_MODEREQ) {p->st = BTP_AUTHED; p->tid = 0;}
+            return 1;                                  /* Central wins a crossed encryption request */
+        }
         if (p->st == BTP_IDLE || p->st == BTP_ENCRYPTED)
             return 0;
         p->st = BTP_FAILED;

@@ -19,7 +19,14 @@
 #define APP_TAGLINE ""                   /* under the name on the splash screen */
 #endif
 #ifndef APP_GAIN
+#ifdef APP_MASTER_DB
+#include "master_taper.h"
+#define APP_GAIN(m) fm1b_master_db(m)
+#elif defined APP_MASTER_LINEAR
+#define APP_GAIN(m) (m)               /* opt-in linear MASTER amplitude */
+#else
 #define APP_GAIN(m) ((m) * (m) >> 12)    /* the render's gain from MASTER's position: the square, 0..~4096 */
+#endif
 #endif
 #ifndef APP_VERSION
 #define APP_VERSION "DEV"                /* a release build passes its own (tools/build.py --release) */

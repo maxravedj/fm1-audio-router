@@ -7,7 +7,9 @@ audio at MASTER and records the master (no APP_USB_PLAY, no APP_USB_CAPTURE): a 
 the signal, every frame, bit for bit, from the render that started after usb_play. Then MASTER at half: the
 recording the signal at master^2 (main_fm1.c's uac_play gain), within a rounding.
 
-  tests/host_usb_audio_test.py HOST_EXE OUTDIR"""
+  tests/host_usb_audio_test.py HOST_EXE OUTDIR [--linear-master|--db-master]
+  --linear-master checks an APP_MASTER_LINEAR app's linear amplitude taper.
+  --db-master checks the audio taper's quantized -30-dB midpoint (130/4096)."""
 import math
 import struct
 import subprocess
@@ -55,7 +57,8 @@ def main() -> int:
                       f"expect usb_play_frames {n}\nusb_recstop\n")
         nch, bits, rec = wav_read(out / "rec.wav")
         assert nch == 2 and bits == 16, (nch, bits)
-        g = (master * master >> 12) / 4096.0
+        g = (130 if "--db-master" in sys.argv[3:] and master == 2048 else
+             master if "--linear-master" in sys.argv[3:] else master * master >> 12) / 4096.0
         start = next(i for i, f in enumerate(rec) if f != (0, 0))   # (the first render after usb_play)
         got = rec[start:start + n]
         assert len(got) == n, len(got)

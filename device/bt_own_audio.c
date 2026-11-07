@@ -79,6 +79,9 @@ static void con_hex(uint32_t v, uint32_t n) { (void)v, (void)n; }
 static void con_dec(uint32_t v) { (void)v; }
 #endif
 #define SY_TPS_Q8 (24000000u * 256u / 44100u)    /* TIMER4 ticks a sample, Q8 (bt_acl.c's latency figure) */
+#ifdef APP_BT_RECEIVER
+#include "bt_receiver_device.c"
+#else
 #include "bt_audio.h"
 static int own_bt_trims(struct ble_rf_trims *t);
 #define BTI_RADIO_TRIMS own_bt_trims              /* (bt_inq.c bti_radio_up: our constants, the 187 measured) */
@@ -356,3 +359,5 @@ static int bta_frame(const uint8_t *p, uint32_t n)
     ota_wire_send(end, sizeof end);
     return 1;
 }
+
+#endif /* APP_BT_RECEIVER */

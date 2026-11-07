@@ -86,7 +86,12 @@
 #ifndef FM1B_ERASE_SLICED
 #define FM1B_ERASE_SLICED 1
 #endif
+#if FM1B_RAM_RUNTIME
+#define FL_RAM_RUNTIME 1
+#define FL_ERASE_SLICED 0
+#else
 #define FL_ERASE_SLICED FM1B_ERASE_SLICED
+#endif
 static uint32_t flash_held;               /* erases that held the sound for the whole erase (plat_flash_held) */
 #define FL_ERASE_HELD() (flash_held++)
 #include "fm1_flash.h"
@@ -101,6 +106,9 @@ static uint32_t flash_held;               /* erases that held the sound for the 
 #endif
 
 #include "libc.c"
+#ifdef APP_UI_PROFILE
+#include "ui_profile.c"
+#endif
 #include "lcd.c"
 #if FM1B_SD
 #include "sd.c"                 /* the SD card on the LCD's bus: plat_sd_* */
@@ -208,6 +216,11 @@ static volatile uint32_t fm1_ms;  /* milliseconds since boot (TIMER4-based, TIME
 #ifdef APP_SYSEX_BYTE
 #define FELUCCA_SYSEX_BYTE(b) app_sysex_byte(b)   /* the app's, every SysEx byte from USB (plat.h APP_SYSEX_BYTE) */
 #endif
+#ifdef APP_USB_INPUT_METER
+#include "usb_input_meter.h"
+#define FELUCCA_UAC_OUT_OBSERVE(p, n, alt) usb_input_meter_packet((p), (n), (alt))
+#define FELUCCA_UAC_OUT_STREAM_START() usb_input_stream_start()
+#endif
 #include "usb.c"
 #include "console.c"              /* the USB serial console's bytes for the app (plat_console_*, FM1B_CDC) */
 #ifndef FM1B_TRS
@@ -226,6 +239,11 @@ static int data_erase(uint32_t off);   /* (main_fm1.c) */
 static int st_read(uint32_t off, void *dst, uint32_t n)   /* 256-byte IRQ-off windows: audio keeps up */
 {
     uint8_t *d = dst;
+#if FM1B_RAM_RUNTIME
+    /* Store reads happen after a completed write. Once the plain data window
+     * is enabled, avoid even short SPI/IRQ-off windows when checking records. */
+    if (!fl_plain_read_xip(off, d, n)) return 0;
+#endif
     while (n) {
         uint32_t k = n > 256u ? 256u : n, f = irq_save();
         int rc = FL_FAR(fl_read_ram)(off, d, k);

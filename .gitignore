@@ -2,3 +2,9 @@ build/
 __pycache__/
 *.pyc
 .DS_Store
+
+._*
+**/build
+reference/
+vendor/
+apps/*/web/words/

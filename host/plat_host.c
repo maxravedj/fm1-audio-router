@@ -168,6 +168,11 @@
 #include <time.h>
 #define __attribute__(x)
 
+#include "plat.h"
+#include "app.h"
+#ifdef APP_SCREENSHOT
+#include "screenshot_row.h"
+#endif
 /* ------------------------------------------------------------ screen --- */
 #ifdef PLAT_FB
 static uint16_t *const fb = PLAT_FB;    /* the embedder's own (host/rfm1.c: the panel's LCD) */
@@ -184,6 +189,9 @@ static void mirror_fill(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint16_t
 #endif
 static void lcd_fill(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint16_t c)
 {
+#ifdef APP_SCREENSHOT
+    if(screenshot_active){screenshot_copy(x,y,w,h,0,c);return;}
+#endif
     uint32_t i, j;
     uint16_t sc = (uint16_t)(((c >> 8) & 0xFFu) | ((c & 0xFFu) << 8));
 #if FM1B_MIRROR
@@ -198,6 +206,9 @@ static void lcd_fill(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint16_t c)
 static uint32_t blits;
 static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint16_t *px)
 {
+#ifdef APP_SCREENSHOT
+    if(screenshot_active){screenshot_copy(x,y,w,h,px,0);return;}
+#endif
     uint32_t i, j;
     blits++;
     lcd_changes++;
@@ -689,6 +700,29 @@ void plat_ble_enable(int on)
         plat_ble_start();
     }
 }
+#ifdef APP_BT_RECEIVER
+#include "../bt/br/bt_receiver_profile.c"
+#include "../bt/br/bt_receiver_pcm.c"
+#include "../bt/br/bt_receiver_media.c"
+static uint8_t btr_host_on, btr_host_pairing, btr_host_connected, btr_host_start_fail, btr_host_codec;
+static uint32_t btr_host_codec_queries;
+int plat_bt_receiver_on(int on) {
+    if (on && btr_host_start_fail) return -1;
+    btr_host_on=on!=0;btr_host_pairing=btr_host_connected=0;btr_host_codec=PLAT_BT_CODEC_NONE;
+    btr_audio_reset(44100);btr_media_reset();return 0;
+}
+void plat_bt_receiver_preference(int preference) {
+    if(preference>=0 && preference<=2 && preference!=btr_codec_preference){
+        btr_codec_preference=(uint8_t)preference;btr_host_connected=0;btr_host_codec=0;btr_media_reset();
+    }
+}
+void plat_bt_receiver_pair(int on) {btr_host_pairing=btr_host_on&&on;}
+int plat_bt_receiver_pairing(void) {return btr_host_pairing;}
+int plat_bt_receiver_connected(void) {return btr_host_on&&btr_host_connected;}
+int plat_bt_receiver_codec(void) {btr_host_codec_queries++;return plat_bt_receiver_connected()?btr_host_codec:PLAT_BT_CODEC_NONE;}
+void plat_bt_receiver_mix(int32_t *lr,uint32_t n,uint32_t gain) {if(btr_host_on)btr_pcm_mix(lr,n,gain);}
+#endif
+
 #if FM1B_BT_AUDIO
 /* Bluetooth audio (FM1B_BT_AUDIO): a stand-in for the A2DP source. The devices around are the script's ("bta add NAME",
  * "bta drop NAME": it leaves, a link to it is lost); a scan lists them after 1 s, a connect streams 0.3 s later (one
@@ -1142,6 +1176,7 @@ static uint32_t hsx_sk;                          /* the stream's bytes not yet i
 uint32_t plat_sysex_room(void) { return hsx_session && !hsx_streaming ? (HSX_RING - hsx_q) * 3u : 0u; }
 uint32_t plat_sysex_queued(void) { return hsx_q * 3u; }
 uint32_t plat_usb_session(void) { return hsx_session; }
+int plat_usb_connected(void){return hsx_session!=0;}
 static void hsx_ms(void)                        /* one millisecond of USB: the computer reads */
 {
     if (!hsx_stalled)
@@ -1537,6 +1572,15 @@ static FILE *usb_rec_f;                             /* the computer records into
 static uint32_t usb_rec_frames, usb_play_frames;
 static int32_t *usb_play_buf;                       /* the computer's audio (usb_play): stereo, 24-bit as the render's */
 static uint32_t usb_play_n, usb_play_at;
+#ifdef APP_USB_INPUT_METER
+#include "usb_input_meter.h"
+#endif
+#ifdef APP_MASTER_METER
+#include "master_meter.h"
+#endif
+#ifdef APP_MASTER_FADE
+#include "master_fade.h"
+#endif
 static uint8_t usb_rec_now;                         /* this render's: the computer records (plat_usb_audio_rec) */
 int plat_usb_audio_rec(void) { return FM1B_UAC && usb_rec_now && !usbh_port(); }   /* (a USB host: no computer) */
 /* the computer's next n frames at unity (24-bit), silence past its end; 1 while there are some */
@@ -1550,6 +1594,9 @@ static int usb_play_take(int32_t *lr, uint32_t n)
         usb_play_at += (uint32_t)ok;
         usb_play_frames += (uint32_t)ok;
     }
+#ifdef APP_USB_INPUT_METER
+    usb_input_meter_samples(lr, n);
+#endif
     return (int)got;
 }
 void plat_usb_audio_stats(plat_usb_audio_stats_t *s)
@@ -1744,6 +1791,9 @@ static int himg_load(const char *path, uint32_t *objs)   /* 0 = loaded (*objs: t
 
 static uint32_t cpu_pct;
 uint32_t plat_cpu_pct(void) { return cpu_pct; }
+#ifdef APP_CPU_WORKLOAD
+#include "cpu_workload.h"
+#endif
 static void ds_fill(ds_rec_t *r)                    /* what the simulator has of main_fm1.c's counters (the rest 0) */
 {
     r->up_s = (now_ms - hcr_boot_ms) / 1000u, r->halves = hds_halves;
@@ -1769,6 +1819,9 @@ uint32_t plat_ticks24(void)                     /* the host's monotonic clock, a
 #if FM1B_CPU2 && !defined(APP_HOST_CPU2)
 /* the second core, simulated: a job runs at once, in order (the same sums as the device's split); plat_core is 1 in it */
 static int cpu2_on, cpu2_in_job;
+#ifdef APP_CPU_WORKLOAD
+#include "cpu2_workload.h"
+#endif
 int plat_cpu2_set(int on) { cpu2_on = on; return 0; }
 int plat_cpu2_on(void) { return cpu2_on; }
 int plat_cpu2_run(void (*fn)(uint32_t), uint32_t arg)
@@ -1776,7 +1829,13 @@ int plat_cpu2_run(void (*fn)(uint32_t), uint32_t arg)
     if (!cpu2_on)
         return 0;
     cpu2_in_job = 1;
+#ifdef APP_CPU_WORKLOAD
+    cpu2_work_begin();
+#endif
     fn(arg);
+#ifdef APP_CPU_WORKLOAD
+    cpu2_work_end();
+#endif
     cpu2_in_job = 0;
     host_busy_left = host_env_n("FM1B_HOST_CPU2_BUSY", &host_busy_n);
     return 1;
@@ -1820,6 +1879,8 @@ const struct plat_cache_ram *plat_cache_ram(void)
 #endif
     return &r;
 }
+
+#include "work_memory.h"
 
 /* -------------------------------------------------------------- app --- */
 #define ANN_NAME APP_NAME " " APP_VERSION
@@ -2260,6 +2321,9 @@ static int usb_play_open(const char *path)          /* 0, or -1: no stereo 44.1 
         at += 8u + sz + (sz & 1u);
     }
     free(w);
+#ifdef APP_USB_INPUT_WAVEFORM
+    if (usb_play_buf) usb_input_stream_start();
+#endif
     return usb_play_buf ? 0 : -1;
 }
 
@@ -2347,19 +2411,49 @@ static void sim_ms_begin(uint32_t ms)
 #endif
 }
 
+#ifdef APP_MASTER_FX
+/* Share the actual device mixer; the host adapts only USB transport. */
+#define FELUCCA_UAC FM1B_UAC
+#define FELUCCA_UAC_OUT FM1B_UAC_OUT
+static int uac_capturing(void){return usb_rec_f && !usbh_port();}
+static void uac_tap(const int32_t *p,uint32_t n){if(uac_capturing())usb_rec_put(p,n);}
+static void uac_play(int32_t *p,uint32_t n,uint32_t gain)
+{
+    static int32_t next[APP_BLOCK*2];
+    if(usb_play_take(next,n))for(unsigned i=0;i<2*n;i++)p[i]+=(int32_t)((float)next[i]*((float)gain/4096.0f));
+}
+#include "uac_mix.h"
+#endif
+
 static void sim_render(int32_t *blk)            /* one APP_BLOCK-frame block, as the device renders it */
 {
     double t0 = now_ns(), dt;
+    #ifndef APP_MASTER_FX
     uint32_t k;
+    #endif
+#ifdef APP_CPU_WORKLOAD
+    plat_cpu_work_begin();
+#endif
     usb_rec_now = usb_rec_f != 0;               /* (the device reads it at the render's start) */
+#ifdef APP_MASTER_FX
+    app_render(blk,APP_BLOCK,4096u);
+    uac_mix(blk,APP_BLOCK,APP_GAIN(master),master,uac_full,usb_play_q12);
+#else
     app_render(blk, APP_BLOCK, uac_full ? 4096u : APP_GAIN(master));
 #ifndef APP_USB_PLAY
     if (FM1B_UAC_OUT && usb_play_buf) {         /* the computer's audio at MASTER and plat_usb_play_gain, as uac_mix.h */
         static int32_t pl[2 * APP_BLOCK];
+#ifdef APP_MASTER_DB
+        const float g = (float)(uac_full ? 4096u : APP_GAIN(master)) * (float)usb_play_q12 * (1.0f / (4096.0f * 4096.0f));
+#elif defined APP_MASTER_LINEAR
+        const float g = (float)(uac_full ? 4096u : master) * (float)usb_play_q12 * (1.0f / (4096.0f * 4096.0f));
+#else
         const float g = (float)(uac_full ? 4096u : master * master >> 12) * (float)usb_play_q12 * (1.0f / (4096.0f * 4096.0f));
-        if (usb_play_take(pl, APP_BLOCK))
+#endif
+        if (usb_play_take(pl, APP_BLOCK)) {
             for (k = 0; k < 2u * APP_BLOCK; k++)
                 blk[k] += (int32_t)((float)pl[k] * g);
+        }
     }
 #endif
     if (FM1B_UAC && usb_rec_f && !usbh_port()) {   /* the USB audio input: the app's channels, or the master */
@@ -2369,15 +2463,32 @@ static void sim_render(int32_t *blk)            /* one APP_BLOCK-frame block, as
         usb_rec_put(blk, APP_BLOCK);
 #endif
     }
+#ifdef APP_BT_RECEIVER
+    plat_bt_receiver_mix(blk, APP_BLOCK, uac_full ? 4096u : APP_GAIN(master));
+    for (uint32_t i=0;i<2u*APP_BLOCK;i++) {
+        if(blk[i]>8388607)blk[i]=8388607;
+        if(blk[i]<-8388608)blk[i]=-8388608;
+    }
+#endif
     if (uac_full) {                             /* (the USB audio input took it at full level) the speaker: MASTER */
         const float g = (float)APP_GAIN(master) * (1.0f / 4096.0f);
         for (k = 0; k < 2u * APP_BLOCK; k++)
             blk[k] = (int32_t)((float)blk[k] * g);
     }
+#ifdef APP_MASTER_METER
+    master_meter_samples(blk, APP_BLOCK);
+#endif
+#ifdef APP_MASTER_FADE
+    master_fade_apply(blk, APP_BLOCK);
+#endif
+#endif
     dt = now_ns() - t0;
     render_ns_total += dt;
     render_budget_ns_total += APP_BLOCK * 1e9 / 44100.0;
     cpu_pct = (uint32_t)(100.0 * dt / (APP_BLOCK * 1e9 / 44100.0));
+#ifdef APP_CPU_WORKLOAD
+    plat_cpu_work_end();
+#endif
 }
 
 static void sim_ms_end(int frame)

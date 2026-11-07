@@ -19,19 +19,30 @@ struct bsd_rec { const struct bsd_attr *a; uint8_t na; uint8_t nu; const uint16_
 
 /* the A2DP source (the A2DP spec §5.3) */
 static const uint8_t BSD_S0000[] = {0x0A, 0x00, 0x01, 0x00, 0x00};
-static const uint8_t BSD_S0001[] = {0x35, 0x03, 0x19, 0x11, 0x0A};
+#ifdef APP_BT_RECEIVER
+#define BSD_AUDIO_UUID 0x110B
+#define BSD_AUDIO_LOW 0x0B
+#else
+#define BSD_AUDIO_UUID 0x110A
+#define BSD_AUDIO_LOW 0x0A
+#endif
+static const uint8_t BSD_S0001[] = {0x35, 0x03, 0x19, 0x11, BSD_AUDIO_LOW};
 static const uint8_t BSD_S0004[] = {0x35, 0x10, 0x35, 0x06, 0x19, 0x01, 0x00, 0x09, 0x00, 0x19,
                                     0x35, 0x06, 0x19, 0x00, 0x19, 0x09, 0x01, 0x03};
 static const uint8_t BSD_S0005[] = {0x35, 0x03, 0x19, 0x10, 0x02};
 static const uint8_t BSD_S0009[] = {0x35, 0x08, 0x35, 0x06, 0x19, 0x11, 0x0D, 0x09, 0x01, 0x03};
-static const uint8_t BSD_S0100[] = {0x25, 0x08, 'O', 'P', 'T', 'I', 'M', 'I', 'S', 'T'};
+#ifdef APP_BT_RECEIVER
+static const uint8_t BSD_S0100[] = {0x25, 0x0C, 'A','U','D','I','O',' ','R','O','U','T','E','R'};
+#else
+static const uint8_t BSD_S0100[] = {0x25, 0x08, 'O','P','T','I','M','I','S','T'};
+#endif
 static const uint8_t BSD_S0311[] = {0x09, 0x00, 0x01};
 static const struct bsd_attr BSD_SRC[] = {
     {0x0000, sizeof BSD_S0000, BSD_S0000}, {0x0001, sizeof BSD_S0001, BSD_S0001}, {0x0004, sizeof BSD_S0004, BSD_S0004},
     {0x0005, sizeof BSD_S0005, BSD_S0005}, {0x0009, sizeof BSD_S0009, BSD_S0009}, {0x0100, sizeof BSD_S0100, BSD_S0100},
     {0x0311, sizeof BSD_S0311, BSD_S0311},
 };
-static const uint16_t BSD_SRC_U[] = {0x110A, 0x0100, 0x0019, 0x1002, 0x110D};
+static const uint16_t BSD_SRC_U[] = {BSD_AUDIO_UUID, 0x0100, 0x0019, 0x1002, 0x110D};
 
 /* the AVRCP target (the AVRCP spec §8: the AirPods ask its profile version, BlueZ says 1.6) */
 static const uint8_t BSD_T0000[] = {0x0A, 0x00, 0x01, 0x00, 0x01};
@@ -48,7 +59,11 @@ static const struct bsd_attr BSD_TG[] = {
 static const uint16_t BSD_TG_U[] = {0x110C, 0x0100, 0x0017, 0x1002, 0x110E};
 
 /* the Device ID (the DI spec 1.3 §5) */
+#ifdef APP_BT_RECEIVER
+static const uint8_t BSD_D0000[] = {0x0A, 0x00, 0x01, 0x00, 0x01};
+#else
 static const uint8_t BSD_D0000[] = {0x0A, 0x00, 0x01, 0x00, 0x02};
+#endif
 static const uint8_t BSD_D0001[] = {0x35, 0x03, 0x19, 0x12, 0x00};
 static const uint8_t BSD_D0005[] = {0x35, 0x03, 0x19, 0x10, 0x02};
 static const uint8_t BSD_D0200[] = {0x09, 0x01, 0x03};                  /* SpecificationID 1.3 */
@@ -67,7 +82,9 @@ static const uint16_t BSD_DID_U[] = {0x1200, 0x1002};
 #define BSD_N(x) (uint8_t)(sizeof x / sizeof x[0])
 static const struct bsd_rec BSD_REC[] = {      /* (index i: handle BSD_HANDLE0 + i, as attribute 0x0000 says) */
     {BSD_SRC, BSD_N(BSD_SRC), BSD_N(BSD_SRC_U), BSD_SRC_U},
+#ifndef APP_BT_RECEIVER
     {BSD_TG, BSD_N(BSD_TG), BSD_N(BSD_TG_U), BSD_TG_U},
+#endif
     {BSD_DID, BSD_N(BSD_DID), BSD_N(BSD_DID_U), BSD_DID_U},
 };
 #define BSD_NREC BSD_N(BSD_REC)

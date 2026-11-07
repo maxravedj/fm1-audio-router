@@ -461,6 +461,9 @@ static void bti_alarm(void)                        /* the 18-slot housekeeping (
 void bti_bt_irq(void)                              /* IRQ 40 (BR §6.2), via isr_bti_bt (hal/fm1_bredr.h) */
 {
     uint32_t p = fm1_br_ipnd();
+#if defined(APP_BT_RECEIVER) && defined(APP_CPU_WORKLOAD)
+    plat_cpu_work_begin();
+#endif
     bti_st.irq40++;
     if (bti_st.phase == BTI_INQ_RUN) {
         bti_count(bti_st.pd_key, bti_st.pd_n, &bti_st.pd_other, p);
@@ -495,6 +498,9 @@ void bti_bt_irq(void)                              /* IRQ 40 (BR §6.2), via isr
         fm1_br_iack(4u);
     if (p & 0x0C05u)
         bti_st.other40++;
+#if defined(APP_BT_RECEIVER) && defined(APP_CPU_WORKLOAD)
+    plat_cpu_work_end();
+#endif
 }
 
 void bti_slot_irq(void)                            /* IRQ 41 (BR §6.3): timer 0, every 1,600 slots during 1a */
@@ -719,10 +725,15 @@ static void bta_named(const uint8_t a[6], const char *nm);
 #endif
 #include "bt_inq_con.c"                            /* the options, the printing, the console commands */
 
+#ifdef APP_BT_RECEIVER
+#include "bt_receiver_link.c"
+#else
 #include "bt_page.c"                               /* stage 2: btpage (the page, the link, the minimal LMP) */
 #if FELUCCA_BT_AUDIO
 #include "bt_audio.c"                              /* the screen's side: scan, pick, reconnect (SYSTEM > Bluetooth AUDIO) */
 #endif
+
+#endif /* APP_BT_RECEIVER */
 
 static void bti_poll(void)                         /* the main loop */
 {

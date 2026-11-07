@@ -147,6 +147,7 @@ APP_DIR holds the app (app.h, app.c, its sources) and its fm1.toml:
   cpu2_stack = 4096          its jobs' stack, bytes (FM1_CPU1_USTACK_BYTES: default 2816, the lowest 256 a guard the
                              core's stack limit traps in), a multiple of 8, 1024..16384: an app whose jobs go deeper
                              (plat_cpu2_stack reads how deep they went)
+  cpu2_timeout_us = 8000     wait deadline, 1000..2000000 us; long foreground decoder jobs need more than an audio render
   main_stack = 9216          the main loop's stack (crt0's sp), bytes above its 256-byte guard band, a multiple of 256,
   irq_stack = 6400           2048..24320 (default 24320); the interrupts' (ssp), the same, 2048..7936 (default 7936):
                              device/app.ld's SRAM ends that much lower or higher (its free RAM, an app's arena), the
@@ -172,6 +173,10 @@ APP_DIR holds the app (app.h, app.c, its sources) and its fm1.toml:
                              refused to plat_data_erase / plat_data_write
 Optional parts: only what an fm1.toml asks for is built in (Bluetooth, USB audio; an app's lib/touch by APP_TOUCH in
 app.h); the build prints what it has.
+  ram_runtime = true         copy all runtime code/constants to SRAM before C startup; keep audio/USB/scan IRQs
+                             running while settings flash erase/program polls. Uses device/app_ram.ld and
+                             crt0_ram.S. No BLE/WiFi/CPU2/boot_pack. The section table and RAM call graph are checked;
+                             the usual SRAM headroom and bootloader/app-slot bounds still apply.
   boot_pack = true           .ram_text and .data stored LZMA-packed (tools/boot_pack.py, Melodee's; device/boot_lzma.h): the
                              boot unpacks them, the decoder's tables in the pool before it is cleared (about 9 KB of
                              flash back on a large app)
@@ -825,12 +830,18 @@ def cache_ram_ways():
 def cpu2_stack_flags():
     """fm1.toml cpu2_stack: the second core's job stack, for its entry's unit and the platform's (none: felucca-bsp's
     2816 B, the build as before)"""
+    timeout = CONF.get("cpu2_timeout_us")
+    extra = []
+    if timeout is not None:
+        if not isinstance(timeout, int) or isinstance(timeout, bool) or not 1000 <= timeout <= 2000000:
+            raise SystemExit("fm1.toml cpu2_timeout_us: integer 1000..2000000")
+        extra = [f"-DFM1_CPU1_TIMEOUT_US={timeout}u"]
     n = CONF.get("cpu2_stack")
     if n is None:
-        return []
+        return extra
     if not isinstance(n, int) or isinstance(n, bool) or n % 8 or not 1024 <= n <= 16384:
         raise SystemExit(f"fm1.toml cpu2_stack {n!r}: bytes, a multiple of 8, 1024..16384")
-    return [f"-DFM1_CPU1_USTACK_BYTES={n}"]
+    return [f"-DFM1_CPU1_USTACK_BYTES={n}", *extra]
 
 
 def write_sizes(img, syms):
@@ -848,11 +859,13 @@ def wifi_own_flags(host=False):
     """the own Wi-Fi stack's switches and include directories (the host's: its simulated radio, host/wifi_air.c)"""
     if not WIFI_OWN:
         return []
-    f = ["-DFM1B_WIFI=1", "-DFM1B_WIFI_OWN=1", *inc(SRC / "wifi")]
+    # Host compilers run in the caller's directory; device tc() runs in ROOT.
+    includes = (lambda *dirs: [f"-I{Path(d).resolve()}" for d in dirs]) if host else inc
+    f = ["-DFM1B_WIFI=1", "-DFM1B_WIFI_OWN=1", *includes(SRC / "wifi")]
     if host:
-        f = [*inc(SRC / "host" / "wifi_fake"), *f]
+        f = [*includes(SRC / "host" / "wifi_fake"), *f]
     if LINK:
-        f += ["-DFM1B_LINK=1", *inc(SRC / "link")]
+        f += ["-DFM1B_LINK=1", *includes(SRC / "link")]
     if WIFI_AP:
         f.append("-DFM1B_WIFI_AP=1")
     v = CONF.get("wifi_mem", "static")
@@ -939,7 +952,14 @@ def build_app():
     flags = [f"-O{unity_opt}" if f == "-Os" else f for f in flags]
     ir = CONF.get("ir_pass")                      # the app's pass over the IR (see the top)
     ir_out = ["-S", "-emit-llvm", "-Xclang", "-disable-llvm-optzns"] if ir else ["-c"]   # (IR: -S, so no -c: clang warns "-c unused")
-    units = [("cc", "-c", BSP / "chip" / "crt0.S", "-o", OUT / "crt0.o"),
+    ram_runtime = bool(CONF.get("ram_runtime"))
+    if ram_runtime:
+        if (BLE and not OWN) or WIFI or CONF.get("boot_pack"):
+            raise SystemExit("ram_runtime requires vendor radio/WiFi/boot_pack disabled")
+        flags.append("-DFM1B_RAM_RUNTIME=1")
+        o2.append("-DFM1B_RAM_RUNTIME=1")
+    entry = SRC / "device/crt0_ram.S" if ram_runtime else BSP / "chip/crt0.S"
+    units = [("cc", *(["-DFM1_CPU1=1"] if CPU2 else []), "-c", entry, "-o", OUT / "crt0.o"),
              ("cc", "-c", BSP / "chip" / "fm1_vec.S", "-o", OUT / "fm1_vec.o"),
              ("cc", "-c", BSP / "chip" / "fm1_isr.S", "-o", OUT / "fm1_isr.o"),
              ("cc", *flags, *ir_out, SRC / "device" / "unity.c", "-o", OUT / ("unity.ll" if ir else "unity.o"))]
@@ -962,6 +982,10 @@ def build_app():
             objs.append(o)
             o2_units.append((f, o))
     jieli = (BLE and not OWN) or WIFI             # JieLi's libraries linked (the shim, LTO)
+    if not ir and (os.environ.get("FM1B_OPT_IR") == "1" or CONF.get("stack_check")):
+        units.append(("cc", *flags, "-S", "-emit-llvm", SRC / "device/unity.c", "-o", OUT / "unity.opt.ll"))
+        for f, o in o2_units:
+            units.append(("cc", *o2, *o2_more, *inc(f.parent), "-S", "-emit-llvm", f, "-o", o.with_suffix(".opt.ll")))
     b_units, b_objs, b_libs = radio_units() if jieli else ([], [], [])
     tc_all(*units, *b_units)
     if ir:                                        # the pass, then each unit's code from its IR at its own level
@@ -990,7 +1014,7 @@ def build_app():
     lto = ["--plugin", "/opt/jieli/pi32v2/bin/LLVMgold.so" if use_docker() else str(toolchain() / "pi32v2/bin/LLVMgold.so"),
            f"--plugin-opt=mcpu={CPU}", "--plugin-opt=-pi32v2-large-program=true"] if jieli else []
     global LAYOUT
-    ld = SRC / "device" / ("app_wifi.ld" if WIFI else "app.ld")
+    ld = SRC / "device" / ("app_ram.ld" if ram_runtime else "app_wifi.ld" if WIFI else "app.ld")
     if app_slot() != APP_SLOT:    # a bigger slot (app_end): the script with XIP that long
         text = ld.read_text()
         room = 0x10000 if "_app_xip_end" in text else 0   # (app.ld: the slot and 64 KB, the image before boot_pack packs it)
@@ -1189,6 +1213,24 @@ def check(img, syms, dis, rt):
         st_errors, st_notes = stack_check(dis)
         errors += st_errors
         notes += st_notes
+    if CONF.get("ram_runtime"):
+        # There must be no runtime code/constant fetch in XIP while NOR is busy.
+        # Explicitly audit the section table as well as the ordinary RAM call graph.
+        sections = tc("common/bin/objdump", "-h", OUT / (NAME + ".elf"))
+        rows = list(re.finditer(r"^\s*\d+\s+(\S+)\s+([0-9a-fA-F]+)\s+([0-9a-fA-F]+)\s+([0-9a-fA-F]+).*\n([^\n]*)", sections, re.M))
+        if not rows:
+            errors.append("RAM runtime: cannot read ELF section table")
+        ram_lo, ram_size = LAYOUT.get("SRAM", (0, 0))
+        for row in rows:
+            name, size, vma, lma, attrs = row.groups()
+            size, vma = int(size, 16), int(vma, 16)
+            if size and "ALLOC" in attrs and "LOAD" in attrs:
+                if name == ".text":
+                    if vma != APP_XIP or size > 256:
+                        errors.append("RAM runtime: XIP bootstrap must be <=256 bytes at entry")
+                elif not ram_lo <= vma < vma + size <= ram_lo + ram_size:
+                    errors.append(f"RAM runtime: loaded section {name} at {vma:#x} is outside SRAM")
+        notes.append("RAM runtime: all loaded runtime code/constants in SRAM; XIP entry stub only")
     ar_errors, ar_notes = ramcode.check(syms, dis, CONF.get("ram_code_allow", []))
     errors += ar_errors
     notes += ar_notes
@@ -1303,6 +1345,8 @@ def mmio_check():
         return re.sub(r"//[^\n]*", "", s)
     defs = {}
     for h in sorted([*(BSP / "chip").glob("*.h"), *(BSP / "boards" / "fm1").glob("*.h")]):
+        if h.name.startswith("._"):                # AppleDouble metadata, not C source
+            continue
         for m in re.finditer(r"^#define\s+(\w+)(?:\([^)]*\))?\s+(.*)$", strip(h.read_text()), re.M):
             defs[m.group(1)] = m.group(2)
     regs = {n for n, b in defs.items() if re.search(r"\bvolatile\b", b)}
@@ -1318,6 +1362,8 @@ def mmio_check():
              *[f for f in APP.rglob("*.[ch]") if "build" not in f.relative_to(APP).parts
                and not any(str(f.relative_to(APP)).startswith(v) for v in CONF.get("vendored", []))]]
     for f in sorted(files):
+        if f.name.startswith("._"):                # preserve metadata without parsing it as UTF-8 C
+            continue
         for no, ln in enumerate(strip(f.read_text()).splitlines(), 1):
             where = f"{f.relative_to(ROOT)}:{no}"
             for rx, what in ((MMIO_LIT, "register/window address"), (MMIO_CAST, "volatile pointer cast"),
@@ -1365,9 +1411,10 @@ def build_id():
     (fm1_cpu1_bar_build) is lifted for a new build, and each crash record in the flash history names the build that
     kept it (device/crashlog.c; printed by every build: tools/fm1_remote.py crashes shows it)"""
     h = hashlib.sha1((VERSION or "").encode())
-    for d in (APP, SRC / "device", SRC / "include", BSP / "chip"):
+    for d in (APP, SRC / "device", SRC / "include", SRC / "bt/br", BSP / "chip"):
         for f in sorted(d.rglob("*")):
-            if f.suffix in (".c", ".h", ".S", ".toml", ".ld") and "build" not in f.relative_to(d).parts:
+            if (f.suffix in (".c", ".h", ".S", ".toml", ".ld") and "build" not in f.relative_to(d).parts
+                    and not f.name.startswith("._")):
                 h.update(str(f.relative_to(d)).encode())
                 h.update(f.read_bytes())
     return int.from_bytes(h.digest()[:4], "little")
@@ -1756,7 +1803,9 @@ def main():
     STEM = NAME + ("-usb" if CONF.get("ble") and not BLE else "")
     OUT = APP / "build"
     GEN, LDR = OUT / "gen", OUT / "loader"
-    ROOT = Path(os.path.commonpath([SRC, APP]))
+    # A build/ symlink may keep generated files outside the source checkout.
+    # tc() and inc() express paths relative to ROOT, including those outputs.
+    ROOT = Path(os.path.commonpath([SRC, APP, OUT.resolve()]))
     prefix = CONF.get("id_prefix", "FM-1_0")
     if not re.fullmatch(r"FM-1_\d+", prefix):
         raise SystemExit(f"fm1.toml id_prefix {prefix!r}: FM-1_ and digits only (the update tools parse it)")

@@ -46,7 +46,8 @@ own headers:
 | What | Licence | Where |
 | --- | --- | --- |
 | The SBC encoder of Android's Bluetooth stack (Copyright 1999-2012 Broadcom Corporation, AOSP), for Bluetooth audio. Two files are changed and marked so (a coefficient written in decimal; `<string.h>` on a host only) | Apache-2.0 (`LICENSES/Apache-2.0.txt`) | `bt/br/sbc/`, set up by `bt/br/bt_sbc.c` |
-| AOSP's SBC decoder (Copyright 2014 The Android Open Source Project, 2002-2006 Open Interface North America), unchanged, used by a host test only and not built into a firmware | Apache-2.0 | `tests/bt/ref/sbc_dec/` |
+| AOSP's SBC decoder (Copyright 2014 The Android Open Source Project, 2002-2006 Open Interface North America). Reference tests unchanged; production copy replaces an unused allocator include and fixes a signed-shift expression, with changes marked | Apache-2.0 | `tests/bt/ref/sbc_dec/` (reference), `bt/br/sbc_dec/` (receiver firmware); see its README |
+| PacketVideo's Android 4.1.2 AAC decoder, taken from `charlesvestal/fm1-radio` commit `c9113b5eceb9d6c295e32c86e5d769ed8efa67d6`. Retains PacketVideo/Android attribution and marked FM-1 fixes; LC dependency subset, wrapper and further bounds changes documented in its README | Apache-2.0 (`LICENSES/Apache-2.0.txt`); retain its NOTICE | `bt/br/aac_dec/`, especially `pvaac/NOTICE`, `pvaac/README.fm1`, `UPSTREAM-SHA256SUMS`; standalone in 0.0.19; linked for AAC-LC receiver playback in 0.0.20 |
 | micro-ecc by Kenneth MacKay (<https://github.com/kmackay/micro-ecc>, Copyright 2014-2015), the P-192 keys of Secure Simple Pairing | BSD-2-Clause (`LICENSES/BSD-2-Clause-micro-ecc.txt`) | `bt/br/uECC.c`, `uECC.h`, `uECC_vli.h`, `types.h`, `curve-specific.inc`, `platform-specific.inc`, `asm_*.inc` |
 | The radio's start-up tables: JieLi's `rf_init` as M-VAVE's stock V15 firmware runs it (Copyright (c) 2024-2026 Zhuhai Jieli Technology Co., Ltd., AC79 AIoT SDK; Copyright (c) 2026 Zhuhai Shengke / M-VAVE, `fm1_open`), packed by Optimist; the header states the changes | Apache-2.0 | `bsp/chip/ble_rf_tables_v15.h` (`bsp/NOTICE`) |
 | The radio's calibration at every start: JieLi's SDK calibration (`wl_rf_common.a`, Copyright (c) 2024-2026 Zhuhai Jieli Technology Co., Ltd.) rewritten in C by Charles Vestal; the header states the changes | Apache-2.0 | `bsp/chip/fm1_rf_cal.h` (`bsp/NOTICE`; how it works: `docs/bt/RF-CALIBRATION.md`) |
@@ -102,3 +103,11 @@ works with Link should read Ableton's guidelines for that first.
 | JieLi's WiFi libraries (`wl_wifi_sta_sfc.a`, `wpasupplicant.a`, `hsm.a`: binary only) and the SDK's lwIP 2.1.3 sources | Apache-2.0 (lwIP: BSD-3-Clause) | copied from your SDK checkout into `build/` by a build with `wifi = true`; never in this repository. `ble/lwip/lwipopts_sfc.h` and `ble/wifi/rf_moderate.c` are the SDK's (Apache-2.0), the first changed where marked "FM-1" |
 | m-bootloader 1.2 (Julius Vitkauskas, github.com/jvitkauskas/m-bootloader): its FM-1 installer package and bootloader, which the web installer offers to install | MIT | `web/m-bootloader/` (with its `LICENSE`); a site copies the package and the licence into `firmware/` |
 | The browser emulator's voice: eSpeak NG, through fm1-reader | GPL-3.0-or-later | taken from an fm1-reader checkout when the emulator is built; a separate program the page loads |
+
+## Incoming Classic receiver timing (Audio Router 0.0.14)
+
+The incoming page timing extension uses register/timing facts inspected from
+JieLi AC79 SDK `btctrler.a` (Apache-2.0; Copyright (c) 2024-2026 Zhuhai Jieli
+Technology Co., Ltd.). No vendor controller implementation is copied or linked.
+The own implementation is MPL-2.0. See `docs/bt/BT-RECEIVER-PAGE.md` for exact
+provenance/hash and `bsp/NOTICE` for the BSP changes.

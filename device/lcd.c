@@ -15,7 +15,11 @@
                                     * timing writes to it did not stop the tearing on hardware. */
 #endif
 
+#ifdef APP_SCREENSHOT
+#include "screenshot_row.h"
+#endif
 static uint8_t lcd_small[64];
+#include "ui_profile.h"
 static uint8_t lcd_busy;           /* a lcd_data DMA may still run; CS is low */
 #if FM1B_MIRROR
 /* screen mirroring over USB (mirror.c): every blit and fill copied while a host watches */
@@ -46,19 +50,25 @@ static void lcd_sync(void)          /* finish the running transfer (before touch
 #endif
     if (!lcd_busy)
         return;
+    plat_profile_span_t timing=plat_profile_begin();
     fm1_lcd_wait();
+    plat_profile_end(PROFILE_LCD_WAIT,timing);
     LCD_IDLE();
     lcd_busy = 0;
 }
 
 static void lcd_cmd(uint8_t c)
 {
+    plat_profile_count(PROFILE_BYTES,1);
+    if(plat_profile_flags()&PROFILE_NO_LCD)return;
     lcd_sync();
 #if FM1B_SD
     fm1_lcd_cs_pulse();
 #endif
     fm1_lcd_send_cmd(c);
+    plat_profile_span_t timing=plat_profile_begin();
     fm1_lcd_wait();
+    plat_profile_end(PROFILE_LCD_WAIT,timing);
     LCD_IDLE();
 }
 
@@ -66,6 +76,9 @@ static void lcd_data(const void *p, uint32_t n)
 {
     if (!n)
         return;                    /* SPI_CNT = 0 never completes */
+    plat_profile_count(PROFILE_BYTES,n);
+    plat_profile_count(PROFILE_DMA,1);
+    if(plat_profile_flags()&PROFILE_NO_LCD)return;
     lcd_sync();
     fm1_lcd_send_data(p, n);
     lcd_busy = 1;                  /* completed by lcd_sync */
@@ -73,6 +86,7 @@ static void lcd_data(const void *p, uint32_t n)
 
 static void lcd_window(uint32_t x0, uint32_t y0, uint32_t x1, uint32_t y1)
 {
+    plat_profile_count(PROFILE_WINDOWS,1);
     lcd_sync();
     lcd_small[0] = (uint8_t)(x0 >> 8);
     lcd_small[1] = (uint8_t)x0;
@@ -93,6 +107,9 @@ static uint16_t lcd_fillbuf[240];
 
 static void lcd_fill(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint16_t c)
 {
+#ifdef APP_SCREENSHOT
+    if(screenshot_active){screenshot_copy(x,y,w,h,0,c);return;}
+#endif
     uint32_t i, n, k, sw = (uint16_t)((c >> 8) | (c << 8));
     if (!w || !h || x >= 240u || y >= 240u)
         return;
@@ -118,6 +135,9 @@ static void lcd_fill(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint16_t c)
 
 static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint16_t *px)
 {
+#ifdef APP_SCREENSHOT
+    if(screenshot_active){screenshot_copy(x,y,w,h,px,0);return;}
+#endif
     if (!w || !h)
         return;
     lcd_window(x, y, x + w - 1u, y + h - 1u);

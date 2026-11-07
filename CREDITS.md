@@ -33,3 +33,7 @@
 - The idea of running FM-1 firmware in the browser: [Groove OS](https://www.groove-os.com/) by Peter Gombos (no
   code from it).
 - Fonts: Barlow by The Barlow Project Authors and Terminus by Dimitar Toshkov Zhekov (both SIL OFL 1.1).
+- **Andrew Simper / Cytomic**: the public-domain trapezoidal state-variable
+  filter derivation ([technical papers](https://cytomic.com/technical-papers/)),
+  used by Audio Router's original master EQ implementation. Responses are
+  independently checked against the W3C Audio EQ Cookbook formulas.

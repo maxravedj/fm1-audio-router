@@ -10,6 +10,7 @@
  * the app's own section with them off) leaves them off: before, the outermost unlock always switched them on, inside
  * an interrupt too. */
 #define LOCK_IE 0x200u                            /* icfg bit 9: the global interrupt enable */
+#include "ui_profile.h"
 static uint32_t lock_depth;
 uint32_t lock_max, lock_from;                     /* the longest the app kept interrupts off (us), and from where */
 static uint32_t lock_t0, lock_ra;
@@ -26,7 +27,8 @@ uint32_t plat_lock(void)
 void plat_unlock(uint32_t f)                      /* f: what the matching plat_lock returned */
 {
     if (lock_depth && --lock_depth == 0) {
-        uint32_t us = (fm1_ticks() - lock_t0) / FM1_TICKS_PER_US;
+        uint32_t ticks = fm1_ticks() - lock_t0, us=ticks/FM1_TICKS_PER_US;
+        plat_profile_add(PROFILE_LOCK,ticks);
         if (us > lock_max) {
             lock_max = us;
             lock_from = lock_ra;

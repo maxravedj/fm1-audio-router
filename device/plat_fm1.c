@@ -207,6 +207,9 @@ void plat_leds(uint32_t buttons, uint32_t keys)    /* PLAY green, unless red (re
  * that sends interrupts it) */
 static volatile uint8_t in_tick;
 #include "plat_lock.c"
+#ifdef APP_USB_STATUS
+int plat_usb_connected(void){return usb.config && !usb.suspended;}
+#endif
 #ifdef APP_SYSEX
 /* (built for an app that talks SysEx, APP_SYSEX: another's image stays as it was, byte for byte) */
 int plat_sysex_send(const uint8_t *frame, uint32_t n) { return usb.config ? ota_wire_send(frame, n) : -1; }
@@ -321,6 +324,8 @@ void plat_host_patience(uint32_t try_ms, uint32_t total_ms)
     ota_try_ms = try_ms ? try_ms : 5000u;
     ota_deadline = total_ms ? ota_now_ms() + total_ms : 0u;
 }
+#include "work_memory.h"
+
 /* USB audio full: the render at full level for the USB audio input, MASTER after it (main_fm1.c render_block) */
 static volatile uint8_t uac_full;
 void plat_usb_audio_full(int on) { uac_full = (uint8_t)(on != 0); }
@@ -550,6 +555,9 @@ int plat_store_room(void) { return -1; }
 
 static volatile uint32_t audio_cpu_pct, audio_xruns;
 uint32_t plat_cpu_pct(void) { return audio_cpu_pct; }
+#ifdef APP_CPU_WORKLOAD
+#include "cpu_workload.h"
+#endif
 #ifdef APP_CPU_KHZ
 uint32_t plat_cpu_khz(void) { return fm1_clock_is_stock() ? 360000u : 0u; }   /* (PLL1 24 / 12 * 270 MHz, x 2/3) */
 #endif

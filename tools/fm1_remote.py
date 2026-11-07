@@ -13,6 +13,7 @@ or by a program (an agent). Needs mido with python-rtmidi.
     master N | master pot                   MASTER at 0..4096, or the pot's own again
     wait MS                                 let it run (with listen: print what it says meanwhile)
     listen                                  a screen reader starts listening: every message it says is printed
+    screenshot                              save a timestamped 240x240 PNG in the current directory
     screen                                  what is on the screen, in words (the screen reader's channel)
     log                                     the last crash, the registers at the last four, the crash history kept
                                             in flash, the supplies, the clock as the boot loader left it, and the
@@ -20,6 +21,8 @@ or by a program (an agent). Needs mido with python-rtmidi.
     crashes [--clear]                       the crash history kept in flash (the newest 8, oldest first: it
                                             survives a power-off; an install starts it again), each crash's pc
                                             and rets as function+offset with --elf; --clear erases it
+    profile SECONDS [no-lcd] [capture-only|capture-off] [idle-slow]
+                                            temporary waveform investigation, 1..30 seconds; settings unchanged
     stats [--clear]                         the debug stats kept in flash (a snapshot every 5 minutes while the
                                             app has them on, one with every crash: the last 60, oldest first; an
                                             install starts them again); --clear erases them
@@ -104,6 +107,8 @@ LH_CLEAR = LH + [0x43, 0x4C, 0x52]         # "CLR": erase it
 CRASH_HEX = ("vec", "pc", "rets", "sp", "emu", "dbg", "psr", "build")
 LS = [0x7D, 0x4C, 0x53]                    # the debug stats in flash (device/dbgstats.c ds_request)
 LS_CLEAR = LS + [0x43, 0x4C, 0x52]         # "CLR": erase them
+LP = [0x7D, 0x4C, 0x50]                    # temporary RAM-only UI profiling
+PROFILE_FLAGS = {"no-lcd": 1, "capture-only": 2, "capture-off": 6, "idle-slow": 8}
 STAT_HEX = ("build", "flags", "cpu2", "bt")
 STAT_FLAGS = ((1, "periodic"), (2, "crash"), (4, "playing"), (8, "on"))
 
@@ -296,6 +301,52 @@ class FM1:
         k = self.keys
         self.sysex(LC + [2, k & 0x7F, (k >> 7) & 0x7F, (k >> 14) & 0x7F, (k >> 21) & 0x7F])
 
+    def screenshot(self):
+        from datetime import datetime
+        from pathlib import Path
+        from fm1_mirror import Screen
+        head = [0x7D, 0x4C, 0x49]
+        screen = Screen()
+        try:
+            for attempt in range(3):
+                self.sysex(head + [2])
+                ack = self.frames(head, 2.5, until=lambda f: f[:2] == b"\x7f\x02")
+                if b"\x7f\x02\x01" in ack:
+                    break
+            else:
+                raise SystemExit("screenshot: screen freeze did not start; install firmware 0.0.54 or later")
+            for y in range(240):
+                seq = y & 127
+                for attempt in range(3):
+                    chunks = {}
+                    self.sysex(head + [1, y & 127, y >> 7, seq])
+                    frames = self.frames(head, 2.5, until=lambda f: f == b"\x7f\x01\x00" or
+                                         (len(f) == 124 and f[:4] == bytes([seq, y & 127, y >> 7, 7])))
+                    if b"\x7f\x01\x00" in frames:
+                        raise SystemExit("screenshot: capture interrupted; retry without changing screens")
+                    for f in frames:
+                        if (len(f) != 124 or f[0] != seq or f[1] + 128*f[2] != y or
+                                f[3] >= 8 or any(v > 15 for v in f[4:])):
+                            continue
+                        chunks[f[3]] = f[4:]
+                    if len(chunks) == 8:
+                        break
+                else:
+                    raise SystemExit(f"screenshot: missing row {y}; install firmware 0.0.54 or later, "
+                                     "check the USB connection, and retry")
+                for chunk, data in chunks.items():
+                    for i in range(30):
+                        a,b,c,d = data[i*4:i*4+4]
+                        screen.px[y*240+chunk*30+i] = (a<<12)|(b<<8)|(c<<4)|d
+        finally:
+            self.sysex(head + [0])
+        path = Path.cwd() / ("fm1-screenshot-" + datetime.now().strftime("%Y-%m-%d_%H-%M-%S_%f") + ".png")
+        if path.exists():
+            raise SystemExit(f"screenshot: file already exists: {path}")
+        screen.png(path)
+        print(f"screenshot: {path}")
+        return path
+
     def run(self, args):
         i = 0
         while i < len(args):
@@ -353,6 +404,9 @@ class FM1:
                 self.sysex(SR + [1, 1])                  # HELLO: from now on it says each change
                 self.listening = True
                 i += 1
+            elif c == "screenshot":
+                self.screenshot()
+                i += 1
             elif c == "screen":
                 self.sysex(SR + [1, 1])                  # HELLO, then where am I
                 time.sleep(0.2)
@@ -363,6 +417,33 @@ class FM1:
                     if f and f[0] == 16:
                         print("screen:", f[2:].decode("latin1", "replace"))
                 i += 1
+            elif c == "profile":
+                try:
+                    seconds = int(a)
+                except ValueError:
+                    raise SystemExit("profile SECONDS [no-lcd] [capture-only|capture-off] [idle-slow]")
+                if not 1 <= seconds <= 30:
+                    raise SystemExit("profile duration must be 1..30 seconds")
+                flags, used = 0, 2
+                while i + used < len(args) and args[i + used] in PROFILE_FLAGS:
+                    flags |= PROFILE_FLAGS[args[i + used]]
+                    used += 1
+                self.sysex(LP + [1, seconds, flags])
+                started = self.frames(LP, 2.0, until=lambda f: f == b"started" or f.startswith(b"error"))
+                if not started or started[-1] != b"started":
+                    raise SystemExit("profile did not start; use the diagnostic firmware on a HOME screen")
+                print(f"profile: measuring {seconds}s, flags {flags}", flush=True)
+                try:
+                    time.sleep(seconds + 0.1)
+                finally:
+                    self.sysex(LP + [2])
+                    result = self.frames(LP, 4.0, until=lambda f: f == b"end")
+                    for line in result:
+                        if line != b"end":
+                            print("profile:", line.decode("ascii", "replace"))
+                    if not result or result[-1] != b"end":
+                        print("profile: incomplete response; measurement auto-expires on the device")
+                i += used
             elif c == "log":
                 self.sysex(LG)
                 for f in self.frames(LG, 2.0, until=lambda f: f == b"end"):

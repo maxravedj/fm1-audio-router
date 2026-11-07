@@ -55,15 +55,16 @@ static void rev(uint8_t *d, const uint8_t *s, uint32_t n)
         d[i] = s[n - 1u - i];
 }
 static struct btp fm;
+static uint8_t dev_tid=1;
 static void from_dev(const uint8_t *pdu, uint32_t len) { (void)btp_in(&fm, pdu, len); }
 static void dev_pdu(uint32_t op, const uint8_t *par, uint32_t n)   /* the initiator sends op (TID 1: the slave's) */
 {
     uint8_t b[BTL_MAX];
     uint32_t k = 0;
     if (op >> 8 == BTL_ESCAPE)
-        b[k++] = (uint8_t)(BTL_ESCAPE << 1 | 1u), b[k++] = (uint8_t)op;
+        b[k++] = (uint8_t)(BTL_ESCAPE << 1 | dev_tid), b[k++] = (uint8_t)op;
     else
-        b[k++] = (uint8_t)(op << 1 | 1u);
+        b[k++] = (uint8_t)(op << 1 | dev_tid);
     memcpy(b + k, par, n);
     from_dev(b, k + n);
 }
@@ -74,7 +75,7 @@ static int accepted(uint32_t of)
     return p && p[0] == of;
 }
 
-static void run(int bad_check)
+static void run(int bad_check,int peripheral)
 {
     const uint8_t own[6] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66}, peer[6] = {0x93, 0x2a, 0xde, 0xdd, 0x3a, 0xd8};
     uint8_t apub[64], apriv[32], a_pub_spec[48], b_pub_spec[48], b_air[48], dh_le[32], dhkey[24];
@@ -84,6 +85,11 @@ static void run(int bad_check)
     const uint8_t *p;
     nout = rd = 0;
     btp_begin(&fm, own, peer, rng, sink, 0);
+    fm.peripheral=(uint8_t)(peripheral!=0);dev_tid=peripheral?0:1;
+    if(peripheral==2) { /* Phone forgot its bond: fresh SSP must supersede our kept key. */
+        uint8_t old_key[16];rng(old_key,16);btp_bond(&fm,old_key);fm.init=0;
+        btp_auth(&fm);nout=rd=0; /* Incoming SSP supersedes an outstanding reconnect challenge. */
+    }
     uECC_set_rng(rng);
     bts_ecc_make_key(apub, apriv);                      /* the initiator's key pair */
     for (i = 0; i < 24u; i++)
@@ -92,6 +98,7 @@ static void run(int bad_check)
     dev_pdu(BTL_ESCAPE << 8 | BTL_X_IO_CAPABILITY_REQ, iocap_a, 3);
     p = next(BTL_ESCAPE << 8 | BTL_X_IO_CAPABILITY_RES, &len);
     check("the device's IO capability request: ours back, NoInputNoOutput (Just Works)", p && p[0] == 3u);
+    if(peripheral)check("fresh peripheral: IO capability exchange clears saved-key mode",!fm.bonded && !fm.init && !fm.auth_pending);
     if (!p)
         return;
     memcpy(iocap_b, p, 3);
@@ -186,9 +193,40 @@ static void run(int bad_check)
     dev_pdu(BTL_AU_RAND, au, 16);
     p = next(BTL_SRES, &len);
     bts_e1(lk_air, au, own, sres, aco);
-    check("its au_rand: our SRES = E1(LK, AU_RAND, our address)", p && !memcmp(p, sres, 4) && fm.st == BTP_AUTHED);
+    check("its au_rand: our SRES = E1(LK, AU_RAND, our address)", p && !memcmp(p, sres, 4) &&
+          fm.st == (peripheral ? BTP_AUTHING : BTP_AUTHED));
+    if(peripheral) {
+        /* A fresh SSP phone waits here for the reverse authentication before
+         * it will request encryption. The previous fixture skipped this half. */
+        p=next(BTL_AU_RAND,&len);
+        check("fresh peripheral: SRES precedes reverse AU_RAND in the Central's pairing transaction",
+              p && len==17 && out[rd-1][0]==BTL_AU_RAND<<1);
+        if(!p)return;
+        bts_e1(lk_air,p,peer,sres,aco);
+        dev_pdu(BTL_SRES,sres,4);
+        check("fresh peripheral: verifies Central's SRES, retains reverse ACO and waits for Central encryption",
+              fm.st==BTP_AUTHED && !memcmp(fm.aco,aco,12) && nout==rd);
+    }
     /* 7. encryption: its mode request accepted; our key size (16) and, once taken, EN_RAND; Kc = E3(LK, EN_RAND, ACO) */
-    {
+    if(peripheral) {
+        uint8_t on=1,size=16,en_rand[16];
+        for(i=0;i<nout;i++)ok&=!(out[i][0]&1);
+        if(peripheral==2) {
+            btp_peripheral_encrypt(&fm);
+            p=next(BTL_ENCRYPTION_MODE_REQ,&len);
+            check("fresh incoming pairing: Peripheral initiates encryption with TID 1 after mutual authentication",
+                  p && len==2 && p[0]==1 && (out[rd-1][0]&1) && fm.st==BTP_MODEREQ);
+            dev_tid=1;on=BTL_ENCRYPTION_MODE_REQ;dev_pdu(BTL_ACCEPTED,&on,1);
+            ok&=fm.st==BTP_KEYSIZE && nout==rd;
+        } else {dev_pdu(BTL_ENCRYPTION_MODE_REQ,&on,1);ok&=accepted(BTL_ENCRYPTION_MODE_REQ);}
+        dev_pdu(BTL_ENCRYPTION_KEY_SIZE_REQ,&size,1);ok&=accepted(BTL_ENCRYPTION_KEY_SIZE_REQ);
+        rng(en_rand,16);bts_e3(lk_air,en_rand,aco,kc);
+        dev_pdu(BTL_START_ENCRYPTION_REQ,en_rand,16);ok&=accepted(BTL_START_ENCRYPTION_REQ);
+        check("fresh incoming pairing: both keys/nonces/DH checks, SRES and peripheral E0 encryption",
+              ok && fm.st==BTP_ENCRYPTED && !memcmp(kc,fm.kc,16));
+        check("fresh incoming pairing: final ACCEPTED retains the encryption initiator's TID",
+              (out[rd-1][0]&1)==(peripheral==2));
+    } else {
         uint8_t on = 1, a;
         dev_pdu(BTL_ENCRYPTION_MODE_REQ, &on, 1);
         ok = accepted(BTL_ENCRYPTION_MODE_REQ);
@@ -344,15 +382,151 @@ static void run_bonded(int wrong_key)
     }
 }
 
+/* Incoming ACL: the peer is Central and drives encryption, TID 0. */
+static void run_peripheral(void)
+{
+    uint8_t own[6]={1,2,3,4,5,6},peer[6]={6,5,4,3,2,1},lk[16],p[17],sres[4],aco[12],kc[16];
+    nout=rd=0;rng(lk,16);btp_begin(&fm,own,peer,rng,sink,0);btp_bond(&fm,lk);
+    fm.init=0;fm.peripheral=1;
+    p[0]=BTL_AU_RAND<<1;rng(p+1,16);bts_e1(lk,p+1,own,sres,aco);
+    check("peripheral: Central authenticates our saved bond",btp_in(&fm,p,17) && fm.st==BTP_AUTHED && nout==1 &&
+        out[0][0]==BTL_SRES<<1 && !memcmp(out[0]+1,sres,4));
+    p[0]=BTL_ENCRYPTION_MODE_REQ<<1;p[1]=1;
+    check("peripheral: accepts encryption mode without sending Central's key-size request",btp_in(&fm,p,2) &&
+        fm.st==BTP_KEYSIZE && nout==2 && out[1][1]==BTL_ENCRYPTION_MODE_REQ);
+    p[0]=BTL_ENCRYPTION_KEY_SIZE_REQ<<1;p[1]=16;
+    check("peripheral: accepts Central's 16-byte key size without starting encryption itself",btp_in(&fm,p,2) &&
+        fm.st==BTP_KEYSIZE && nout==3 && out[2][1]==BTL_ENCRYPTION_KEY_SIZE_REQ);
+    p[0]=BTL_START_ENCRYPTION_REQ<<1;rng(p+1,16);bts_e3(lk,p+1,aco,kc);
+    check("peripheral: Central starts E0; matching Kc, encrypted ACCEPTED with Central TID",btp_in(&fm,p,17) &&
+        fm.st==BTP_ENCRYPTED && nout==4 && !memcmp(fm.kc,kc,16) && out[3][0]==BTL_ACCEPTED<<1 &&
+        out[3][1]==BTL_START_ENCRYPTION_REQ);
+    nout=rd=0;btp_begin(&fm,own,peer,rng,sink,0);btp_bond(&fm,lk);fm.init=0;fm.peripheral=1;
+    fm.st=BTP_KEYSIZE;fm.ksz=16;p[0]=BTL_ENCRYPTION_KEY_SIZE_REQ<<1;p[1]=6;
+    check("peripheral: unsafe key-size offer refused",btp_in(&fm,p,2) && fm.st==BTP_FAILED);
+    check("peripheral: empty and truncated escaped PDUs ignored",!btp_in(&fm,p,0));
+}
+
+static void run_peripheral_mutual_failure(void)
+{
+    uint8_t own[6]={1,2,3,4,5,6},peer[6]={6,5,4,3,2,1},lk[16],p[17],answer[4],aco[12],before[12];
+    rng(lk,16);nout=rd=0;btp_begin(&fm,own,peer,rng,sink,0);
+    fm.peripheral=1;fm.st=BTP_PAIRED;memcpy(fm.lk,lk,16);
+    p[0]=BTL_AU_RAND<<1;rng(p+1,16);btp_in(&fm,p,17);
+    check("fresh peripheral: publishes SRES then one reverse challenge, still unauthenticated",
+          nout==2 && out[0][0]==BTL_SRES<<1 && out[1][0]==BTL_AU_RAND<<1 && fm.st==BTP_AUTHING);
+    bts_e1(lk,fm.au,peer,answer,aco);memcpy(before,fm.aco,12);
+    p[0]=BTL_SRES<<1;memcpy(p+1,answer,4);
+    check("fresh peripheral: truncated SRES cannot complete authentication",!btp_in(&fm,p,4) && fm.st==BTP_AUTHING);
+    p[0]|=1;
+    check("fresh peripheral: wrong-transaction SRES ignored",!btp_in(&fm,p,5) && fm.st==BTP_AUTHING && !memcmp(before,fm.aco,12));
+    p[0]=BTL_ENCRYPTION_MODE_REQ<<1;p[1]=1;
+    check("fresh peripheral: early encryption cannot bypass missing reverse authentication",
+          !btp_in(&fm,p,2) && fm.st==BTP_AUTHING && nout==2);
+    p[0]=BTL_SRES<<1;memcpy(p+1,answer,4);p[1]^=1;btp_in(&fm,p,5);
+    check("fresh peripheral: wrong SRES fails before encryption",fm.st==BTP_FAILED && fm.reason==BTL_ERR_AUTH_FAILURE && nout==2);
+}
+
+static void run_peripheral_encryption_request(void)
+{
+    uint8_t own[6]={1,2,3,4,5,6},peer[6]={6,5,4,3,2,1},lk[16],p[17],aco[12],kc[16],kc7[16];
+    struct btp ready;
+    nout=rd=0;rng(lk,16);btp_begin(&fm,own,peer,rng,sink,0);btp_bond(&fm,lk);
+    fm.init=0;fm.peripheral=1;
+    btp_peripheral_encrypt(&fm);
+    check("Peripheral cannot request encryption before authentication",fm.st==BTP_PAIRED && !nout);
+    p[0]=BTL_AU_RAND<<1;rng(p+1,16);btp_in(&fm,p,17);memcpy(aco,fm.aco,12);
+    nout=rd=0;ready=fm;
+    btp_peripheral_encrypt(&fm);btp_peripheral_encrypt(&fm);
+    check("Peripheral requests encryption exactly once using its own TID",fm.st==BTP_MODEREQ && fm.tid==1 &&
+          nout==1 && out[0][0]==((BTL_ENCRYPTION_MODE_REQ<<1)|1) && out[0][1]==1);
+    p[0]=BTL_ACCEPTED<<1;p[1]=BTL_ENCRYPTION_MODE_REQ;
+    check("mode ACCEPTED with wrong TID cannot advance Peripheral",!btp_in(&fm,p,2) && fm.st==BTP_MODEREQ && nout==1);
+    p[0]|=1;btp_in(&fm,p,2);
+    check("Central accepts Peripheral mode request; Peripheral waits without proposing a key size",fm.st==BTP_KEYSIZE && fm.tid==1 && nout==1);
+    p[0]=(BTL_ACCEPTED<<1)|1;p[1]=BTL_ENCRYPTION_KEY_SIZE_REQ;
+    check("unexpected key-size ACCEPTED cannot make Peripheral send START",!btp_in(&fm,p,2) && nout==1);
+    p[0]=BTL_ENCRYPTION_KEY_SIZE_REQ<<1;p[1]=7;
+    check("Central key-size offer with wrong TID ignored",!btp_in(&fm,p,2) && fm.ksz==16 && nout==1);
+    p[0]|=1;btp_in(&fm,p,2);
+    check("Peripheral accepts negotiated seven-byte size with original TID",fm.ksz==7 && nout==2 &&
+          out[1][0]==((BTL_ACCEPTED<<1)|1) && out[1][1]==BTL_ENCRYPTION_KEY_SIZE_REQ);
+    p[0]=BTL_AU_RAND<<1;rng(p+1,16);btp_in(&fm,p,17);
+    check("authentication during encryption setup rejected without changing ACO or transaction",fm.st==BTP_KEYSIZE &&
+          fm.tid==1 && !memcmp(fm.aco,aco,12) && nout==3 && out[2][0]==BTL_NOT_ACCEPTED<<1 && out[2][2]==0x24);
+    p[0]=BTL_START_ENCRYPTION_REQ<<1;rng(p+1,16);bts_e3(lk,p+1,aco,kc);bts_kc_reduce(kc,7,kc7);
+    check("wrong-TID START cannot load encryption key",!btp_in(&fm,p,17) && fm.st==BTP_KEYSIZE && nout==3);
+    p[0]|=1;btp_in(&fm,p,17);
+    check("Peripheral-initiated encryption derives reduced Kc from the Central's nonce",fm.st==BTP_ENCRYPTED &&
+          !memcmp(fm.kc,kc7,16) && nout==4 && out[3][0]==((BTL_ACCEPTED<<1)|1));
+    for(unsigned first=0;first<2;first++) {
+        fm=ready;nout=rd=0;btp_peripheral_encrypt(&fm);
+        if(first){p[0]=(BTL_NOT_ACCEPTED<<1)|1;p[1]=BTL_ENCRYPTION_MODE_REQ;p[2]=0x23;btp_in(&fm,p,3);
+            check("collision rejection first: wait for Central without retrying our request",fm.st==BTP_AUTHED && nout==1);}
+        p[0]=BTL_ENCRYPTION_MODE_REQ<<1;p[1]=1;btp_in(&fm,p,2);
+        if(!first){p[0]=(BTL_NOT_ACCEPTED<<1)|1;p[1]=BTL_ENCRYPTION_MODE_REQ;p[2]=0x23;btp_in(&fm,p,3);}
+        check("crossed mode requests: Central wins in either receive order",fm.st==BTP_KEYSIZE && fm.tid==0 && nout==2 && !fm.enc_pending);
+        p[0]=BTL_ENCRYPTION_KEY_SIZE_REQ<<1;p[1]=16;btp_in(&fm,p,2);
+        p[0]=BTL_START_ENCRYPTION_REQ<<1;rng(p+1,16);bts_e3(lk,p+1,aco,kc);btp_in(&fm,p,17);
+        check("crossed mode requests finish encrypted in Central transaction",fm.st==BTP_ENCRYPTED &&
+              !memcmp(fm.kc,kc,16) && nout==4 && !(out[3][0]&1));
+    }
+    fm=ready;nout=rd=0;btp_peripheral_encrypt(&fm);
+    p[0]=(BTL_NOT_ACCEPTED<<1)|1;p[1]=BTL_ENCRYPTION_MODE_REQ;p[2]=BTL_ERR_AUTH_FAILURE;btp_in(&fm,p,3);
+    check("a real encryption rejection remains fatal",fm.st==BTP_FAILED && fm.reason==BTL_ERR_AUTH_FAILURE);
+}
+
+/* A saved-bond incoming link can initiate legacy authentication itself. */
+static void run_peripheral_bond_auth(void)
+{
+    const uint8_t own[6]={1,2,3,4,5,6},peer[6]={7,8,9,10,11,12};
+    struct btp fm,challenging;uint8_t lk[16],p[17],sres[4],aco[12];
+    rng(lk,16);nout=rd=0;btp_begin(&fm,own,peer,rng,sink,0);btp_bond(&fm,lk);fm.init=0;fm.peripheral=1;
+    btp_auth(&fm);challenging=fm;
+    check("saved Peripheral bond: initiates one AU_RAND in Peripheral transaction",fm.st==BTP_AUTHING && fm.tid==1 &&
+          nout==1 && out[0][0]==((BTL_AU_RAND<<1)|1));
+    bts_e1(lk,fm.au,peer,sres,aco);p[0]=BTL_SRES<<1;memcpy(p+1,sres,4);
+    check("saved Peripheral bond: wrong-TID SRES cannot authenticate peer",!btp_in(&fm,p,5) && fm.st==BTP_AUTHING);
+    p[0]|=1;btp_in(&fm,p,5);
+    check("saved Peripheral bond: SRES proves key and supplies encryption ACO",fm.st==BTP_AUTHED && !fm.dev_authed &&
+          !memcmp(fm.aco,aco,12));
+    btp_peripheral_encrypt(&fm);
+    check("saved Peripheral bond: requests encryption without waiting for Central challenge",fm.st==BTP_MODEREQ &&
+          nout==2 && out[1][0]==((BTL_ENCRYPTION_MODE_REQ<<1)|1));
+    for(unsigned reject_first=0;reject_first<2;reject_first++) {
+        uint8_t collision[]={((BTL_NOT_ACCEPTED<<1)|1),BTL_AU_RAND,0x23};
+        fm=challenging;nout=rd=0;
+        if(reject_first){btp_in(&fm,collision,sizeof collision);check("auth collision rejection first waits for Central",fm.st==BTP_PAIRED);}
+        p[0]=BTL_AU_RAND<<1;rng(p+1,16);bts_e1(lk,p+1,own,sres,aco);btp_in(&fm,p,17);
+        check("auth collision: Central wins and supplies ACO in both receive orders",fm.st==BTP_AUTHED && fm.tid==0 &&
+              nout==1 && out[0][0]==BTL_SRES<<1 && !memcmp(out[0]+1,sres,4) && !memcmp(fm.aco,aco,12));
+        btp_peripheral_encrypt(&fm);
+        if(!reject_first)btp_in(&fm,collision,sizeof collision);
+        p[0]=(BTL_SRES<<1)|1;memset(p+1,0,4);
+        check("auth collision: abandoned challenge SRES and late rejection cannot overwrite ACO",!btp_in(&fm,p,5) &&
+              fm.st==BTP_MODEREQ && !memcmp(fm.aco,aco,12));
+    }
+    fm=challenging;nout=rd=0;p[0]=(BTL_SRES<<1)|1;bts_e1(lk,fm.au,peer,p+1,aco);p[1]^=1;btp_in(&fm,p,5);
+    check("saved Peripheral bond: wrong SRES fails authentication",fm.st==BTP_FAILED && fm.reason==BTL_ERR_AUTH_FAILURE);
+    fm=challenging;p[0]=(BTL_NOT_ACCEPTED<<1)|1;p[1]=BTL_AU_RAND;p[2]=6;btp_in(&fm,p,3);
+    check("saved Peripheral bond: key missing rejection remains fatal",fm.st==BTP_FAILED && fm.reason==6);
+}
 int main(void)
 {
-    run(0);
-    run(1);
+    run(0,0);
+    run(1,0);
+    run(0,1);
+    run(1,1);
+    run(0,2);
     run_initiator(0);
     run_initiator(7);
     run_initiator(5);
     run_bonded(0);
     run_bonded(1);
+    run_peripheral();
+    run_peripheral_mutual_failure();
+    run_peripheral_encryption_request();
+    run_peripheral_bond_auth();
     printf("bt_ssp: %d failed\n", fails);
     return fails != 0;
 }
