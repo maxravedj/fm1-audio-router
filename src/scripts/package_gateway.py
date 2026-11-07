@@ -66,6 +66,14 @@ def main():
         shutil.copy2(firmware, out / 'audio-router.fwsc')
         for name in ('LICENSE', 'LICENSING.md', 'CREDITS.md'):
             shutil.copy2(ROOT / name, out / name)
+        for source, name in (
+            ('LICENSES/Apache-2.0.txt', 'Apache-2.0.txt'),
+            ('LICENSES/BSD-2-Clause-micro-ecc.txt', 'BSD-2-Clause-micro-ecc.txt'),
+            ('bsp/NOTICE', 'BSP-NOTICE.txt'),
+            ('bsp/LICENSING.md', 'BSP-LICENSING.md'),
+            ('bt/br/aac_dec/pvaac/NOTICE', 'AAC-NOTICE.txt'),
+        ):
+            shutil.copy2(SRC / source, out / name)
         (out / 'manifest.json').write_text(json.dumps(info, indent=2) + '\n')
         (out / 'INSTALL.txt').write_text(
             'FM1 Audio Router ' + info['version'] + '\n\n'
