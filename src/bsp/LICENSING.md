@@ -1,0 +1,64 @@
+# Licensing
+
+**Status: settled.** The contributors whose Felucca code is here have answered: Leo Kuroshita for the code he owns
+(https://github.com/hugelton/felucca-bsp/issues/4) and keremimo for his part of `chip/usb.c` (below).
+
+Every file under `chip/`, `boards/`, `loader/` and `examples/` is MPL-2.0 (SPDX header in each file), except three Apache-2.0 files in `chip/` from JieLi's AC79 SDK: `ble_rf_tables_v15.h` (the radio's start-up program), `fm1_rf_cal.h` (its calibration in C) and `fm1_wifi_wlc.h` (the Wi-Fi coexistence controller's set-up words); and the radio drivers from Optimist (`fm1_ble.h`, `fm1_ble_rf.h`, `fm1_bredr.h`, `fm1_wifi.h`), whose headers say `GPL-3.0-only OR MPL-2.0` (taken here under MPL-2.0). For details, see NOTICE. The full text
+is in `LICENSE`. The files carry no "Incompatible With Secondary Licenses" notice, so they can
+be combined with GPL code under MPL-2.0 section 3.3.
+
+Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments.
+
+The JieLi AC79 SDK is Apache-2.0 and is not part of this repository. See `NOTICE`.
+
+Files were first published in Felucca under GPL-3.0-only. The copyright holder relicensed
+these files here; copies already distributed under GPL-3.0-only stay under that licence.
+
+## chip/usb.c
+
+`chip/usb.c` is MPL-2.0 like the rest. One part of it came into Felucca from another contributor under GPL-3.0-only:
+the MIDI clock and transport sync by keremimo (Felucca commit 019e2ad, through Felucca pull request 8). keremimo
+agreed to license it, and the TRS ring fix 57f2aa0, under MPL-2.0: https://github.com/hugelton/felucca-bsp/pull/3. Firmwares and loader images built
+from this tree no longer become GPL-3.0 through it. Felucca's own copy of `usb.c` stays GPL-3.0-only (see below).
+
+## USB MIDI host
+
+`chip/usb_host.c`, `chip/usb_host_desc.h`, the host routines in `chip/fm1_usb.h` and
+`tests/usb_host_test.c` are ported from Melodee under MPL-2.0. Adrien Tibi
+(Recursive Field Instruments / recursivefieldinstruments) confirmed permission in
+[Melodee #75](https://github.com/keremimo/melodee/pull/75#issuecomment-6384184014).
+Kerem Kilic (Ellic Studio) also licenses his output, recovery, tests and BSP integration
+under MPL-2.0. Both authors are credited in the files; exact source revisions are in
+`NOTICE`. This permission applies to these contributions, not to the rest of Melodee.
+
+## The sliced sector erase
+
+`chip/fm1_flash_slice.h`, `tests/flash_slice_test.c` and the sliced erase's glue in `chip/fm1_flash.h`
+(`fl_erase_window_ram`, `fl_erase_window`, `fl_blank_xip`, `fl_erase4k_sliced`, the `FL_ERASE_HELD`,
+`FM1_FLASH_ENTER` and `FM1_FLASH_LEAVE` hooks) come from Optimist (https://github.com/w0ts/optimist,
+`firmware/hal/fm1_flash_slice.h`, `tests/flash_slice_test.c`, `firmware/hal/fm1_flash.h`), written by hdavid, who offers
+them there under GPL-3.0-only OR MPL-2.0 (Optimist commit 25b17fc7, its LICENSING.md, "The sliced sector erase").
+They are taken here under MPL-2.0. The rest of Optimist's `fm1_flash.h` is not: the primitives they run on are this
+repository's own.
+
+## Forks of Felucca
+
+Using this repository does not relicense a fork of Felucca. A fork still contains Felucca's code, which is
+GPL-3.0-only, and only its copyright holders can change that. Files copied from Felucca's tree are GPL-3.0-only even
+when this repository carries the same file under MPL-2.0; only the copy taken from here is MPL-2.0.
+
+To publish under MPL-2.0 (or any other licence), start a new project, import this repository, and write the rest
+yourself. Do not copy Felucca's code into it. The other direction is fine: MPL-2.0 files from here can go into a
+GPL project.
+
+## Tools
+
+`tools/fm1pkg.py` (package builder) and `tools/fm1_install.py` (USB-MIDI installer) are MPL-2.0, moved here from Felucca
+by their only author. `tools/fm1_rescue.py` and `fm1_rescue.sh` (rescue) are MPL-2.0, from fm1-x0x by their author; the
+rescue downloads, when it runs, JieLi's flash loader from jl-uboot-tool and M-VAVE's stock firmware, both checked by
+hash, neither in this repository. Packages built by `fm1pkg.py` contain three files of the JieLi AC79 SDK (`uboot.boot`,
+`cfg_tool.bin`, `eq_cfg_hw.bin`), which are Apache-2.0: ship `LICENSES/Apache-2.0.txt` with every package.
+
+The JieLi SDK is never copied into this repository. `tools/get_sdk.sh` fetches it from JieLi's repository at a fixed revision and
+checks the hashes of the files this repository depends on. Its libraries (`*.a`) carry no separate licence statement
+of their own in the SDK; the SDK as a whole is declared Apache-2.0. That has not been confirmed with JieLi.

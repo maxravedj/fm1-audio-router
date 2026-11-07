@@ -1,5 +1,12 @@
 # Licensing
 
+Audio Router source and platform files use the notices below. Paths in the
+upstream inventory are relative to `src/`; unused historical applications and
+web pages are omitted from this project. Vendored BSP notices are in
+`src/bsp/NOTICE` and `src/bsp/LICENSING.md`. The offline M-Flasher parser in
+`src/tests/vendor/m-flasher/` is MIT, with its license included. Release assets
+include a matching full source archive with these notices.
+
 **fm1-base is MPL-2.0** (full text in `LICENSE`), file by file: every source file carries an
 `SPDX-License-Identifier: MPL-2.0` header. If you change one of these files and distribute it, publish your change to
 that file under MPL-2.0. Your own files, such as an app built on fm1-base, may use any licence, closed ones included.
@@ -47,7 +54,7 @@ own headers:
 | --- | --- | --- |
 | The SBC encoder of Android's Bluetooth stack (Copyright 1999-2012 Broadcom Corporation, AOSP), for Bluetooth audio. Two files are changed and marked so (a coefficient written in decimal; `<string.h>` on a host only) | Apache-2.0 (`LICENSES/Apache-2.0.txt`) | `bt/br/sbc/`, set up by `bt/br/bt_sbc.c` |
 | AOSP's SBC decoder (Copyright 2014 The Android Open Source Project, 2002-2006 Open Interface North America). Reference tests unchanged; production copy replaces an unused allocator include and fixes a signed-shift expression, with changes marked | Apache-2.0 | `tests/bt/ref/sbc_dec/` (reference), `bt/br/sbc_dec/` (receiver firmware); see its README |
-| PacketVideo's Android 4.1.2 AAC decoder, taken from `charlesvestal/fm1-radio` commit `c9113b5eceb9d6c295e32c86e5d769ed8efa67d6`. Retains PacketVideo/Android attribution and marked FM-1 fixes; LC dependency subset, wrapper and further bounds changes documented in its README | Apache-2.0 (`LICENSES/Apache-2.0.txt`); retain its NOTICE | `bt/br/aac_dec/`, especially `pvaac/NOTICE`, `pvaac/README.fm1`, `UPSTREAM-SHA256SUMS`; standalone in 0.0.19; linked for AAC-LC receiver playback in 0.0.20 |
+| PacketVideo's Android 4.1.2 AAC decoder, taken from `charlesvestal/fm1-radio` commit `c9113b5eceb9d6c295e32c86e5d769ed8efa67d6`. Retains PacketVideo/Android attribution and marked FM-1 fixes; LC dependency subset, wrapper and further bounds changes documented in its README | Apache-2.0 (`LICENSES/Apache-2.0.txt`); retain its NOTICE | `bt/br/aac_dec/`, especially `pvaac/NOTICE`, `pvaac/README.fm1`, `UPSTREAM-SHA256SUMS`; linked for AAC-LC receiver playback |
 | micro-ecc by Kenneth MacKay (<https://github.com/kmackay/micro-ecc>, Copyright 2014-2015), the P-192 keys of Secure Simple Pairing | BSD-2-Clause (`LICENSES/BSD-2-Clause-micro-ecc.txt`) | `bt/br/uECC.c`, `uECC.h`, `uECC_vli.h`, `types.h`, `curve-specific.inc`, `platform-specific.inc`, `asm_*.inc` |
 | The radio's start-up tables: JieLi's `rf_init` as M-VAVE's stock V15 firmware runs it (Copyright (c) 2024-2026 Zhuhai Jieli Technology Co., Ltd., AC79 AIoT SDK; Copyright (c) 2026 Zhuhai Shengke / M-VAVE, `fm1_open`), packed by Optimist; the header states the changes | Apache-2.0 | `bsp/chip/ble_rf_tables_v15.h` (`bsp/NOTICE`) |
 | The radio's calibration at every start: JieLi's SDK calibration (`wl_rf_common.a`, Copyright (c) 2024-2026 Zhuhai Jieli Technology Co., Ltd.) rewritten in C by Charles Vestal; the header states the changes | Apache-2.0 | `bsp/chip/fm1_rf_cal.h` (`bsp/NOTICE`; how it works: `docs/bt/RF-CALIBRATION.md`) |
