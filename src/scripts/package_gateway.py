@@ -31,12 +31,15 @@ def logged(name, command):
 
 def main():
     info = json.loads((BUILD / 'build-info.json').read_text())
-    firmware = ROOT / 'dist/folder/audio-router.fwsc'
+    firmware = ROOT / 'dist/audio-router.fwsc'
     if sha(firmware) != info['firmware_sha256'] or source_build_id(ROOT, info['version']) != info['build_id']:
         raise SystemExit('Firmware/source changed since the target build; rebuild before packaging')
+    boot = ROOT / info['bootloader']['path']
+    if sha(boot) != info['bootloader']['sha256']:
+        raise SystemExit('Bundled bootloader changed since the target build; rebuild before packaging')
     logged('runtime.log', [sys.executable, SRC / 'tests/cpu2_runtime_test.py', BUILD])
     logged('rust-build.log', ['rustc', '--edition=2021', SRC / 'scripts/verify_fwsc.rs', '-o', BUILD / 'verify-fwsc'])
-    logged('package.log', [BUILD / 'verify-fwsc', firmware, BUILD / 'fm1audio.bin', info['identity']])
+    logged('package.log', [BUILD / 'verify-fwsc', firmware, BUILD / 'fm1audio.bin', info['identity'], boot])
     logged('ota.log', [sys.executable, SRC / 'apps/fm1-audio-gateway/tests/run_package.py', firmware])
     # Use Git's publication boundary, never local backups, toolchains, flash dumps or generated files.
     names = subprocess.check_output(['git', '-C', str(ROOT), 'ls-files', '-z', '--cached', '--others', '--exclude-standard']).split(b'\0')
@@ -64,6 +67,7 @@ def main():
     with tempfile.TemporaryDirectory(dir=destination.parent, prefix='release-') as temp:
         out = Path(temp)
         shutil.copy2(firmware, out / 'audio-router.fwsc')
+        shutil.copy2(boot, out / 'fm1-uboot.boot')
         for name in ('LICENSE', 'LICENSING.md', 'CREDITS.md'):
             shutil.copy2(ROOT / name, out / name)
         for source, name in (
@@ -72,12 +76,16 @@ def main():
             ('bsp/NOTICE', 'BSP-NOTICE.txt'),
             ('bsp/LICENSING.md', 'BSP-LICENSING.md'),
             ('bt/br/aac_dec/pvaac/NOTICE', 'AAC-NOTICE.txt'),
+            ('boot/m-bootloader/LICENSE', 'MBOOT-LICENSE.txt'),
+            ('boot/m-bootloader/NOTICE.md', 'MBOOT-NOTICE.md'),
         ):
             shutil.copy2(SRC / source, out / name)
         (out / 'manifest.json').write_text(json.dumps(info, indent=2) + '\n')
         (out / 'INSTALL.txt').write_text(
             'FM1 Audio Router ' + info['version'] + '\n\n'
             'Install audio-router.fwsc with M-Flasher. Keep bootloader replacement disabled.\n'
+            'The container embeds m-bootloader ' + info['bootloader']['version'] + '; fm1-uboot.boot is the same plain binary.\n'
+            'Firmware-only updates preserve the bootloader already installed on your device.\n'
             'Leave settings/Bluetooth erase unchecked to preserve settings, FX presets and bonds.\n'
             'See docs/INSTALL.md in the matching source archive for backup/recovery guidance.\n'
             'Host/package validation does not replace hardware RF or listening tests.\n')

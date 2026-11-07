@@ -8,6 +8,7 @@
 | Open pi32v2 compiler | `jvitkauskas/pi32v2-llvm`, release `pi32v2-23.1.5-2` | Archive SHA-256 `cb896562418a2be93edb9bac26af4bc81a106a32974002a78e6b9fc203c93990`. |
 | Compiler drop-in adapter | `jvitkauskas/pi32v2-isa`, `66ac37bb2ae40e5dbbd5588a6a7c2d7baf829d7f` | Downloaded into ignored `tools/`, checked by setup. |
 | AC79 packaging files | `amitv87/fw-AC79_AIoT_SDK`, `ffbb2a8d925682ba6880d643a83a63ee0691ec09` | Only three files and license, pinned individually in setup; no vendor radio library linked. |
+| m-bootloader | `jvitkauskas/m-bootloader`, v2.2 / `64f7c9cad1580bea870fc4a9e9bd61583fee3aef` | FM-1 binary in `src/boot/m-bootloader/`, SHA-256 `cedc9c17648bdeecda5c8d0ffffe2211849f8a36ab615fe49d6cc46d249baf44`; MIT license and NOTICE retained. |
 | Offline M-Flasher parser | `jvitkauskas/m-flasher`, `55da95cc978e45d60d833a10edc3292c2a5918c2` | Unmodified `formats.rs` plus MIT license in `src/tests/vendor/m-flasher/`. |
 | AAC-LC decoder | `charlesvestal/fm1-radio`, `c9113b5eceb9d6c295e32c86e5d769ed8efa67d6` | PacketVideo/AOSP fixed-point subset; local fixes/pins/notices in `src/bt/br/aac_dec/`. |
 | SBC decoder | AOSP/Open Interface | Apache-2.0; provenance and marked adaptations in `src/bt/br/sbc_dec/README.md`. |

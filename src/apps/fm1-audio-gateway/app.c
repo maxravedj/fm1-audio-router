@@ -298,10 +298,10 @@ void app_init(void)
     plat_usb_play_gain(4096u);
     gateway_message[0][0] = gateway_message[1][0] = 0;
     gateway_mix_db[0]=gateway_mix_db[1]=gateway_mix_db[2]=0;
-    gateway_mix_mutes=gateway_mix_solos=0;gateway_fade_time=gateway_fade_draft=3;
+    gateway_mix_mutes=gateway_mix_solos=0;gateway_fade_time=gateway_fade_draft=2;
     gateway_monitor = gateway_codec_preference = gateway_codec_draft = gateway_aac_active = 0;
-    gateway_master_wave_auto_scale = 1;
-    gateway_wave_color = GATEWAY_WAVE_BLUE;
+    gateway_master_wave_auto_scale = 0;
+    gateway_wave_color = GATEWAY_WAVE_GREEN;
     gateway_spectrum_color=GATEWAY_WAVE_YELLOW;gateway_battery_mode=gateway_cpu_mode=1;
     gateway_zoom = 6;
     gateway_muted = 0;
@@ -310,7 +310,8 @@ void app_init(void)
     gateway_spectrum_rate = 1;
     gateway_spectrum_max = 0;
     gateway_spectrum_min = 90;
-    gateway_bt_mode = gateway_bt_draft = gateway_save_notice = gateway_bt_running = 0;
+    gateway_bt_mode = gateway_bt_draft = 1;
+    gateway_save_notice = gateway_bt_running = 0;
     gateway_settings_row = gateway_settings_first = gateway_oct_tracking = gateway_oct_fired = 0;
     gateway_pair_seen = gateway_bt_seen = gateway_codec_seen = 0;
     if ((size == 8u || size == 12u || size==16u || size==20u || size==22u || size == sizeof s) &&

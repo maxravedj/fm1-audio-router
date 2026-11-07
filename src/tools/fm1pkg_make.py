@@ -5,7 +5,7 @@
 """Build an FM-1 update package (.fwsc) from the Felucca app and update loader.
 
   flash.bin  head [0, 0x4000): flash header (JieLi SDK default values), JLFS
-             entries, the SDK SPL (uboot.boot, Apache-2.0) and an isd_config
+             entries, the selected bootloader (SDK SPL by default) and an isd_config
              blob that decodes to the chip key. The update loader never writes
              the head.
              app area 0x4000..: app_area_head, app.bin, the SDK cfg_tool.bin and
@@ -18,6 +18,7 @@ All integrity checks in the format are CRC16 (poly 0x1021, init 0).
   fm1pkg_make.py APP.bin OTA.bin OUT.fwsc [--product FM-1_9XY] [--sdk DIR] [--app-end 0xCE000]
 """
 import argparse
+import hashlib
 import os
 import struct
 from pathlib import Path
@@ -109,19 +110,51 @@ def app_slot(app_hi):
 assert app_slot(FLASH_SIZE) == APP_SLOT
 
 
-def flash_image(app, key, app_hi=FLASH_SIZE):
+def read_bootloader(path, sha256=None):
+    """Read a plain FM-1 BANKCB release; reject corruption and another board."""
+    boot = Path(path).read_bytes()
+    if sha256 is not None and hashlib.sha256(boot).hexdigest() != sha256:
+        raise SystemExit("bootloader SHA-256 mismatch")
+    if len(boot) < 16:
+        raise SystemExit("bootloader: truncated BANKCB header")
+    bank, size, load, offset, pcrc, hcrc = struct.unpack_from("<HHIIHH", boot)
+    if (bank != 1 or load != 0x01C02000 or offset != 16 or size != len(boot)-16
+            or crc16(boot[:14]) != hcrc or crc16(boot[16:]) != pcrc):
+        raise SystemExit("bootloader: invalid BANKCB bounds/load address/checksums")
+    if boot[16+0x40:16+0x48] != b"AC79BLID" or boot[16+0x48:16+0x50] != b"fm1\0\0\0\0\0":
+        raise SystemExit("bootloader: expected an FM-1 m-bootloader build")
+    return boot
+
+
+def flash_image(app, key, app_hi=FLASH_SIZE, boot=None):
     """flash.bin [0, app_hi): the head and the app area (app_hi: 0x93000, or a bigger slot's end)"""
     slot = app_slot(app_hi)
-    spl = sdk_file("uboot.boot")                         # SDK SPL, BANKCB-encoded as in the SDK
+    spl = sdk_file("uboot.boot") if boot is None else boot
+    stored_spl = bytearray(spl)
+    if boot is not None:
+        # A release .boot is plain BANKCB. ROM restarts ENC for its 16-byte
+        # header and payload independently; the directory CRC covers plaintext.
+        enc(stored_spl, 0, 16)
+        enc(stored_spl, 16, len(stored_spl)-16)
     cfg_tool = sdk_file("cfg_tool.bin")
     eq = sdk_file("cfg/eq_cfg_hw.bin")
     isd = key_blob(key) + b"[FELUCCA]\r\n"
+    if boot is not None:
+        # m-bootloader 2.2's 96-byte compatibility configuration: chip key,
+        # then the five records also needed by its 1.3-and-earlier releases.
+        isd = key_blob(key)
+        for name, value in (("OSC", b"OSC0"), ("OSC_FREQ", struct.pack("<I", 24000000)),
+                            ("SYS_CLK", struct.pack("<I", 360000000)),
+                            ("HSB_DIV", struct.pack("<I", 1)), ("LSB_DIV", struct.pack("<I", 2))):
+            isd += bytes([len(value)]) + name.encode() + b"\0" + value
     f = bytearray(b"\xFF" * app_hi)
     # ---- head
     spl_off = 0xA0
-    isd_off = spl_off + len(spl)
+    isd_off = spl_off + len(spl) if boot is None else 0x4000-len(isd)
+    if spl_off + len(spl) > isd_off:
+        raise SystemExit("bootloader and configuration do not fit the 16-KiB boot area")
     assert isd_off + len(isd) <= 0x4000
-    f[spl_off:spl_off + len(spl)] = spl
+    f[spl_off:spl_off + len(spl)] = stored_spl
     f[isd_off:isd_off + len(isd)] = isd
     top = (entry(crc16(spl), spl_off, len(spl), 0x00, 0x00, 0, "uboot.boot") +
            entry(crc16(isd), isd_off, len(isd), 0x02, 0x80, 0, "isd_config.ini") +

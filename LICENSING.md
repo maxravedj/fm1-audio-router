@@ -5,7 +5,9 @@ upstream inventory are relative to `src/`; unused historical applications and
 web pages are omitted from this project. Vendored BSP notices are in
 `src/bsp/NOTICE` and `src/bsp/LICENSING.md`. The offline M-Flasher parser in
 `src/tests/vendor/m-flasher/` is MIT, with its license included. Release assets
-include a matching full source archive with these notices.
+include a matching full source archive with these notices. The unmodified FM-1
+m-bootloader binary in `src/boot/m-bootloader/` is MIT (Julius Vitkauskas, 2026);
+its LICENSE and NOTICE are included there and alongside release firmware.
 
 **fm1-base is MPL-2.0** (full text in `LICENSE`), file by file: every source file carries an
 `SPDX-License-Identifier: MPL-2.0` header. If you change one of these files and distribute it, publish your change to
@@ -108,7 +110,7 @@ works with Link should read Ableton's guidelines for that first.
 | JieLi AC79 SDK files a package needs (`uboot.boot`, `cfg_tool.bin`, `eq_cfg_hw.bin`) | Apache-2.0 | read from your SDK checkout at build time; never in this repository |
 | JieLi's Bluetooth libraries (`btctrler.a`, `btstack.a`, `wl_rf_common.a`, ...: binary only) and the few SDK sources and headers they need | Apache-2.0 | copied from your SDK checkout into `build/` by a build with `ble = true` on JieLi's stack (not with `ble_stack = "own"`); never in this repository |
 | JieLi's WiFi libraries (`wl_wifi_sta_sfc.a`, `wpasupplicant.a`, `hsm.a`: binary only) and the SDK's lwIP 2.1.3 sources | Apache-2.0 (lwIP: BSD-3-Clause) | copied from your SDK checkout into `build/` by a build with `wifi = true`; never in this repository. `ble/lwip/lwipopts_sfc.h` and `ble/wifi/rf_moderate.c` are the SDK's (Apache-2.0), the first changed where marked "FM-1" |
-| m-bootloader 1.2 (Julius Vitkauskas, github.com/jvitkauskas/m-bootloader): its FM-1 installer package and bootloader, which the web installer offers to install | MIT | `web/m-bootloader/` (with its `LICENSE`); a site copies the package and the licence into `firmware/` |
+| m-bootloader 1.2 (Julius Vitkauskas): legacy FM-1 installer and bootloader used only as OTA test fixtures | MIT | `tests/fixtures/m-bootloader/`, with its `LICENSE`; new firmware embeds the separately pinned 2.2 binary in `boot/m-bootloader/` |
 | The browser emulator's voice: eSpeak NG, through fm1-reader | GPL-3.0-or-later | taken from an fm1-reader checkout when the emulator is built; a separate program the page loads |
 
 ## Incoming Classic receiver timing (Audio Router 0.0.14)

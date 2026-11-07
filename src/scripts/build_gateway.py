@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 from build_version import version_info, source_build_id
 
 SRC = Path(__file__).resolve().parents[1]
@@ -23,6 +24,14 @@ def main():
     parser.add_argument("--tag", help="explicit release tag (also works in a source archive)")
     args = parser.parse_args()
     info = version_info(PROJECT, args.tag)
+    config = tomllib.loads((APP / "fm1.toml").read_text())
+    sys.path.insert(0, str(SRC / "tools"))
+    from fm1pkg_make import read_bootloader
+    boot_path = (APP / config["bootloader"]).resolve()
+    boot = read_bootloader(boot_path, config["bootloader_sha256"])
+    info["bootloader"] = dict(name="m-bootloader", board="fm1",
+        version=boot[16+0x50:16+0x70].split(b"\0", 1)[0].decode("ascii"),
+        path=str(boot_path.relative_to(PROJECT)), sha256=hashlib.sha256(boot).hexdigest())
     output = PROJECT / "build/gateway"
     output.mkdir(parents=True, exist_ok=True)
     link = APP / "build"
@@ -47,7 +56,7 @@ def main():
     package = output / info["package"]
     info["firmware_sha256"] = hashlib.sha256(package.read_bytes()).hexdigest()
     (output / "build-info.json").write_text(json.dumps(info, indent=2) + "\n")
-    latest = PROJECT / "dist/folder/audio-router.fwsc"
+    latest = PROJECT / "dist/audio-router.fwsc"
     latest.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(dir=latest.parent, delete=False) as f:
         temporary = Path(f.name)

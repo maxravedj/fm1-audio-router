@@ -6,7 +6,7 @@ typedef struct { float gain,seen,step;uint32_t remaining,used; } gateway_fader_t
 static gateway_fader_t gateway_fader[3];
 static uint8_t gateway_mixer_redraw;
 /* Bits 0..2 mute USB/BT/OUT; MASTER shares gateway_muted and PLAY. */
-static uint8_t gateway_mix_mutes,gateway_mix_solos,gateway_fade_time=3,gateway_fade_draft=3;
+static uint8_t gateway_mix_mutes,gateway_mix_solos,gateway_fade_time=2,gateway_fade_draft=2;
 static const uint16_t gateway_fade_ms[]={0,10,50,100,500,1000};
 static const char *const gateway_fade_names[]={"OFF","10ms","50ms","100ms","500ms","1s"};
 static const uint8_t gateway_mute_keys[]={0,2,4,6},gateway_solo_keys[]={12,14,16,18};

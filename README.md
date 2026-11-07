@@ -12,7 +12,8 @@ process the master output, and monitor signals on the built-in display.
 Download `audio-router.fwsc` from **GitHub Releases** or a successful
 **Actions → Firmware** artifact. Install with M-Flasher; keep bootloader
 replacement disabled and **settings/Bluetooth erase unchecked** to retain
-settings, presets and pairings. Read [installation and recovery](docs/INSTALL.md)
+settings, presets and pairings. The container bundles the pinned FM-1
+m-bootloader; firmware-only updates preserve your installed bootloader. Read [installation and recovery](docs/INSTALL.md)
 before the first install. No website or browser installer is provided.
 
 Build on Linux x86-64:
@@ -25,7 +26,7 @@ python src/scripts/setup_build.py
 python src/scripts/build_gateway.py
 ```
 
-Firmware is always written to `dist/folder/audio-router.fwsc`. Versions come
+Firmware is always written to `dist/audio-router.fwsc`. Versions come
 from manually created Git tags; untagged builds are marked `DEV`.
 
 [Controls](docs/CONTROLS.md) · [Build, tests and releases](docs/BUILD.md) ·

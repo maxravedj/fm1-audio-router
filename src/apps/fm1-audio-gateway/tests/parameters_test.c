@@ -13,13 +13,44 @@ static void leds(int muted)
 {
     uint32_t active=1u<<(gateway_screen==GATEWAY_MAIN?B_HOME:B_EDIT);
     uint32_t dim=((1u<<B_HOME)|(1u<<B_EDIT)|(1u<<B_FX)) & ~active;
+    if(gateway_bt_mode)dim|=1u<<B_OCTUP;
     assert(lights_b == ((muted ? 1u << B_PLAY : LED_PLAY_GREEN)|active));
     assert(lights_db==dim && lights_glow==1 && !lit_keys && !mid_keys && !dim_keys);
     assert(lit_btn == ((1u << B_PLAY)|active) && dim_btn==dim);
 }
+static void defaults_and_saved_preferences(void)
+{
+    static const char *const defaults[]={"RECEIVER","AUTO","OFF","GREEN","YELLOW","PERCENT","ON","OFF","50ms"};
+    app_init();app_boot();app_ui_init();
+    assert(btr_host_on && !btr_host_pairing && !gateway_bt_seen);
+    assert(master_fade_frames==2205 && !gateway_usb_pcm);
+    for(unsigned row=0;row<GATEWAY_SETTING_ROWS;row++)
+        assert(!strcmp(gateway_settings_value(row),defaults[row]));
+    gateway_settings_t saved=gateway_settings();
+    /* Previously saved preferences must win, including explicitly disabled BT. */
+    saved.bluetooth=0;saved.bt_reserved[0]=2;
+    saved.bt_reserved[2]=1|(GATEWAY_WAVE_BLUE<<1);
+    saved.spectrum_reserved=GATEWAY_WAVE_RED;saved.reserved=2|(3<<2);
+    saved.fade_time=5;
+    assert(!plat_store_save(OBJ_SETTINGS,&saved,sizeof saved));
+    plat_bt_receiver_on(0);unsigned writes=store_writes;
+    app_init();app_boot();app_ui_init();
+    gateway_settings_t actual=gateway_settings();
+    assert(!memcmp(&saved,&actual,sizeof saved) && !btr_host_on && store_writes==writes);
+    assert(master_fade_frames==44100 && gateway_usb_pcm);
+    /* A malformed record falls back to the same fresh defaults without saving. */
+    saved.version=99;assert(!plat_store_save(OBJ_SETTINGS,&saved,sizeof saved));
+    app_init();app_boot();app_ui_init();
+    for(unsigned row=0;row<GATEWAY_SETTING_ROWS;row++)
+        assert(!strcmp(gateway_settings_value(row),defaults[row]));
+    assert(master_fade_frames==2205 && !gateway_usb_pcm && btr_host_on && !btr_host_pairing);
+    plat_bt_receiver_on(0);store_len[OBJ_SETTINGS]=-1;
+    puts("PASS: fresh/invalid settings show requested defaults, receiver boots undiscoverable, 50ms DSP fade; valid saved preferences retained exactly without a write");
+}
 int main(void)
 {
     palette_set(APP_PALETTE);
+    defaults_and_saved_preferences();
     gateway_settings_t s;
     uint32_t writes;
     char label[8];

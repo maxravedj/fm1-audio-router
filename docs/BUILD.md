@@ -43,11 +43,17 @@ and tools stay outside Git. The vendored BSP is included in the source tree;
 there are no submodules to initialize. Pins are in `src/scripts/setup_build.py`
 and [UPSTREAM.md](UPSTREAM.md).
 
+The FM-1 m-bootloader binary is vendored under `src/boot/m-bootloader/` with
+its license and provenance. The app configuration pins its SHA-256; build and
+package checks reject modified, corrupt or wrong-board images. The generated
+firmware container embeds it, and release assets include the plain `.boot`
+file. Firmware-only installations preserve the device's existing bootloader.
+
 - `build/gateway/`: ELF, disassembly, generated headers, loader and memory reports.
-- `dist/folder/audio-router.fwsc`: stable path for M-Flasher, refreshed atomically
+- `dist/audio-router.fwsc`: stable path for M-Flasher, refreshed atomically
   only after a successful target build; accompanied by `SHA256SUMS`.
 - `dist/release/`: verified firmware, matching source archive, debug symbols,
-  manifest, licenses and checksums, created by `package_gateway.py`.
+  plain FM-1 bootloader, manifest, licenses and checksums, created by `package_gateway.py`.
 - `logs/ci/`: linked-runtime, package parser and simulated OTA check results.
 
 `JIELI_TOOLCHAIN` and `AC79_SDK` can override local dependency locations.

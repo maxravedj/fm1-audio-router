@@ -17,7 +17,7 @@ the whole chip or write the boot region below `0x4000`.
 
 1. Download the release's `audio-router.fwsc`, or use the same file in a
    successful Firmware Actions artifact. Locally it is always at
-   `dist/folder/audio-router.fwsc`.
+   `dist/audio-router.fwsc`.
 2. Verify the accompanying `SHA256SUMS`. Use a reliable USB data cable and
    stable power.
 3. Open [M-Flasher](https://github.com/jvitkauskas/m-flasher), select the FM-1
@@ -27,9 +27,13 @@ the whole chip or write the boot region below `0x4000`.
 5. Complete the update without interrupting USB/power; then verify audio and
    controls. Firmware-only writes preserve the settings, preset and bond areas.
 
-The package includes a boot head for container compatibility; its presence is
-not permission to replace the installed bootloader. The offline verifier checks
-that normal firmware writes remain within `[0x4000, 0x93000)`.
+The firmware container embeds the pinned **m-bootloader 2.2-64f7c9c for FM-1**
+in its boot area. Release assets also include the identical plain
+`fm1-uboot.boot` and its MIT notices. This replaces the SDK SPL in generated
+containers. Firmware-only updates still preserve the bootloader already on the
+device; bundling does not install it. The offline verifier checks the exact
+bootloader bytes, ROM encoding, configuration and checksums, and that normal
+firmware writes remain within `[0x4000, 0x93000)`.
 
 ## Recovery and useful distinctions
 

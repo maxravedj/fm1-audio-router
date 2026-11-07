@@ -17,7 +17,10 @@ controls, build/release instructions and recovery guidance are in `docs/`.
   `python3 src/scripts/test_gateway.py` runs the current host suites.
 - Firmware: `python3 src/scripts/setup_build.py`, then
   `python3 src/scripts/build_gateway.py` and `python3 src/scripts/package_gateway.py`.
-  Each successful build refreshes `dist/folder/audio-router.fwsc` atomically.
+  Each successful build refreshes `dist/audio-router.fwsc` atomically.
+- The container bundles the pinned FM-1 m-bootloader in `src/boot/m-bootloader/`;
+  validate its hash/BANKCB/board and ROM encoding. Bundling authorizes no device
+  write; firmware-only updates must preserve the installed bootloader.
 - Versions come only from manually supplied Git tags `[v]MAJOR.MINOR.PATCH`
   (optional prerelease; numeric components 0..99 for the FM-1 identity).
   Untagged builds show DEV plus the commit. Do not increment hardcoded versions

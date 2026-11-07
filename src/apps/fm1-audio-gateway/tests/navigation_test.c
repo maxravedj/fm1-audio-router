@@ -9,6 +9,7 @@ static void lights(void)
     unsigned active=1u<<(gateway_screen==GATEWAY_MAIN?B_HOME:gateway_screen==GATEWAY_FX?B_FX:B_EDIT);
     unsigned dim=(((1u<<B_HOME)|(1u<<B_EDIT)|(1u<<B_FX))&~active)|(gateway_screen==GATEWAY_SETTINGS?1u<<B_SAVE:0);
     if(gateway_screen==GATEWAY_FX){if(gateway_fx_limiter?gateway_fx_params.lim:gateway_fx_params.eq)active|=1u<<B_SEL;else dim|=1u<<B_SEL;}
+    if(gateway_bt_mode)dim|=1u<<B_OCTUP;
     assert(lights_b==(active|(gateway_muted?1u<<B_PLAY:LED_PLAY_GREEN)));
     assert(dim_btn==dim && lights_db==dim && lights_glow==1 && !lit_keys && !mid_keys && !dim_keys);
 }

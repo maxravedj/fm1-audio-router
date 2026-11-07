@@ -299,10 +299,14 @@ int main(int argc, char **argv)
                              v == 1u ? "m-bootloader boot area for the SMK-37 -> -5" :
                                        "damaged boot area -> -5", v == 0u ? rc == 0 : rc == -5);
             }
-            memcpy(img, tpl, sizeof img);                   /* ours keeps the SDK's file unciphered: */
-            logical = img;                                  /* never written (Felucca's writer is exempt) */
+            memcpy(img, tpl, sizeof img);
+            logical = img;                                  /* firmware OTA never writes this head */
             rc = ota_boot_valid(0, sizeof img, b_scratch);
+#ifdef EXPECT_BUNDLED_MBOOT
+            bad += check("firmware package's bundled FM-1 m-bootloader: valid", rc == 0);
+#else
             bad += check("our packages' head: not one to write -> -5", rc == -5);
+#endif
             logical = NULL;
         }
 

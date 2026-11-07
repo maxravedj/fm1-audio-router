@@ -79,6 +79,11 @@ CPU display, USB OUT routing and mute/solo fade time. Fade choices are OFF,
 white and orange. Battery percentage is an uncalibrated estimate; no voltage
 mode is provided.
 
+Fresh settings default to Bluetooth RECEIVER with codec AUTO (SBC and AAC),
+MASTER waveform auto scale OFF, green waveforms, yellow spectrum, battery and
+CPU displays ON, USB OUT OFF and a 50-ms mute/solo fade. Existing saved
+preferences take priority over these defaults.
+
 Enable Bluetooth RECEIVER and SAVE. Hold OCT+ for one second to pair with
 **FM1 BT Receiver**; press OCT+ again to stop discovery. Discovery is off at
 boot. AUTO advertises SBC and AAC; forced modes expose only that codec.

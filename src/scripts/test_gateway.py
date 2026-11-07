@@ -18,6 +18,7 @@ def run(path, *extra):
 
 if args.suite in ('ui', 'all'):
     run(SRC / 'tests/build_version_test.py')
+    run(SRC / 'tests/bundled_boot_test.py')
     run(APP / 'tests/build_checks.py')
     run(SRC / 'tests/screenshot_cli_test.py')
     run(SRC / 'tests/ui_profile_cli_test.py')

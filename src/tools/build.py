@@ -13,6 +13,8 @@
 APP_DIR holds the app (app.h, app.c, its sources) and its fm1.toml:
   name = "TEMPLATE"          the build's file names (lower case)
   id_prefix = "FM-1_0"       package identity: dev builds are the prefix + "00", releases the prefix + XXYYZZ
+  bootloader = "file.boot"   plain FM-1 m-bootloader container, relative to APP_DIR (optional)
+  bootloader_sha256 = "..."  required SHA-256 pin when bootloader is set
   usb_manufacturer = "..."   the USB names (felucca-bsp FELUCCA_USB_MANUFACTURER / FELUCCA_USB_PRODUCT)
   usb_product = "..."
   usb_name_fn = "fn"         the name of the app's function `const char *fn(void)` the USB product name is asked of each time a
@@ -1702,6 +1704,11 @@ def main():
         generate()
         return build_host() if a.host else build_rfm1()
     fm1pkg_make.SDK = a.sdk
+    boot = None
+    if CONF.get("bootloader"):
+        if not re.fullmatch(r"[0-9a-f]{64}", CONF.get("bootloader_sha256", "")):
+            raise SystemExit("bootloader requires a SHA-256 pin in fm1.toml")
+        boot = fm1pkg_make.read_bootloader(APP / CONF["bootloader"], CONF["bootloader_sha256"])
     for rel, sha in SDK_SHA256.items():          # fail early without the SDK
         if hashlib.sha256(fm1pkg_make.sdk_file(rel)).hexdigest() != sha:
             print(f"warning: SDK {rel} differs from AC79NN_SDK_V1.2.1; the package will not match the reference")
@@ -1739,7 +1746,7 @@ def main():
                                             for f in APP.glob("*.h")))]
     print("parts    " + ", ".join(n for n, x in parts if x) + "  (not built in: " +
           (", ".join(n for n, x in parts if not x) or "none") + ")")
-    pkg = fm1pkg_make.ufw(fm1pkg_make.flash_image(img, fm1pkg_make.KEY, app_end() or APP_END), ota, PRODUCT)
+    pkg = fm1pkg_make.ufw(fm1pkg_make.flash_image(img, fm1pkg_make.KEY, app_end() or APP_END, boot), ota, PRODUCT)
     (OUT / name).write_bytes(pkg)
     print(f"app      {OUT / (NAME + '.bin')}  {len(img)} B")
     if CONF.get("resources"):                 # the resource region beside the package: the installer writes it after
