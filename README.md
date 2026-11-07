@@ -1,33 +1,69 @@
-# FM1 Audio Router
+<h1 align="center">FM-1 Audio Router</h1>
 
-Alternative firmware for the **M-VAVE FM-1**: mix USB and Bluetooth audio,
-process the master output, and monitor signals on the built-in display.
+<p align="center">
+  USB audio interface and Bluetooth audio receiver firmware for M-VAVE FM-1
+</p>
 
-- Stereo USB audio playback and recording (`FM1 Audio`).
-- Bluetooth A2DP receiver with SBC and AAC-LC (`FM1 BT Receiver`).
-- USB/BT input trims, USB output routing, master control, mute and solo.
-- Five-band parametric EQ and lookahead peak limiter, with eight presets each.
-- Stereo meters, scrolling waveforms, 40-band spectrum and dual-core CPU display.
+<p align="center">
+  <img src="assets/github/mixer.png" width="240" height="240" alt="Mixer screenshot">
+  <img src="assets/github/waveforms.png" width="240" height="240" alt="Waveforms screenshot">
+  <img src="assets/github/spectrum.png" width="240" height="240" alt="Spectrum screenshot">
+  <img src="assets/github/eq.png" width="240" height="240" alt="EQ screenshot">
+  <img src="assets/github/limiter.png" width="240" height="240" alt="Peak limiter screenshot">
+</p>
 
-Download `audio-router.fwsc` from **GitHub Releases** or a successful
-**Actions → Firmware** artifact. Install with M-Flasher; keep bootloader
-replacement disabled and **settings/Bluetooth erase unchecked** to retain
-settings, presets and pairings. The container bundles the pinned FM-1
-m-bootloader; firmware-only updates preserve your installed bootloader. Read [installation and recovery](docs/INSTALL.md)
-before the first install. No website or browser installer is provided.
+<p align="center">
+  <a href="https://github.com/maxravedj/fm1-audio-router/actions/workflows/firmware.yml"><img src="https://github.com/maxravedj/fm1-audio-router/actions/workflows/firmware.yml/badge.svg" alt="Firmware build status"></a>
+</p>
 
-Build on Linux x86-64:
+# Features
+- 2in/2out 16/44100 USB audio interface
+- Bluetooth audio receiver with AAC support
+- FX chain of 5 bands parametric EQ and peak limiter with 8 presets
+- Mixer
+- 3 Visualizers: meters, waveforms and 40-band spectrum
 
-```sh
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -r requirements-build.txt
-python src/scripts/setup_build.py
-python src/scripts/build_gateway.py
-```
+# Installation
+1. Flash m-bootloader with [M-Flasher](https://github.com/jvitkauskas/m-flasher)
+2. Turn off FM-1 and turn on while holding **REC** button
+3. Flash [latest release](https://github.com/maxravedj/fm1-audio-router/releases/latest/download/audio-router.fwsc) with M-Flasher
 
-Firmware is always written to `dist/audio-router.fwsc`. Versions come
-from manually created Git tags; untagged builds are marked `DEV`.
+See additional [installation instructions](docs/INSTALL.md)
+
+# Usage and controls
+### USB audio
+Plug your FM-1 to computer and it should be deteceted as class compliant 2in/2out audio interface. Incoming audio will be played through speaker or headphones output. You can send audio back to computer using USB OUT feature to have loopback or pass incoming bluetooth audio feed, raw or post-FX.
+
+### Bluetooth
+Enable bluetooth in settings and hold **OCT+** to enter or exit pairing mode. BT IN badge in status bar is yellow during pairing mode.
+
+### FX chain
+Hold **FX** button to enable or disable FX chain. Press **SEL** on specific FX screen to bypass that FX
+- EQ: use **SELECT** to cycle through five bands and post-EQ gain, **ALGORITHM** to select filter type, **K1** for frequency, **K2** for gain or slope, **K3** for Q or resonance
+- Peak limiter: use **K1** for input gain, **K2** for release, **K3** for ceiling
+
+Use **PRESETS** knob to scroll presets. EQ and limiter have 8 preset slots each. Use **SAVE** to store changes to current preset.
+
+### Mixer
+Press **GLO** to open mixer. Use **K1**-**K3** to trim volumes on inputs and USB output. Use **MASTER** knob to control Master volume. Press **PLAY/STOP** to mute Master (works on any screen).
+Use first octave F-B keys to mute, second octave to solo.
+
+### Settings
+Press **EDIT** to open settings, use **SELECT** to scroll, **ALGORITHM** to change parameters and **SAVE** to save and apply settings.
+- Bluetooth: enable/disable bluetooth
+- Bluetooth codec: force SBC, AAC or advertise both codecs
+- Master waveform auto scale: automatically scale master waveform to achieve  always fat waveform
+- USB OUT: send audio back to USB, select source here.
+
+### Visualizers
+Press **HOME** to open visualizers screen and cycle through different visualizers.
+ - Meters: no controls
+ - Waveforms: **SELECT** knob scrolls through audio sources to visualize, use **K1** to choose window size
+ - Spectrum: **SELECT** for source, **K1** and **K2** for minimum and maximum displayed dB, **K3** controls decay rate
+
+Please note that Waveforms and Spectrum are sacrificed during bluetooth AAC playback due to low memory constraints
+
+## Other usefull stuff
 
 [Controls](docs/CONTROLS.md) · [Build, tests and releases](docs/BUILD.md) ·
 [Architecture](docs/ARCHITECTURE.md) · [Debugging](DEBUG.md)
