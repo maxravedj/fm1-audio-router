@@ -38,7 +38,9 @@ with tempfile.TemporaryDirectory() as temp:
     assert asset.name == 'fm1-audio-router-v0.1.1.fwsc' and asset.read_bytes() == firmware
     text = notes.read_text()
     assert text.startswith('Changes\n') and info['firmware_sha256'] in text
-    assert 'https://github.com/owner/repo/archive/refs/tags/v0.1.1.zip' in text
+    assert '[Matching source]' not in text and 'Install with M-Flasher.' not in text
+    assert '/archive/refs/tags/' not in text
+    assert 'https://github.com/owner/repo/blob/v0.1.1/docs/INSTALL.md' in text
     for name in release.NOTICES:
         assert f'{name}: copyright &lt;author&gt; &amp; contributors' in text
     release.prepare(bundle, 'v0.1.1', 'owner/repo', text, output)
@@ -77,6 +79,9 @@ with tempfile.TemporaryDirectory() as temp:
             assert '--latest' in args and '--verify-tag' in args
             state['body'] = Path(args[args.index('--notes-file') + 1]).read_text()
             state['assets'] = [dict(name=Path(args[3]).name)]
+        elif command == 'delete':
+            assert args == ('release', 'delete', 'v0.1.1', '--yes')
+            state['assets'] = []
         else:
             raise AssertionError(args)
         return ''
@@ -99,6 +104,20 @@ with tempfile.TemporaryDirectory() as temp:
         release.publish(bundle, 'v0.1.1', 'owner/repo', None)
         assert state['assets'] == [dict(name=asset.name)]
         commands.clear()
+        release.publish(bundle, 'v0.1.1', 'owner/repo', state.copy(), recreate=True)
+        assert state['assets'] == [dict(name=asset.name)]
+        assert next(i for i,c in enumerate(commands) if c[1]=='delete') < next(i for i,c in enumerate(commands) if c[1]=='create')
+        assert not any('--cleanup-tag' in c for c in commands)
+        commands.clear()
+        (bundle / 'audio-router.fwsc').write_bytes(b'corrupt')
+        try:
+            release.publish(bundle, 'v0.1.1', 'owner/repo', state.copy(), recreate=True)
+            raise AssertionError('replacement was not validated before deletion')
+        except ValueError:
+            pass
+        assert not commands
+        (bundle / 'audio-router.fwsc').write_bytes(firmware)
+        commands.clear()
         release.tidy_legacy('v0.1.1', 'owner/repo')
         assert all(c[1]=='view' for c in commands), 'Already migrated releases must be untouched'
         state['assets'] = [dict(name='unrelated.bin')]
@@ -115,6 +134,6 @@ with tempfile.TemporaryDirectory() as temp:
         state['assets'] = [dict(name=p.name) for p in bundle.iterdir()]
         release.tidy_legacy('v0.1', 'owner/repo')
         assert state['assets'] == [dict(name='fm1-audio-router-v0.1.0.fwsc')]
-        assert '/archive/refs/tags/v0.1.zip' in state['body']
+        assert '/archive/refs/tags/' not in state['body']
 
-print('PASS: normalized versioned firmware, source/notices retained in body, idempotent notes, one-asset publication, upload-before-delete, failed-upload preservation and bounded legacy migration')
+print('PASS: normalized versioned firmware, concise notes with notices, validated release recreation, idempotent notes, one-asset publication, upload-before-delete, failed-upload preservation and bounded legacy migration')

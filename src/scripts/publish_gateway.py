@@ -38,10 +38,7 @@ def prepare(directory, tag, repo, body, output):
     url = f'https://github.com/{repo}'
     text = body.split(MARKER)[0].rstrip() + '\n\n' + MARKER + '\n'
     text += (f'Firmware: **{name}**\n\n'
-             'Install with M-Flasher. Keep bootloader replacement disabled and '
-             'settings/Bluetooth erase unchecked.\n\n'
              f'SHA-256: `{digest}`\n\n'
-             f'[Matching source]({url}/archive/refs/tags/{tag}.zip) · '
              f'[Installation and recovery]({url}/blob/{tag}/docs/INSTALL.md)\n\n'
              '<details>\n<summary>Licenses and third-party notices</summary>\n\n')
     for notice in NOTICES:
@@ -63,9 +60,14 @@ def prune_assets(tag, filename):
             gh('release', 'delete-asset', tag, asset['name'], '--yes')
 
 
-def publish(directory, tag, repo, existing):
+def publish(directory, tag, repo, existing, recreate=False):
     with tempfile.TemporaryDirectory() as temp:
         asset, notes = prepare(directory, tag, repo, existing['body'] if existing else '', Path(temp))
+        if existing and recreate:
+            # Validate the replacement before deleting the old release. Keep the
+            # Git tag: it already points at the commit being published.
+            gh('release', 'delete', tag, '--yes')
+            existing = None
         if existing:
             # Preserve notices before removing any of their old attachments.
             gh('release', 'edit', tag, '--notes-file', notes)
@@ -98,11 +100,12 @@ def main():
     parser.add_argument('--tag', required=True)
     parser.add_argument('--directory', type=Path, default=Path('release'))
     parser.add_argument('--tidy-legacy', action='store_true')
+    parser.add_argument('--recreate', action='store_true', help='delete an existing release before publishing it again')
     args = parser.parse_args()
     repo = os.environ['GH_REPO']
     releases = json.loads(gh('release', 'list', '--limit', '100', '--json', 'tagName'))
     existing = view(args.tag) if any(r['tagName'] == args.tag for r in releases) else None
-    publish(args.directory, args.tag, repo, existing)
+    publish(args.directory, args.tag, repo, existing, recreate=args.recreate)
     if args.tidy_legacy:
         for release in releases:
             if release['tagName'] != args.tag:

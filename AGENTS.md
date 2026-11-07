@@ -28,7 +28,7 @@ controls, build/release instructions and recovery guidance are in `docs/`.
 - GitHub Actions tests/builds pull requests and master; pushed tags additionally
   publish only `fm1-audio-router-vMAJOR.MINOR.PATCH.fwsc` as a release asset.
   Matching sources/debug symbols/notices stay in Actions artifacts; release
-  descriptions retain notices and matching source links. No website.
+  descriptions retain notices; GitHub provides tagged source archives. No website.
 
 ## Runtime invariants
 

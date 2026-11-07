@@ -6,7 +6,7 @@ web pages are omitted from this project. Vendored BSP notices are in
 `src/bsp/NOTICE` and `src/bsp/LICENSING.md`. The offline M-Flasher parser in
 `src/tests/vendor/m-flasher/` is MIT, with its license included. Actions artifacts
 include a matching full source archive with these notices; release descriptions
-retain notices and link to the matching tagged source. The unmodified FM-1
+retain notices; GitHub provides matching tagged source archives. The unmodified FM-1
 m-bootloader binary in `src/boot/m-bootloader/` is MIT (Julius Vitkauskas, 2026);
 its LICENSE and NOTICE are included there and in the release description.
 
