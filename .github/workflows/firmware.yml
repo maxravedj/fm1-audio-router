@@ -1,0 +1,127 @@
+name: Firmware
+
+on:
+  push:
+    branches: [master]
+    tags: ['*']
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firmware-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
+jobs:
+  test:
+    name: Test (${{ matrix.suite }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [ui, dsp, bluetooth]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-build.txt
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential ffmpeg
+          python -m pip install -r requirements-build.txt
+      - name: Build simulator and test
+        env:
+          SUITE: ${{ matrix.suite }}
+          CC: gcc
+        run: |
+          set -o pipefail
+          mkdir -p logs/ci
+          python src/scripts/build_gateway.py --host 2>&1 | tee "logs/ci/host-$SUITE.log"
+          python src/scripts/test_gateway.py --suite "$SUITE" 2>&1 | tee "logs/ci/test-$SUITE.log"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: test-logs-${{ matrix.suite }}
+          path: logs/ci/
+          retention-days: 14
+
+  build:
+    name: Build firmware
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-build.txt
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential rustc
+          python -m pip install -r requirements-build.txt
+      - name: Fetch verified toolchain and packaging files
+        run: python src/scripts/setup_build.py
+      - name: Build and verify firmware
+        run: |
+          set -o pipefail
+          mkdir -p logs/ci
+          python src/scripts/build_gateway.py 2>&1 | tee logs/ci/build.log
+          python src/scripts/package_gateway.py 2>&1 | tee logs/ci/release.log
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: audio-router-${{ github.sha }}
+          path: dist/release/*
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: build-logs-${{ github.sha }}
+          path: logs/ci/
+          retention-days: 14
+
+  release:
+    name: Publish tagged release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: audio-router-${{ github.sha }}
+          path: release
+      - name: Verify release checksums
+        working-directory: release
+        run: sha256sum --check SHA256SUMS
+      - name: Publish firmware and matching sources
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release/* --clobber
+          else
+            flags=()
+            if [[ "$TAG" == *-* ]]; then flags+=(--prerelease); fi
+            gh release create "$TAG" release/* --verify-tag --title "$TAG" --generate-notes "${flags[@]}"
+          fi

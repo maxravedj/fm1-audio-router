@@ -1,4 +1,15 @@
-build/
+# Local build products, toolchains and device data
+/build/
+/dist/
+/logs/
+/downloads/
+/tools/
+.venv/
 __pycache__/
-*.pyc
+*.py[cod]
+**/build
 .DS_Store
+._*
+*.swp
+*.bak
+/backups/

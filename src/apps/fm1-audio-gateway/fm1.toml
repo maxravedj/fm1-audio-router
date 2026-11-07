@@ -1,0 +1,108 @@
+# SPDX-License-Identifier: MPL-2.0
+# USB audio gateway with read-only stereo waveform and meters. Playback depends on recording being enabled.
+name = "FM1AUDIO"
+id_prefix = "FM-1_731"
+usb_manufacturer = "FM-1 Audio Gateway"
+usb_product = "FM1 Audio"
+usb_audio_in = true
+usb_audio_out = true
+usb_audio_in_channels = 2
+usb_audio_in_24bit = false
+usb_audio_out_24bit = false
+# The PC follows the audio clock; playback reads frames without interpolation.
+usb_audio_out_feedback = true
+usb_audio_split = false
+ble = true
+ble_stack = "own"
+ble_diag = false
+ble_central = false
+bt_audio = true
+wifi = false
+cpu2 = true
+cpu2_fallback = false
+cpu2_stack = 6144
+main_stack = 8192
+# A LATM element may contain up to 64 AAC frames; never use the render's 8-ms deadline.
+cpu2_timeout_us = 2000000
+# Keep audio/USB/LED interrupts running during settings erase/program.
+ram_runtime = true
+usb_host = false
+usb_console = false
+o2 = ["../../bt/br/sbc_dec/*.c", "../../bt/br/aac_dec/aac_dec.c",
+ "../../bt/br/aac_dec/pvaac/apply_ms_synt.c",
+ "../../bt/br/aac_dec/pvaac/apply_tns.c",
+ "../../bt/br/aac_dec/pvaac/byte_align.c",
+ "../../bt/br/aac_dec/pvaac/calc_gsfb_table.c",
+ "../../bt/br/aac_dec/pvaac/decode_huff_cw_binary.c",
+ "../../bt/br/aac_dec/pvaac/deinterleave.c",
+ "../../bt/br/aac_dec/pvaac/digit_reversal_tables.c",
+ "../../bt/br/aac_dec/pvaac/esc_iquant_scaling.c",
+ "../../bt/br/aac_dec/pvaac/fft_rx4_long.c",
+ "../../bt/br/aac_dec/pvaac/fft_rx4_short.c",
+ "../../bt/br/aac_dec/pvaac/fft_rx4_tables_fxp.c",
+ "../../bt/br/aac_dec/pvaac/fm1_fxp.c",
+ "../../bt/br/aac_dec/pvaac/gen_rand_vector.c",
+ "../../bt/br/aac_dec/pvaac/get_audio_specific_config.c",
+ "../../bt/br/aac_dec/pvaac/get_dse.c",
+ "../../bt/br/aac_dec/pvaac/get_ele_list.c",
+ "../../bt/br/aac_dec/pvaac/get_ga_specific_config.c",
+ "../../bt/br/aac_dec/pvaac/get_ics_info.c",
+ "../../bt/br/aac_dec/pvaac/get_prog_config.c",
+ "../../bt/br/aac_dec/pvaac/get_pulse_data.c",
+ "../../bt/br/aac_dec/pvaac/get_tns.c",
+ "../../bt/br/aac_dec/pvaac/getfill.c",
+ "../../bt/br/aac_dec/pvaac/getgroup.c",
+ "../../bt/br/aac_dec/pvaac/getics.c",
+ "../../bt/br/aac_dec/pvaac/getmask.c",
+ "../../bt/br/aac_dec/pvaac/hcbtables_binary.c",
+ "../../bt/br/aac_dec/pvaac/huffcb.c",
+ "../../bt/br/aac_dec/pvaac/huffdecode.c",
+ "../../bt/br/aac_dec/pvaac/hufffac.c",
+ "../../bt/br/aac_dec/pvaac/huffspec_fxp.c",
+ "../../bt/br/aac_dec/pvaac/imdct_fxp.c",
+ "../../bt/br/aac_dec/pvaac/infoinit.c",
+ "../../bt/br/aac_dec/pvaac/intensity_right.c",
+ "../../bt/br/aac_dec/pvaac/inv_long_complex_rot.c",
+ "../../bt/br/aac_dec/pvaac/inv_short_complex_rot.c",
+ "../../bt/br/aac_dec/pvaac/iquant_table.c",
+ "../../bt/br/aac_dec/pvaac/mdct_tables_fxp.c",
+ "../../bt/br/aac_dec/pvaac/mix_radix_fft.c",
+ "../../bt/br/aac_dec/pvaac/ms_synt.c",
+ "../../bt/br/aac_dec/pvaac/pns_corr.c",
+ "../../bt/br/aac_dec/pvaac/pns_intensity_right.c",
+ "../../bt/br/aac_dec/pvaac/pns_left.c",
+ "../../bt/br/aac_dec/pvaac/pulse_nc.c",
+ "../../bt/br/aac_dec/pvaac/pv_normalize.c",
+ "../../bt/br/aac_dec/pvaac/pvmp4audiodecoderconfig.c",
+ "../../bt/br/aac_dec/pvaac/pvmp4audiodecoderframe.c",
+ "../../bt/br/aac_dec/pvaac/pvmp4audiodecodergetmemrequirements.c",
+ "../../bt/br/aac_dec/pvaac/pvmp4audiodecoderinitlibrary.c",
+ "../../bt/br/aac_dec/pvaac/q_normalize.c",
+ "../../bt/br/aac_dec/pvaac/set_mc_info.c",
+ "../../bt/br/aac_dec/pvaac/sfb.c",
+ "../../bt/br/aac_dec/pvaac/tns_ar_filter.c",
+ "../../bt/br/aac_dec/pvaac/tns_decode_coef.c",
+ "../../bt/br/aac_dec/pvaac/tns_inv_filter.c",
+ "../../bt/br/aac_dec/pvaac/trans4m_freq_2_time_fxp.c",
+ "../../bt/br/aac_dec/pvaac/unpack_idx.c",
+ "../../bt/br/aac_dec/pvaac/window_tables_fxp.c"]
+o2_cflags = ["-fwrapv"]
+device_include = ["compat"]
+o2_include = ["../../bt/br/aac_dec/pvaac/pv_fm1.h"]
+words = "words.tsv"
+licence = "MPL-2.0"
+tagline = "Audio router with stereo waveforms and input/master meters"
+credits = "Built on fm1-base and felucca-bsp; platform and template by Charles Vestal and Leo Kuroshita."
+
+# Closed callback sets, audited for the SRAM runtime (all loaded executable
+# sections are independently required to reside in SRAM by the ELF checker).
+# SBC: fixed synthesis/bit-allocation tables; SSP: br_lmp_send; RF: RAM wait/
+# burst helpers; BLE MIDI: own_out_* and stream callbacks (no stream registered);
+# micro-ecc: P-192/P-256 arithmetic tables and br_rng.
+# AAC: compiler switch jump tables (frame/hufffac), and huffspec's closed
+# decode_huff_cw_tab1..11 and unpack_idx families. Every target is in SRAM.
+# cpu2_job dispatches only btr_aac_job, btr_sbc_job or btr_resample_job, which is linked into the SRAM runtime.
+ram_code_allow = ["cpu2_job", "PVMP4AudioDecodeFrame", "huffspec_fxp", "hufffac","OI_SBC_SynthFrame", "DecodeBody", "OI_SBC_ComputeBitAllocation",
+ "btp_en_start", "btp_put", "fm1_rfc_txlo_search", "fm1_ble_rf_exec",
+ "ble_app_midi_pop", "ble_app_midi_peek", "ble_poll",
+ "uECC_vli_modMult_fast", "EccPoint_mult", "uECC_generate_random_int"]

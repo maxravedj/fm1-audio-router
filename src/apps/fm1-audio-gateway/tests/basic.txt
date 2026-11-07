@@ -1,0 +1,28 @@
+# M1: musical inputs stay silent; no saved settings, note forwarding or radio.
+wait 600
+splashshot splash.png
+expect usb_play_gain 4096
+expect ble 0
+expect store_writes 0
+key 7 down
+midi USB 90 3C 7F
+midi TRS 90 40 7F
+turn PRESET 5
+tap SAVE
+wait 100
+peakreset
+wav silent.wav
+wait 100
+wavstop
+expect peak_db_max -170
+expect midi_out 0
+expect store_writes 0
+key 7 up
+shot gateway.png
+listen
+wait 100
+said FM-1 AUDIO. USB AUDIO.
+reboot
+wait 600
+expect usb_play_gain 4096
+expect store_writes 0
