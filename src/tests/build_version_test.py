@@ -23,11 +23,18 @@ with tempfile.TemporaryDirectory() as name:
         for tag in ('v1.2.3', '1.2.3', 'v1.2.3-rc.1'):
             info = version_info(root, tag)
             assert info['identity'] == 'FM-1_731010203' and info['version'] == tag.removeprefix('v')
+        for tag in ('v0.1', '0.1', 'v0.1-rc.1'):
+            info = version_info(root, tag)
+            assert info['identity'] == 'FM-1_731000100' and info['version'] == tag.removeprefix('v')
+            assert info['package'] == f"fm1audio-{tag.removeprefix('v')}.fwsc"
+        git('tag', 'v0.1')
+        assert version_info(root)['version'] == '0.1'
+        git('tag', '-d', 'v0.1')
         git('tag', 'v1.2.3')
         assert version_info(root)['version'] == '1.2.3'
         git('-c', 'user.name=Test', '-c', 'user.email=test@localhost', 'commit', '--allow-empty', '-qm', 'next')
         assert version_info(root)['tag'] is None, 'A nearby tag must not label a development build as a release'
-        for bad in ('', 'v100.1.0', 'v1.01.0', 'v1.0', 'v1.0.0/evil', 'v1.0.0-$(oops)', 'latest'):
+        for bad in ('', 'v100.1.0', 'v1.01.0', 'v1', 'v1.01', 'v1.0.', 'v1.0.0/evil', 'v1.0.0-$(oops)', 'latest'):
             try:
                 version_info(root, bad)
                 raise AssertionError('bad tag accepted: ' + bad)
@@ -35,6 +42,8 @@ with tempfile.TemporaryDirectory() as name:
                 pass
     with patch.dict(os.environ, {'GITHUB_REF_TYPE': 'tag', 'GITHUB_REF_NAME': 'v2.3.4'}, clear=True):
         assert version_info(root)['identity'] == 'FM-1_731020304'
+    with patch.dict(os.environ, {'GITHUB_REF_TYPE': 'tag', 'GITHUB_REF_NAME': 'v0.1'}, clear=True):
+        assert version_info(root)['identity'] == 'FM-1_731000100'
     dirs = ('apps/fm1-audio-gateway', 'device', 'include', 'bt/br', 'bsp/chip')
     for rel in dirs:
         (root / 'src' / rel).mkdir(parents=True)

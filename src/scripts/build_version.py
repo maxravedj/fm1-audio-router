@@ -6,7 +6,7 @@ import os
 import re
 import subprocess
 
-TAG = re.compile(r"v?(0|[1-9][0-9]?)\.(0|[1-9][0-9]?)\.(0|[1-9][0-9]?)(-[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*)?")
+TAG = re.compile(r"v?(0|[1-9][0-9]?)\.(0|[1-9][0-9]?)(?:\.(0|[1-9][0-9]?))?(-[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*)?")
 
 
 def git(root, *args):
@@ -24,9 +24,9 @@ def version_info(root, tag=None):
     if tag is not None:
         m = TAG.fullmatch(tag)
         if not m or len(tag) > 40:
-            raise SystemExit("Release tag must be [v]MAJOR.MINOR.PATCH[-prerelease], each number 0..99")
+            raise SystemExit("Release tag must be [v]MAJOR.MINOR[.PATCH][-prerelease], each number 0..99")
         version = tag.removeprefix("v")
-        identity = "FM-1_731" + "".join(f"{int(n):02d}" for n in m.group(1, 2, 3))
+        identity = "FM-1_731" + "".join(f"{int(n or 0):02d}" for n in m.group(1, 2, 3))
         package = f"fm1audio-{version}.fwsc"
     else:
         version = "DEV" + ("-" + commit[:8] if commit else "")

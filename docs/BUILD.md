@@ -79,10 +79,11 @@ radio timing or prove analog output quality and device CPU headroom.
 
 There is no source version counter and no automatic tagging. Untagged builds
 show `DEV-<commit>`. An exact Git tag supplies the release version, including the
-splash/profile label and firmware identity. Use `[v]MAJOR.MINOR.PATCH`, optionally
+splash/profile label and firmware identity. Use `[v]MAJOR.MINOR[.PATCH]`, optionally
 with a prerelease such as `-rc.1`; each numeric component is 0..99 because the
 FM-1 package identity encodes two digits per component. Reuse neither a tag nor
-its identity for a different release.
+its identity for a different release. An omitted PATCH is zero for the numeric
+identity: `v0.1` displays `0.1` and has the same identity as `v0.1.0`.
 
 When you choose a version, tag the reviewed master commit and push that tag:
 
