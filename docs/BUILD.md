@@ -46,7 +46,7 @@ and [UPSTREAM.md](UPSTREAM.md).
 The FM-1 m-bootloader binary is vendored under `src/boot/m-bootloader/` with
 its license and provenance. The app configuration pins its SHA-256; build and
 package checks reject modified, corrupt or wrong-board images. The generated
-firmware container embeds it, and release assets include the plain `.boot`
+firmware container embeds it, and Actions artifacts include the plain `.boot`
 file. Firmware-only installations preserve the device's existing bootloader.
 
 - `build/gateway/`: ELF, disassembly, generated headers, loader and memory reports.
@@ -87,6 +87,9 @@ identity: `v0.1` displays `0.1` and has the same identity as `v0.1.0`.
 
 When you choose a version, tag the reviewed master commit and push that tag:
 
+Update the README's direct latest-firmware link to the chosen asset filename
+before tagging (for example, `fm1-audio-router-v0.1.1.fwsc`).
+
 ```sh
 git switch master
 git tag -a v1.2.3 -m 'Audio Router 1.2.3'   # replace with your chosen version
@@ -100,8 +103,12 @@ that explicit label from a source archive without Git; it creates no tag.
 `.github/workflows/firmware.yml` runs three test suites for master pushes, pull
 requests and manual runs, then builds and verifies firmware. Download the
 `audio-router-<commit>` Actions artifact for the firmware and matching sources.
-A pushed tag additionally publishes those verified assets as a GitHub Release;
-prerelease tags are marked accordingly. Only that final job has repository
+A pushed tag publishes only the versioned firmware as a GitHub Release asset,
+named `fm1-audio-router-vMAJOR.MINOR.PATCH.fwsc` (a missing patch becomes zero).
+Sources, debug symbols, bootloader and checksum files stay in the Actions artifact;
+release descriptions retain license notices, the firmware checksum and a matching
+tagged source link. GitHub also provides its automatic source archive links.
+Prerelease tags are marked accordingly. Only that final job has repository
 write permission. No GitHub Pages configuration is used. Normal runs never
 create a version or release.
 

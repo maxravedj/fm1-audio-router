@@ -4,10 +4,11 @@ Audio Router source and platform files use the notices below. Paths in the
 upstream inventory are relative to `src/`; unused historical applications and
 web pages are omitted from this project. Vendored BSP notices are in
 `src/bsp/NOTICE` and `src/bsp/LICENSING.md`. The offline M-Flasher parser in
-`src/tests/vendor/m-flasher/` is MIT, with its license included. Release assets
-include a matching full source archive with these notices. The unmodified FM-1
+`src/tests/vendor/m-flasher/` is MIT, with its license included. Actions artifacts
+include a matching full source archive with these notices; release descriptions
+retain notices and link to the matching tagged source. The unmodified FM-1
 m-bootloader binary in `src/boot/m-bootloader/` is MIT (Julius Vitkauskas, 2026);
-its LICENSE and NOTICE are included there and alongside release firmware.
+its LICENSE and NOTICE are included there and in the release description.
 
 **fm1-base is MPL-2.0** (full text in `LICENSE`), file by file: every source file carries an
 `SPDX-License-Identifier: MPL-2.0` header. If you change one of these files and distribute it, publish your change to

@@ -9,6 +9,14 @@ import subprocess
 TAG = re.compile(r"v?(0|[1-9][0-9]?)\.(0|[1-9][0-9]?)(?:\.(0|[1-9][0-9]?))?(-[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*)?")
 
 
+def release_filename(tag):
+    m = TAG.fullmatch(tag)
+    if not m or len(tag) > 40:
+        raise ValueError('Invalid release tag: ' + tag)
+    version = '.'.join(str(int(n or 0)) for n in m.group(1, 2, 3)) + (m.group(4) or '')
+    return f'fm1-audio-router-v{version}.fwsc'
+
+
 def git(root, *args):
     p = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
     return p.stdout.strip() if p.returncode == 0 else ""

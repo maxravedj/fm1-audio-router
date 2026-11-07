@@ -26,7 +26,9 @@ controls, build/release instructions and recovery guidance are in `docs/`.
   Untagged builds show DEV plus the commit. Do not increment hardcoded versions
   or create numbered build/docs/release folders. Do not invent or push tags.
 - GitHub Actions tests/builds pull requests and master; pushed tags additionally
-  publish verified firmware, exact source, debug symbols and notices. No website.
+  publish only `fm1-audio-router-vMAJOR.MINOR.PATCH.fwsc` as a release asset.
+  Matching sources/debug symbols/notices stay in Actions artifacts; release
+  descriptions retain notices and matching source links. No website.
 
 ## Runtime invariants
 

@@ -26,7 +26,7 @@
 # Installation
 1. Flash m-bootloader with [M-Flasher](https://github.com/jvitkauskas/m-flasher)
 2. Turn off FM-1 and turn on while holding **REC** button
-3. Flash [latest release](https://github.com/maxravedj/fm1-audio-router/releases/latest/download/audio-router.fwsc) with M-Flasher
+3. Flash [latest firmware](https://github.com/maxravedj/fm1-audio-router/releases/latest/download/fm1-audio-router-v0.1.1.fwsc) with M-Flasher
 
 See additional [installation instructions](docs/INSTALL.md)
 
