@@ -85,6 +85,17 @@ static void independent_bypass(void){
 }
 int main(void){
  setbuf(stdout,NULL);palette_set(APP_PALETTE);now_ms=100;store_ready();store_len[OBJ_FX]=-1;reboot();
+ /* An erased FX store starts globally bypassed, with individual effects ON.
+  * Opening either editor must reflect this without persisting or enabling DSP. */
+ assert(!gateway_fx_params.chain && gateway_fx_params.eq && gateway_fx_params.lim);
+ assert(!gateway_fx_presets_saved.chain && gateway_fx_presets_saved.enabled==3);
+ assert(!gateway_fx.latency_on && !gateway_fx.bank[gateway_fx.active].mask && !gateway_fx.bank[gateway_fx.active].lim);
+ assert(lit_btn&(1u<<B_SEL));
+ unsigned boot_writes=store_writes;
+ tap(B_FX);assert(gateway_fx_limiter && (lit_btn&(1u<<B_SEL)));
+ tap(B_FX);assert(!gateway_fx_limiter && (lit_btn&(1u<<B_SEL)));
+ assert(!gateway_fx_params.chain && !gateway_fx_dirty && store_writes==boot_writes);
+ puts("PASS: fresh FX store defaults to chain bypassed, EQ/limiter enabled, bright SEL in both editors, zero DSP delay and no implicit save");
  assert(sizeof(gateway_eq_preset_t)==48 && sizeof(gateway_lim_preset_t)==8 && sizeof(gateway_fx_presets_t)==456);
  for(unsigned i=0;i<8;i++)assert(!memcmp(&gateway_eq_work[i],&gateway_eq_work[0],48) && !memcmp(&gateway_lim_work[i],&gateway_lim_work[0],8));
  assert(!gateway_fx_selected[0] && !gateway_fx_selected[1]);title();
@@ -147,6 +158,7 @@ int main(void){
   if(bad==11){broken.version=3;broken.enabled=1;}
   assert(!plat_store_save(OBJ_FX,&broken,sizeof broken));reboot();
   assert(!gateway_fx_selected[0] && !gateway_fx_selected[1] && !gateway_fx_params.chain && !gateway_fx_preset_dirty(0));
+  assert(gateway_fx_params.eq && gateway_fx_params.lim);
  }
  independent_bypass();assert(!cv_cuts && !cpu_work_depth);
  puts("PASS: 8 EQ + 8 limiter init slots, cyclic apply/independent selection, exact right-aligned white/yellow titles, volatile edits across navigation, selected-position-only autosave/reboot, explicit save/init/cancel/failure/retry, modal/Bluetooth isolation");

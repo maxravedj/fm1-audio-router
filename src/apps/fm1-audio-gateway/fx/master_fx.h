@@ -49,7 +49,9 @@ typedef struct {
 static void fx_defaults(fx_params_t *p)
 {
     static const uint16_t hz[]={80,250,1000,4000,12000};
-    memset(p,0,sizeof *p);p->eq=p->lim=1;p->ceiling=-10;p->release=100;
+    memset(p,0,sizeof *p);
+    /* Fresh installs bypass the chain, with both effects ready to enable. */
+    p->chain=0;p->eq=p->lim=1;p->ceiling=-10;p->release=100;
     for(unsigned i=0;i<FX_BANDS;i++)p->band[i]=(fx_band_t){hz[i],0,71,FX_BELL,1};
 }
 static int fx_valid(const fx_params_t *p)
