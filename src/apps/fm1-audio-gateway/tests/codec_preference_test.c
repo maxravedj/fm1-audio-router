@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #define APP_BT_AAC
+#define APP_BT_APTX
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -10,7 +11,7 @@ int main(void)
     const uint8_t sbc[]={0x30,3,4,12,1,0,7,6,0,0,0x21,0x15,2,53};
     const uint8_t aac[]={0x40,3,8,16,1,0,7,8,0,2,0x40,1,4,0x84,0xe2,0};
     for(unsigned pref=0;pref<3;pref++){
-        btr_codec_preference=pref;struct btr_profile s={0};
+        btr_codec_mask=pref==1?2:pref==2?1:3;struct btr_profile s={0};
         unsigned n=btr_signal(&s,discover,sizeof discover,out);
         assert((out[0]&3)==2 && n==(pref?4:6));
         if(pref==1)assert(out[2]==8 && out[3]==8);

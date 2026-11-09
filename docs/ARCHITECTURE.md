@@ -37,7 +37,7 @@ OUT graphs show silence then, rather than starting that extra FX instance.
 - CPU0: radio/signalling/RTP assembly, UI, USB, allocation, mixing, FX, panel
   and audio IRQs. Foreground computes EQ coefficients; audio publishes the
   pending bank under a short lock and alone mutates its DSP histories.
-- CPU1: bounded compressed SBC/AAC decoding and the exact 96-tap resampler.
+- CPU1: bounded compressed SBC/AAC/aptX/aptX HD decoding and the exact 96-tap resampler.
   CPU0 consumes prepared int32 stereo output. A 2-kHz hook and audio IRQ can
   reap completed work/kick the mailbox without decoding, FIR work, waits or
   allocation on CPU0 IRQs. There is no single-core fallback.
@@ -47,17 +47,27 @@ queue elements and memory barriers protect in-flight work and PCM publication.
 Foreground retains fault/timeout/allocation ownership. A warm reset stops the
 surviving worker before copying executable SRAM.
 
+LCD operations and long EQ/FFT calculations include foreground media checkpoints.
+At most once per millisecond they drain up to eight queued ACL fragments for the
+active media channel, feeding the CPU1 decoder during a page repaint. They run
+only with an encrypted streaming session and existing decoder/workspace storage.
+Control traffic stays ordered at the head of the RX ring for the normal main-loop
+poll: checkpoints never process signalling, change codecs, free display buffers,
+allocate or wait for a worker. They do not run inside IRQs or replace normal radio
+polling. Modelled continuous ingress/repaints establish this service behavior,
+not measured RF or CPU timing on the FM-1.
+
 All runtime code/constants reside in SRAM, allowing panel/audio/USB IRQs to
 continue during settings flash writes. Main/IRQ/worker stacks and indirect
 call sets are checked in the linked image. An 8192-byte scratch guard is kept.
-SBC + spectrum + maximum USB recording must fit together. Exact linked budgets
+SBC or aptX/aptX HD + spectrum + maximum USB recording must fit together. Exact linked budgets
 are in `build/gateway/cpu2-budget.json` and release manifests; they change with
 the chosen tag/toolchain, so they are not hardcoded in this guide.
 
 AAC workspace takes priority over waveform/spectrum buffers. Accepted AAC
 configuration synchronously releases graphs before allocation. They return
 fresh after disconnect; failed visible graph allocation retries without
-clearing the continuing meter/footer. Persistent SBC/USB route allocations
+clearing the continuing meter/footer. Persistent SBC/aptX/USB route allocations
 use the high end of scratch to preserve a contiguous graph gap.
 
 ## FX and timing
@@ -78,7 +88,7 @@ operation. A changing time alignment/level dip is not universally inaudible.
 ## Persistence and recovery
 
 CRC-checked A/B objects retain panel calibration, application settings, saved
-FX presets and bond metadata. Settings payload schema is 15 (24 bytes); FX
+FX presets and bond metadata. Settings payload schema is 16 (24 bytes); FX
 preset schema is 4 (456 bytes). These are storage format numbers, independent
 of manually chosen firmware tags. Keep their migrations, not DSP history.
 
@@ -107,3 +117,11 @@ automatic radio startup after a crash; an explicit Settings SAVE retries it.
 Host tests provide protocol/register, pixel, sample and lifecycle evidence.
 Actual RF timing, power-loss recovery, CPU headroom and listening remain
 separate device-validation tasks.
+
+aptX and aptX HD use the pinned LGPL libfreeaptx decoder on CPU1. An optional
+low-byte PCM ring keeps all 24 decoded bits through the rate matcher and pre-FX
+mix; SBC/AAC keep their original 16-bit arithmetic. See
+[src/bt/br/aptx_dec/README.md](../src/bt/br/aptx_dec/README.md) for transport,
+source/relinking instructions and validation limits. Settings v16 stores the
+codec checkbox mask in the existing codec byte, retaining the 24-byte record
+and all v1-v15 migrations. The advertised list applies only on successful SAVE.

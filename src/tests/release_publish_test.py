@@ -16,6 +16,7 @@ from build_version import release_filename
 
 assert release_filename('v0.1') == 'fm1-audio-router-v0.1.0.fwsc'
 assert release_filename('v0.1.1') == 'fm1-audio-router-v0.1.1.fwsc'
+assert release_filename('v0.2.0') == 'fm1-audio-router-v0.2.0.fwsc'
 assert release_filename('1.2-rc.1') == 'fm1-audio-router-v1.2.0-rc.1.fwsc'
 for tag in ('v1', 'v1.2.100', 'v1.2/evil', 'v01.2'):
     try:
@@ -108,6 +109,12 @@ with tempfile.TemporaryDirectory() as temp:
         assert state['assets'] == [dict(name=asset.name)]
         assert next(i for i,c in enumerate(commands) if c[1]=='delete') < next(i for i,c in enumerate(commands) if c[1]=='create')
         assert not any('--cleanup-tag' in c for c in commands)
+        summary = '- aptX and aptX HD support\n- ui improvements\n'
+        release.publish(bundle, 'v0.1.1', 'owner/repo', state.copy(), notes_text=summary)
+        assert state['body'].startswith(summary + '\n' + release.MARKER)
+        assert state['body'].count(release.MARKER) == 1
+        for notice in ('LGPL-2.1.txt', 'APTX-NOTICE.md'):
+            assert notice in state['body']
         commands.clear()
         (bundle / 'audio-router.fwsc').write_bytes(b'corrupt')
         try:

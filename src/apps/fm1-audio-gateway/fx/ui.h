@@ -55,9 +55,7 @@ static void gateway_fx_turn(unsigned enc,int delta)
     int step=gateway_fx_step(enc,delta);
     if(gateway_fx_limiter){
         if(enc==EN_K1)p.input=gateway_fx_clamp(p.input+step*delta,-240,240);
-        if(enc==EN_K2){int release=(int)((float)p.release*fm_expf((float)gateway_fx_clamp(delta*step,-1000,1000)*0.01f)+0.5f);
-            if(release==p.release)release+=delta>0?1:-1;
-            p.release=gateway_fx_clamp(release,10,1000);}
+        if(enc==EN_K2)p.release=gateway_fx_clamp(p.release+step*delta,10,1000);
         if(enc==EN_K3)p.ceiling=gateway_fx_clamp(p.ceiling+step*delta,-240,0);
 
     }

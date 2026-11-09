@@ -47,9 +47,10 @@ static void eq(void)
     gateway_fx_publish(&p);select_row(2);turn(EN_K2,INT_MIN);assert(!gateway_fx_params.slope[0]);
     turn(EN_K2,INT_MAX);assert(gateway_fx_params.slope[0]==3);
     turn(EN_ALGO,-2);assert(gateway_fx_params.band[0].type==FX_BELL);turn(EN_K2,-1);assert(gateway_fx_params.slope[0]==3);
-    char text[40];gateway_fx_format(text,"",1985,2,"k");assert(!strcmp(text,"19.85k"));
-    gateway_fx_format(text,"",-240,1,"dB");assert(text_w(&FONT_T,text)<47);
-    gateway_fx_format(text,"R",1800,2,"");assert(text_w(&FONT_T,text)<47);
+    char text[40];gateway_fx_format(text,"",1985,2," kHz");assert(!strcmp(text,"19.85 kHz") && text_w(&FONT_T,text)<47);
+    gateway_fx_format(text,"",-240,1," dB");assert(text_w(&FONT_T,text)<47);
+    gateway_fx_format(text,"",48,0," dB/oct");assert(text_w(&FONT_T,text)<47);
+    gateway_fx_format(text,"R ",1800,2,"");assert(text_w(&FONT_T,text)<47);
     puts("PASS: five visible equal-width band cards, all type pictograms/slopes, selected controls, compact values, log response/combined bypass curves and slope encoder gates/clamps; no FFT/wave/limiter capture on EQ");
 }
 static void limiter(void)

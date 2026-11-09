@@ -1048,9 +1048,14 @@ int plat_bt_receiver_pairing(void);
 int plat_bt_receiver_connected(void);
 /* Negotiated codec, only while the receiver is connected and configured.
  * NONE also covers pairing and a link with no accepted stream configuration. */
-enum { PLAT_BT_CODEC_NONE, PLAT_BT_CODEC_SBC, PLAT_BT_CODEC_AAC };
+enum { PLAT_BT_CODEC_NONE, PLAT_BT_CODEC_SBC, PLAT_BT_CODEC_AAC, PLAT_BT_CODEC_APTX, PLAT_BT_CODEC_APTX_HD };
 int plat_bt_receiver_codec(void);
 void plat_bt_receiver_mix(int32_t *lr, uint32_t n, uint32_t gain_q12);
+/* Foreground UI checkpoint: at most once per millisecond, drain up to eight
+ * already-configured media ACL fragments to the CPU1 queues. No signalling,
+ * allocation, teardown, worker wait or app callback; safe while drawing holds
+ * display scratch. Never call from an IRQ. Other receiver backends may no-op. */
+void plat_bt_receiver_service(void);
 
 /* Opt-in APP_DYNAMIC_DISPLAY: main-thread-only reusable scratch from unlinked
  * SRAM, retaining 8 KiB headroom. Allocations are 8-byte aligned, not zeroed.
@@ -1074,8 +1079,10 @@ void plat_audio_monitor_source(int source);
 void plat_bt_input_peaks(uint32_t lr[2]);
 void plat_audio_monitor_bt_sample(int32_t l,int32_t r);
 void plat_audio_monitor_reset(int source);
-/* 0 AUTO, 1 AAC only, 2 SBC only. Main thread; applying a change drops the old stream. */
+/* Legacy adapter: 0 SBC+AAC, 1 AAC, 2 SBC. Main thread; changes drop the old stream. */
 void plat_bt_receiver_preference(int preference);
+/* Advertised codec bitmask: SBC=1, AAC=2, aptX=4, aptX HD=8. Main thread. */
+void plat_bt_receiver_codecs(unsigned mask);
 
 /* APP_USB_STATUS: configured, non-suspended USB device connection; foreground read only. */
 int plat_usb_connected(void);

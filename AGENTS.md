@@ -38,14 +38,33 @@ controls, build/release instructions and recovery guidance are in `docs/`.
   premute MASTER telemetry, output mute. USB OUT routing is pre-MASTER and has
   its own trim/gate; source-only post-FX routes have independent DSP history.
 - CPU0 owns UI, radio/signalling, allocation, USB and audio/mixing/FX. CPU1
-  exclusively decodes SBC/AAC and performs the exact 96-tap resampler. No
+  exclusively decodes SBC/AAC/aptX/aptX HD and performs the exact 96-tap resampler. No
   single-core fallback. Stop dispatch and join before freeing/resetting workers.
 - Keep all runtime code/constants in SRAM. Audio/USB/panel IRQs must continue
   during settings writes; never allocate, wait, draw or save in audio callbacks.
-- Preserve the 8192-byte scratch guard and linked stack checks. SBC plus
+- Preserve the 8192-byte scratch guard and linked stack checks. SBC and aptX/HD plus
   spectrum plus maximum recording must fit. Release hidden graph producers
   before buffers; AAC suppresses both graph views before workspace allocation.
-  Persistent SBC/USB route allocations use the high end to avoid fragmentation.
+  Settings v16 migrates legacy codec choices to an advertised-codec mask.
+  Persistent SBC/aptX/USB route allocations use the high end to avoid fragmentation.
+- aptX's 24-bit FIR uses the BSP's register-only stereo lane MAC kernel. Keep
+  the high-word ring word-aligned, interpolation exact and each half's absolute
+  coefficient sum <=50573; do not replace it with memory-MAC instructions.
+  The decoder paired multiply consumes both wide products before any loads and
+  must remain spill-free. Native arithmetic/ABI checks run during packaging;
+  instruction counts do not establish real-time hardware headroom.
+- The codec checklist has its own temporary mask: OCT- cancels, OCT+ OK updates the
+  Settings draft, and screen navigation discards unconfirmed checkbox edits.
+  Only the main Settings SAVE persists/applies settings. SEL is bright while
+  the codec row is focused or its dialog is open. Both OCT buttons are fully
+  lit inside the dialog; they cannot trigger Bluetooth pairing there.
+  All four codecs are visible; SELECT moves the cursor, SEL toggles a checkbox.
+  Settings shows red UNSAVED and full SAVE for a changed draft; unchanged Settings
+  keeps SAVE dim. Unsaved current EQ/limiter presets also light SAVE fully.
+- LCD and EQ/FFT foreground checkpoints feed already-allocated, encrypted media
+  queues at most once/ms, eight ACL fragments at a time. Never replace this with
+  a full radio poll during drawing: signalling can free display scratch or join
+  workers. Preserve FIFO control deferral, workspace gates and main-thread ownership.
 - Bypass delay changes retain the requested 5-ms down/silent switch/5-ms up;
   settled global/limiter bypass has zero delay. Prepare limiter detection during
   fade-out but apply ceiling guards to the active limited path. Preserve warm

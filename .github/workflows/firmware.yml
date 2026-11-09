@@ -119,4 +119,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
-        run: python3 src/scripts/publish_gateway.py --tag "$TAG" --tidy-legacy --recreate
+        run: python3 src/scripts/publish_gateway.py --tag "$TAG" --notes-file docs/RELEASE_NOTES.md --tidy-legacy --recreate

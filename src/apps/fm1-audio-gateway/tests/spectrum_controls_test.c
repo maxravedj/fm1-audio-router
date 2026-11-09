@@ -33,23 +33,23 @@ int main(void)
     gateway_spectrum_min=90;gateway_spectrum_max=24;gateway_spectrum_rate=2;
     unsigned writes=store_writes;now_ms=849;app_loop();assert(store_writes==writes);
     now_ms=850;app_loop();assert(store_writes==writes+1);
-    gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==24 && s.version==15 && s.spectrum_range==90);
+    gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==24 && s.version==16 && s.spectrum_range==90);
     start();assert(gateway_spectrum_min==90 && gateway_spectrum_max==24 && gateway_spectrum_rate==2);
     /* Full legacy range -> identical absolute dB window, all old combinations. */
     for(unsigned range=0;range<4;range++)for(unsigned max=0;max<=60;max++) {
-        s=gateway_settings();s.version=12;s.spectrum_max=max;s.spectrum_range=range;
+        s=gateway_settings();s.version=12;s.bt_reserved[0]=0;s.spectrum_max=max;s.spectrum_range=range;
         assert(!plat_store_save(OBJ_SETTINGS,&s,22));app_init();
         assert(gateway_spectrum_min==max+gateway_spectrum_legacy_ranges[range] && gateway_spectrum_max==max);
     }
     for(unsigned version=3;version<=12;version++) {
-        s=gateway_settings();s.version=version;s.spectrum_max=24;s.spectrum_range=1;
+        s=gateway_settings();s.version=version;s.bt_reserved[0]=0;s.spectrum_max=24;s.spectrum_range=1;
         s.reserved=version<8?0:1;s.spectrum_reserved=0;s.bt_reserved[0]=s.bt_reserved[1]=s.bt_reserved[2]=0;
         unsigned size=version==3?12:version<10?16:version<12?20:22;
         assert(!plat_store_save(OBJ_SETTINGS,&s,size));app_init();
         assert(gateway_spectrum_min==54 && gateway_spectrum_max==24);
     }
     for(unsigned version=1;version<=2;version++) {
-        s=gateway_settings();s.version=version;s.mode=0;s.reserved=0;
+        s=gateway_settings();s.version=version;s.bt_reserved[0]=0;s.mode=0;s.reserved=0;
         assert(!plat_store_save(OBJ_SETTINGS,&s,8));app_init();defaults();
     }
     for(unsigned bad=0;bad<5;bad++) {

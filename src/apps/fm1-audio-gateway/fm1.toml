@@ -6,6 +6,9 @@ bootloader = "../../boot/m-bootloader/fm1-uboot.boot"
 bootloader_sha256 = "cedc9c17648bdeecda5c8d0ffffe2211849f8a36ab615fe49d6cc46d249baf44"
 usb_manufacturer = "FM-1 Audio Gateway"
 usb_product = "FM1 Audio"
+# FX units use mixed case; trim empty glyph margins to save SRAM.
+font_full = ["T", "L"]
+font_trim = true
 usb_audio_in = true
 usb_audio_out = true
 usb_audio_in_channels = 2
@@ -30,7 +33,7 @@ cpu2_timeout_us = 2000000
 ram_runtime = true
 usb_host = false
 usb_console = false
-o2 = ["../../bt/br/sbc_dec/*.c", "../../bt/br/aac_dec/aac_dec.c",
+o2 = ["../../bt/br/aptx_dec/aptx_dec.c", "../../bt/br/aptx_dec/aptx_fir.c", "../../bt/br/sbc_dec/*.c", "../../bt/br/aac_dec/aac_dec.c",
  "../../bt/br/aac_dec/pvaac/apply_ms_synt.c",
  "../../bt/br/aac_dec/pvaac/apply_tns.c",
  "../../bt/br/aac_dec/pvaac/byte_align.c",
@@ -90,6 +93,7 @@ o2 = ["../../bt/br/sbc_dec/*.c", "../../bt/br/aac_dec/aac_dec.c",
  "../../bt/br/aac_dec/pvaac/window_tables_fxp.c"]
 o2_cflags = ["-fwrapv"]
 device_include = ["compat"]
+asm = ["../../bsp/chip/fm1_aptx_dsp.S"]
 o2_include = ["../../bt/br/aac_dec/pvaac/pv_fm1.h"]
 words = "words.tsv"
 licence = "MPL-2.0"
@@ -103,7 +107,7 @@ credits = "Built on fm1-base and felucca-bsp; platform and template by Charles V
 # micro-ecc: P-192/P-256 arithmetic tables and br_rng.
 # AAC: compiler switch jump tables (frame/hufffac), and huffspec's closed
 # decode_huff_cw_tab1..11 and unpack_idx families. Every target is in SRAM.
-# cpu2_job dispatches only btr_aac_job, btr_sbc_job or btr_resample_job, which is linked into the SRAM runtime.
+# cpu2_job dispatches only AAC, SBC, aptX or resampler jobs linked into SRAM.
 ram_code_allow = ["cpu2_job", "PVMP4AudioDecodeFrame", "huffspec_fxp", "hufffac","OI_SBC_SynthFrame", "DecodeBody", "OI_SBC_ComputeBitAllocation",
  "btp_en_start", "btp_put", "fm1_rfc_txlo_search", "fm1_ble_rf_exec",
  "ble_app_midi_pop", "ble_app_midi_peek", "ble_poll",

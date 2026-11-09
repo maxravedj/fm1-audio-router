@@ -60,7 +60,10 @@ int main(void)
 {
     palette_set(APP_PALETTE);
     uint32_t writes;gateway_settings_t record;
-    now_ms=100;app_init();app_ui_init();app_loop();
+    now_ms=100;app_init();
+    /* Exercise OFF -> ON drafts explicitly; fresh-install ON is covered by parameters_test. */
+    gateway_bt_mode=gateway_bt_draft=0;gateway_saved=gateway_settings();
+    app_ui_init();app_loop();
     assert(!gateway_bt_mode && !gateway_save_notice && !btr_host_on && !(dim_btn&(1u<<B_SAVE)));
     tap(B_EDIT);app_loop();assert(gateway_screen==GATEWAY_SETTINGS && dim_btn&(1u<<B_SAVE));
     assert(fb[45*240+10]);writes=store_writes;
@@ -104,8 +107,8 @@ int main(void)
     app_init();app_boot();assert(!gateway_bt_mode && !btr_host_on);
     /* Migrate all previous settings versions; invalid new mode defaults safely. */
     record=gateway_settings();record.version=3;record.reserved=record.spectrum_reserved=0;record.zoom=9;record.spectrum_max=24;record.spectrum_range=3;
-    plat_store_save(OBJ_SETTINGS,&record,12);app_init();assert(!gateway_bt_mode && gateway_zoom==9 && gateway_spectrum_max==24);
-    record=gateway_settings();record.bluetooth=2;plat_store_save(OBJ_SETTINGS,&record,sizeof record);app_init();assert(!gateway_bt_mode && gateway_zoom==6);
+    plat_store_save(OBJ_SETTINGS,&record,12);app_init();assert(gateway_bt_mode && gateway_zoom==9 && gateway_spectrum_max==24);
+    record=gateway_settings();record.bluetooth=2;plat_store_save(OBJ_SETTINGS,&record,sizeof record);app_init();assert(gateway_bt_mode && gateway_zoom==6);
     mixed_audio();
     assert(!cv_cuts && !cpu_work_depth);
     puts("PASS: settings draft/save/apply/failure, persistence/migration, pairing threshold/cancel, LEDs, BT badge");

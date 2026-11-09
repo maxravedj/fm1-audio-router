@@ -18,7 +18,7 @@ static void settings(void){
  turn(EN_ALGO,-1);assert(!gateway_cpu_draft && gateway_cpu_mode);
  store_fail=1;tap(B_SAVE);assert(gateway_cpu_mode && gateway_save_notice==2);
  store_fail=0;tap(B_SAVE);assert(!gateway_cpu_mode && gateway_save_notice==1);app_loop();
- gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==sizeof s && s.version==15 && s.reserved==3);
+ gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==sizeof s && s.version==16 && s.reserved==3);
  assert(pixels(0,218,240,20,RGB(255,40,40))>10);
  gateway_draw_cpu();for(unsigned y=0;y<18;y++)for(unsigned x=130;x<195;x++)assert(!fb[y*240+x]);
  assert(pixels(195,0,45,18,C_WHITE)>10); /* battery remains */

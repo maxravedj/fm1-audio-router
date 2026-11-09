@@ -18,7 +18,7 @@
 
 # Features
 - 2in/2out 16/44100 USB audio interface
-- Bluetooth audio receiver with AAC support
+- Bluetooth audio receiver with SBC, AAC, aptX and aptX HD support
 - FX chain of 5 bands parametric EQ and peak limiter with 8 presets
 - Mixer
 - 3 Visualizers: meters, waveforms and 40-band spectrum
@@ -26,7 +26,7 @@
 # Installation
 1. Flash m-bootloader with [M-Flasher](https://github.com/jvitkauskas/m-flasher)
 2. Turn off FM-1 and turn on while holding **REC** button
-3. Flash [latest firmware](https://github.com/maxravedj/fm1-audio-router/releases/latest/download/fm1-audio-router-v0.1.1.fwsc) with M-Flasher
+3. Flash [latest firmware](https://github.com/maxravedj/fm1-audio-router/releases/latest/download/fm1-audio-router-v0.2.0.fwsc) with M-Flasher
 
 See additional [installation instructions](docs/INSTALL.md)
 
@@ -51,7 +51,7 @@ Use first octave F-B keys to mute, second octave to solo.
 ### Settings
 Press **EDIT** to open settings, use **SELECT** to scroll, **ALGORITHM** to change parameters and **SAVE** to save and apply settings.
 - Bluetooth: enable/disable bluetooth
-- Bluetooth codec: force SBC, AAC or advertise both codecs
+- Bluetooth codecs: SEL opens a checklist; SELECT scrolls, SEL toggles, OCT− cancels and OCT+ confirms the draft. Save Settings to apply it.
 - Master waveform auto scale: automatically scale master waveform to achieve  always fat waveform
 - USB OUT: send audio back to USB, select source here.
 

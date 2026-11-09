@@ -7,7 +7,7 @@
 | HOME | Return to Home; press again to cycle meters → waveforms → spectrum. |
 | GLO | Open the mixer. |
 | EDIT | Open Settings. SELECT chooses a row; ALGORITHM edits its draft value. |
-| SAVE in Settings | Save and apply the draft. Red SAVED remains until leaving or editing. |
+| SAVE in Settings | Fully lit with unsaved changes; saves and applies the draft. Red UNSAVED becomes SAVED until leaving or editing. |
 | FX | Open the last FX page; subsequent presses alternate EQ and limiter. |
 | Hold FX for 1 s | Toggle the complete master FX chain. |
 | SEL on an FX page | Toggle that individual effect; its LED is bright when enabled. |
@@ -59,35 +59,49 @@ bypass. Individual bypass grays that effect's graph, independently of global FX.
 The limiter page has K1 input gain, K2 release, K3 ceiling, post-limiter meters
 and a red gain-reduction line. It is a linked sample-peak limiter with 128-frame
 lookahead (about 2.9 ms), anticipatory curved attack and exponential release.
+Slow release-knob turns adjust by 1 ms; fast turns accelerate up to 30 ms per detent.
 Settled global/limiter bypass removes that delay. Changing delay alignment
 uses a 5-ms fade down, silent switch and 5-ms fade up; the level dip can be heard.
 It is not a true-peak/inter-sample limiter.
 
 PRESET cycles eight EQ presets or eight limiter presets and applies them
 immediately. Unsaved edits stay in each working slot until reboot; yellow
-text and dim SAVE indicate an unsaved slot. SAVE asks to save; hold SAVE for
+text and fully lit SAVE indicate an unsaved slot. SAVE asks to save; hold SAVE for
 1 second to initialize. OCT- cancels and OCT+ confirms (YES for initialize).
 Selected slot and bypass metadata are retained independently. Preset data is
 written only by confirmation, and presets do not contain bypass state.
 
 ## Settings and Bluetooth
 
-Settings include Bluetooth OFF/RECEIVER, codec AUTO/AAC/SBC, MASTER waveform
+Settings include Bluetooth OFF/ON, a Bluetooth codecs checklist, MASTER waveform
 auto scale, separate waveform/spectrum colors, battery percentage display,
 CPU display, USB OUT routing and mute/solo fade time. Fade choices are OFF,
 10/50/100/500 ms and 1 s. Colors include red, green, blue, yellow, light gray,
 white and orange. Battery percentage is an uncalibrated estimate; no voltage
 mode is provided.
 
-Fresh settings default to Bluetooth RECEIVER with codec AUTO (SBC and AAC),
+Fresh settings default to Bluetooth ON with SBC and AAC selected,
 MASTER waveform auto scale OFF, green waveforms, yellow spectrum, battery and
 CPU displays ON, USB OUT OFF and a 50-ms mute/solo fade. The global FX chain
 starts bypassed, with EQ and limiter individually enabled. Existing saved
 preferences take priority over these defaults.
 
-Enable Bluetooth RECEIVER and SAVE. Hold OCT+ for one second to pair with
+Enable Bluetooth ON and SAVE. Hold OCT+ for one second to pair with
 **FM1 BT Receiver**; press OCT+ again to stop discovery. Discovery is off at
-boot. AUTO advertises SBC and AAC; forced modes expose only that codec.
+boot. The Bluetooth codecs value reads SELECT; open it with SEL. All four
+codecs (SBC, AAC, aptX and aptX HD) are visible together. Turn SELECT to move
+between them; press SEL to toggle each checkbox. SEL lights fully on the codec row
+and while the dialog is open. OCT- cancels the checklist; OCT+ OK copies it into
+the Settings draft and closes it. Both OCT buttons light fully in the dialog.
+The main Settings SAVE applies and persists the draft.
+HOME, EDIT, GLO or FX cancels an open checklist. At least one codec must
+remain checked; use Bluetooth OFF to disable the receiver. Older AUTO/AAC/SBC
+settings migrate to the corresponding selection. Changing the advertised list
+disconnects an existing stream so the source can negotiate again. aptX/aptX HD
+keep waveform and spectrum views available; AAC retains its meter fallback.
+The checkboxes advertise capabilities; the source chooses a mutually supported
+codec. Keep AAC or SBC checked for sources that cannot use aptX/aptX HD.
+The connected aptX HD badge abbreviates the codec as `apXHD`.
 Saved devices can reconnect after boot/out-of-range loss. An intentional
 source disconnect suppresses FM-1's outgoing paging; incoming connections
 remain allowed. Logs help distinguish the two directions.

@@ -22,14 +22,15 @@ static uint8_t gateway_codec_preference, gateway_codec_draft, gateway_monitor;
 static const char *const gateway_sources[]={"USB IN","BT IN","MASTER","USB OUT"};
 /* Stable stored IDs; visual order is independent of their numeric values. */
 static const uint8_t gateway_source_order[]={PLAT_MONITOR_USB,PLAT_MONITOR_BT,PLAT_MONITOR_OUT,PLAT_MONITOR_MASTER};
-static const char *const gateway_codecs[]={"AUTO","AAC","SBC"};
+static const char *const gateway_codecs[]={"SBC","AAC","aptX","aptX HD"};
+static uint8_t gateway_codec_dialog,gateway_codec_row,gateway_codec_empty,gateway_codec_checks;
 enum { GATEWAY_SET_BT, GATEWAY_SET_CODEC, GATEWAY_SET_AUTO_SCALE, GATEWAY_SET_COLOR, GATEWAY_SET_SPECTRUM_COLOR, GATEWAY_SET_BATTERY, GATEWAY_SET_CPU, GATEWAY_SET_USB_OUT, GATEWAY_SET_FADE, GATEWAY_SETTING_ROWS };
 enum { GATEWAY_WAVE_RED, GATEWAY_WAVE_GREEN, GATEWAY_WAVE_BLUE, GATEWAY_WAVE_YELLOW,
        GATEWAY_WAVE_GRAY, GATEWAY_WAVE_WHITE, GATEWAY_WAVE_ORANGE, GATEWAY_WAVE_COLORS };
 static const char *const gateway_color_names[]={"RED","GREEN","BLUE","YELLOW","LIGHT GRAY","WHITE","ORANGE"};
 static const uint16_t gateway_wave_colors[]={RGB(255,48,48),RGB(40,220,90),RGB(45,130,255),
     RGB(255,212,40),RGB(190,190,190),RGB(255,255,255),RGB(255,140,25)};
-static const char *const gateway_setting_names[]={"Bluetooth:","Bluetooth codec:","Master waveform auto scale","Waveform color:","Spectrum color:","Battery display:","CPU load display:","USB OUT:","Mute/solo fade time:"};
+static const char *const gateway_setting_names[]={"Bluetooth:","Bluetooth codecs:","Master waveform auto scale","Waveform color:","Spectrum color:","Battery display:","CPU load display:","USB OUT:","Mute/solo fade time:"};
 static uint8_t gateway_master_wave_auto_scale=1, gateway_auto_scale_draft=1;
 static uint8_t gateway_wave_color=GATEWAY_WAVE_BLUE, gateway_color_draft=GATEWAY_WAVE_BLUE;
 static uint8_t gateway_spectrum_color=GATEWAY_WAVE_YELLOW,gateway_spectrum_color_draft=GATEWAY_WAVE_YELLOW;
@@ -108,7 +109,7 @@ static uint32_t gateway_settings_ms, gateway_settings_retry_ms;
 
 static gateway_settings_t gateway_settings(void)
 {
-    gateway_settings_t s = {{'A', 'R', 'T'}, 15, (uint8_t)gateway_zoom, gateway_muted, gateway_mode, gateway_battery_mode | (!gateway_cpu_mode<<1) | (gateway_usb_out_mode<<2),
+    gateway_settings_t s = {{'A', 'R', 'T'}, 16, (uint8_t)gateway_zoom, gateway_muted, gateway_mode, gateway_battery_mode | (!gateway_cpu_mode<<1) | (gateway_usb_out_mode<<2),
         gateway_spectrum_rate, gateway_spectrum_max, gateway_spectrum_min, gateway_spectrum_color, gateway_bt_mode,
         {gateway_codec_preference,gateway_monitor,gateway_master_wave_auto_scale | gateway_wave_color<<1},
         {gateway_mix_db[0],gateway_mix_db[1],gateway_mix_db[2]},gateway_mix_mutes | gateway_mix_solos<<3,gateway_fade_time};
@@ -143,6 +144,14 @@ static void gateway_save_settings(uint32_t now)
     plat_cpu_work_end();
 }
 
+static int gateway_settings_unsaved(void)
+{
+    return gateway_bt_draft!=gateway_bt_mode || gateway_codec_draft!=gateway_codec_preference ||
+        gateway_auto_scale_draft!=gateway_master_wave_auto_scale || gateway_color_draft!=gateway_wave_color ||
+        gateway_spectrum_color_draft!=gateway_spectrum_color || gateway_battery_draft!=gateway_battery_mode ||
+        gateway_cpu_draft!=gateway_cpu_mode || gateway_usb_out_draft!=gateway_usb_out_mode ||
+        gateway_fade_draft!=gateway_fade_time;
+}
 static void gateway_lights(void)
 {
     uint32_t home = 1u << B_HOME, edit = 1u << B_EDIT, fx = 1u << B_FX;
@@ -150,14 +159,21 @@ static void gateway_lights(void)
     plat_glow(0);
     plat_play_red(gateway_muted);
     uint32_t dim = (home | edit | fx) & ~active;
-    if (gateway_screen == GATEWAY_SETTINGS) dim |= 1u << B_SAVE;
+    if (gateway_screen == GATEWAY_SETTINGS) {
+        if(!gateway_codec_dialog){
+            if(gateway_settings_unsaved())active|=1u<<B_SAVE;
+            else dim|=1u<<B_SAVE;
+        }
+        if(gateway_settings_row==GATEWAY_SET_CODEC || gateway_codec_dialog)active|=1u<<B_SEL;
+        if(gateway_codec_dialog)active|=(1u<<B_OCTDN)|(1u<<B_OCTUP);
+    }
     if(gateway_screen==GATEWAY_FX){
-        if(gateway_fx_preset_dirty(gateway_fx_limiter))dim|=1u<<B_SAVE;
+        if(gateway_fx_preset_dirty(gateway_fx_limiter))active|=1u<<B_SAVE;
         if(gateway_fx_limiter?gateway_fx_params.lim:gateway_fx_params.eq)active|=1u<<B_SEL;
         else dim|=1u<<B_SEL;
         if(gateway_fx_dialog)active|=(1u<<B_OCTDN)|(1u<<B_OCTUP);
     }
-    if (gateway_bt_mode && !gateway_fx_dialog) {
+    if (gateway_bt_mode && !gateway_fx_dialog && !gateway_codec_dialog) {
         if (plat_bt_receiver_pairing()) active |= 1u << B_OCTUP;
         else dim |= 1u << B_OCTUP;
     }
@@ -299,7 +315,9 @@ void app_init(void)
     gateway_message[0][0] = gateway_message[1][0] = 0;
     gateway_mix_db[0]=gateway_mix_db[1]=gateway_mix_db[2]=0;
     gateway_mix_mutes=gateway_mix_solos=0;gateway_fade_time=gateway_fade_draft=2;
-    gateway_monitor = gateway_codec_preference = gateway_codec_draft = gateway_aac_active = 0;
+    gateway_monitor = gateway_aac_active = 0;
+    gateway_codec_preference = gateway_codec_draft = 3; /* preserve SBC+AAC default */
+    gateway_codec_dialog=gateway_codec_row=gateway_codec_empty=gateway_codec_checks=0;
     gateway_master_wave_auto_scale = 0;
     gateway_wave_color = GATEWAY_WAVE_GREEN;
     gateway_spectrum_color=GATEWAY_WAVE_YELLOW;gateway_battery_mode=gateway_cpu_mode=1;
@@ -323,8 +341,8 @@ void app_init(void)
             s.zoom < GATEWAY_ZOOMS && s.muted <= 1u && (s.version>=8?s.reserved<=(s.version>=11?27u:s.version>=9?3u:1u):!s.reserved) &&
             (s.version == 1 ? s.mode == 0 : s.mode < GATEWAY_MODES) &&
             (((s.version == 1 || s.version == 2) && size == 8u) ||
-             ((s.version == 3 ? size == 12u : (s.version >= 4 && s.version <= 15) && size == (s.version>=15?sizeof s:s.version>=12?22u:s.version>=10?20u:16u) &&
-               s.bluetooth <= 1u && (s.version==4 ? !s.bt_reserved[0] && !s.bt_reserved[1] : s.bt_reserved[0]<=2 && s.bt_reserved[1]<=(s.version>=12?3:2)) &&
+             ((s.version == 3 ? size == 12u : (s.version >= 4 && s.version <= 16) && size == (s.version>=15?sizeof s:s.version>=12?22u:s.version>=10?20u:16u) &&
+               s.bluetooth <= 1u && (s.version==4 ? !s.bt_reserved[0] && !s.bt_reserved[1] : (s.version>=16?(s.bt_reserved[0]>0 && s.bt_reserved[0]<=15):s.bt_reserved[0]<=2) && s.bt_reserved[1]<=(s.version>=12?3:2)) &&
                (s.version>=6 ? s.bt_reserved[2] < (s.version>=8?2u*GATEWAY_WAVE_COLORS:12u) : !s.bt_reserved[2])) && s.spectrum_rate < 3u &&
               (s.version>=13 ? s.spectrum_max<150u && s.spectrum_range>s.spectrum_max && s.spectrum_range<=150u : s.spectrum_max<=60u && s.spectrum_range<4u) && (s.version>=8?s.spectrum_reserved<GATEWAY_WAVE_COLORS:!s.spectrum_reserved)))) {
         gateway_zoom = s.zoom;
@@ -335,7 +353,7 @@ void app_init(void)
             gateway_spectrum_max = s.spectrum_max;
             gateway_spectrum_min = s.version>=13?s.spectrum_range:s.spectrum_max+gateway_spectrum_legacy_ranges[s.spectrum_range];
             if (s.version >= 4) gateway_bt_mode = s.bluetooth;
-            if(s.version>=5){gateway_codec_preference=s.bt_reserved[0];gateway_monitor=s.bt_reserved[1];}
+            if(s.version>=5){gateway_codec_preference=s.version>=16?s.bt_reserved[0]:s.bt_reserved[0]==1?2:s.bt_reserved[0]==2?1:3;gateway_monitor=s.bt_reserved[1];}
             if(s.version>=6){gateway_master_wave_auto_scale=s.bt_reserved[2]&1u;gateway_wave_color=s.bt_reserved[2]>>1;}
             if(s.version>=8){gateway_battery_mode=s.reserved&1u;gateway_spectrum_color=s.spectrum_reserved;}
             if(s.version>=9)gateway_cpu_mode=!(s.reserved&2u);
@@ -350,7 +368,7 @@ void app_init(void)
     gateway_auto_scale_draft = gateway_master_wave_auto_scale;
     gateway_color_draft = gateway_wave_color;
     gateway_spectrum_color_draft=gateway_spectrum_color;gateway_battery_draft=gateway_battery_mode;gateway_cpu_draft=gateway_cpu_mode;gateway_usb_out_draft=gateway_usb_out_mode;
-    plat_bt_receiver_preference(gateway_codec_preference);
+    plat_bt_receiver_codecs(gateway_codec_preference);
     gateway_bt_draft = gateway_bt_mode;
     gateway_saved = gateway_settings();
     gateway_settings_dirty = 0;
@@ -386,7 +404,7 @@ static void gateway_settings_commit(void)
     if (plat_store_save(OBJ_SETTINGS, &s, sizeof s) == 0) {
         int changed = gateway_bt_mode != gateway_bt_draft;
         gateway_codec_preference = gateway_codec_draft;
-        plat_bt_receiver_preference(gateway_codec_preference);
+        plat_bt_receiver_codecs(gateway_codec_preference);
         gateway_bt_mode = gateway_bt_draft;
         gateway_master_wave_auto_scale = gateway_auto_scale_draft;
         gateway_wave_color = gateway_color_draft;
@@ -429,6 +447,42 @@ void app_input_only(void)
         else if(pressed&(1u<<B_OCTUP))gateway_fx_preset_confirm();
         for(i=0;i<NE;i++)(void)plat_enc((int)i);
         gateway_buttons=buttons;return;
+    }
+    /* Navigation cancels only the open checklist, leaving the Settings draft
+     * intact. Let the normal screen handlers consume this same button edge. */
+    if(gateway_codec_dialog && (pressed&((1u<<B_HOME)|(1u<<B_EDIT)|(1u<<B_GLO)|(1u<<B_FX)))){
+        gateway_codec_dialog=gateway_codec_empty=0;gateway_page_redraw=1;gateway_lights();
+    }
+    if(gateway_codec_dialog){
+        gateway_oct_tracking=0;
+        if(pressed&(1u<<B_SEL)){
+            unsigned next=gateway_codec_checks^(1u<<gateway_codec_row);
+            gateway_codec_empty=!next;
+            if(next){gateway_codec_checks=(uint8_t)next;gateway_save_notice=0;}
+            gateway_page_redraw=1;
+        }
+        if(pressed&((1u<<B_OCTDN)|(1u<<B_OCTUP))){
+            if(!(pressed&(1u<<B_OCTDN)))gateway_codec_draft=gateway_codec_checks;
+            gateway_codec_dialog=gateway_codec_empty=gateway_save_notice=0;
+            gateway_page_redraw=1;gateway_lights();
+        }
+        for(i=0;i<NE;i++){
+            int delta=plat_enc((int)i);
+            if(i==EN_SELECT && delta){
+                int row=(int)gateway_codec_row+(delta>4?4:delta< -4?-4:delta);
+                if(row<0)row=0;if(row>3)row=3;
+                gateway_codec_row=(uint8_t)row;
+                gateway_page_redraw=1;
+            }
+        }
+        gateway_buttons=buttons;return;
+    }
+    if(gateway_screen==GATEWAY_SETTINGS && gateway_settings_row==GATEWAY_SET_CODEC && (pressed&(1u<<B_SEL))){
+        gateway_codec_dialog=1;gateway_codec_row=gateway_codec_empty=0;
+        gateway_codec_checks=gateway_codec_draft;
+        gateway_save_notice=0;gateway_oct_tracking=0;gateway_page_redraw=1;
+        gateway_lights();
+        for(i=0;i<NE;i++)(void)plat_enc((int)i);gateway_buttons=buttons;return;
     }
     if (pressed & (1u << B_EDIT)) {
         if (gateway_screen != GATEWAY_SETTINGS) {
@@ -517,25 +571,24 @@ void app_input_only(void)
                 gateway_settings_row=(uint8_t)row;
                 if(row<gateway_settings_first)gateway_settings_first=row;
                 else if(row>=gateway_settings_first+6)gateway_settings_first=row-5;
-                gateway_page_redraw=1;
+                gateway_page_redraw=1;gateway_lights();
             }
-            else if (i == EN_ALGO) {
+            else if (i == EN_ALGO && gateway_settings_row!=GATEWAY_SET_CODEC) {
                 uint8_t *draft=gateway_settings_row==GATEWAY_SET_BT?&gateway_bt_draft:
-                    gateway_settings_row==GATEWAY_SET_CODEC?&gateway_codec_draft:
                     gateway_settings_row==GATEWAY_SET_AUTO_SCALE?&gateway_auto_scale_draft:
                     gateway_settings_row==GATEWAY_SET_COLOR?&gateway_color_draft:
                     gateway_settings_row==GATEWAY_SET_SPECTRUM_COLOR?&gateway_spectrum_color_draft:
                     gateway_settings_row==GATEWAY_SET_BATTERY?&gateway_battery_draft:
                     gateway_settings_row==GATEWAY_SET_FADE?&gateway_fade_draft:
                     gateway_settings_row==GATEWAY_SET_USB_OUT?&gateway_usb_out_draft:&gateway_cpu_draft;
-                int limit=gateway_settings_row==GATEWAY_SET_FADE?5:gateway_settings_row==GATEWAY_SET_USB_OUT?6:gateway_settings_row==GATEWAY_SET_CODEC?2:
+                int limit=gateway_settings_row==GATEWAY_SET_FADE?5:gateway_settings_row==GATEWAY_SET_USB_OUT?6:
                     (gateway_settings_row==GATEWAY_SET_COLOR || gateway_settings_row==GATEWAY_SET_SPECTRUM_COLOR)?GATEWAY_WAVE_COLORS-1:1;
                 if(delta>limit)delta=limit;
                 if(delta< -limit)delta= -limit;
                 int value=(int)*draft+delta;
                 if(value<0)value=0;
                 if(value>limit)value=limit;
-                if(value!=*draft){*draft=(uint8_t)value;gateway_save_notice=0;gateway_page_redraw=1;}
+                if(value!=*draft){*draft=(uint8_t)value;gateway_save_notice=0;gateway_page_redraw=1;gateway_lights();}
             }
         } else if (i == EN_SELECT && delta && gateway_screen==GATEWAY_MAIN && !gateway_wide_meters()) {
             /* Reduce first so even INT_MIN/MAX turns wrap without overflow. */
@@ -747,12 +800,12 @@ static void gateway_draw_cpu(void)
     unsigned fx_active=gateway_fx_params.eq || gateway_fx_params.lim;
     uint32_t key=((gateway_cpu_mode?gateway_cpu_drawn:0u)<<16)|((gateway_cpu_mode?cpu2:0u)<<23)|(usb!=0)|((uint32_t)gateway_bt_mode<<1)|
         ((uint32_t)(connected!=0)<<2)|((uint32_t)(pairing!=0)<<3)|
-        ((uint32_t)codec<<4)|((uint32_t)(gateway_fx_params.chain && !fx_active)<<7)|((uint32_t)gateway_fx_params.chain<<8)|((uint32_t)(percent+1)<<9)|((uint32_t)gateway_battery_mode<<31)|((uint32_t)gateway_cpu_mode<<30)|((uint32_t)(gateway_usb_out_mode!=0)<<6);
-    if(key==gateway_bar_key)return;
+        ((uint32_t)(codec&3u)<<4)|((uint32_t)(gateway_fx_params.chain && !fx_active)<<7)|((uint32_t)gateway_fx_params.chain<<8)|((uint32_t)(percent+1)<<9)|((uint32_t)gateway_battery_mode<<31)|((uint32_t)gateway_cpu_mode<<30)|((uint32_t)(gateway_usb_out_mode!=0)<<6);
+    if(key==gateway_bar_key && codec==gateway_codec_seen)return;
     gateway_bar_key=key;cv_begin(240,16,C_BLACK);
     unsigned x=gateway_status_badge(3,"USB IN",usb?RGB(20,150,50):RGB(190,25,25),0);
     gateway_codec_seen=connected?codec:0;
-    const char *bt=connected?(codec==PLAT_BT_CODEC_AAC?"BT IN AAC":codec==PLAT_BT_CODEC_SBC?"BT IN SBC":"BT IN"):"BT IN";
+    const char *bt=connected?(codec==PLAT_BT_CODEC_AAC?"BT IN AAC":codec==PLAT_BT_CODEC_SBC?"BT IN SBC":codec==PLAT_BT_CODEC_APTX?"BT IN aptX":codec==PLAT_BT_CODEC_APTX_HD?"BT apXHD":"BT IN"):"BT IN";
     x=gateway_status_badge(x,bt,!gateway_bt_mode?C_GRAY:pairing?RGB(190,150,15):connected?RGB(20,150,50):RGB(190,25,25),!gateway_bt_mode);
     x=gateway_status_badge(x,"FX",gateway_fx_params.chain?(fx_active?RGB(20,150,50):RGB(190,150,15)):C_GRAY,!gateway_fx_params.chain);
     gateway_status_badge(x,"USB OUT",gateway_usb_out_mode?RGB(20,150,50):C_GRAY,!gateway_usb_out_mode);
@@ -994,12 +1047,16 @@ static const char *gateway_settings_value(unsigned row)
 {
     if(row==GATEWAY_SET_FADE)return gateway_fade_names[gateway_fade_draft];
     if(row==GATEWAY_SET_USB_OUT)return gateway_usb_out_names[gateway_usb_out_draft];
-    if(row==GATEWAY_SET_BT)return gateway_bt_draft?"RECEIVER":"OFF";
-    if(row==GATEWAY_SET_CODEC)return gateway_codecs[gateway_codec_draft];
+    if(row==GATEWAY_SET_BT)return gateway_bt_draft?"ON":"OFF";
+    if(row==GATEWAY_SET_CODEC)return "SELECT";
     if(row==GATEWAY_SET_AUTO_SCALE)return gateway_auto_scale_draft?"ON":"OFF";
     if(row==GATEWAY_SET_BATTERY)return gateway_battery_draft?"PERCENT":"OFF";
     if(row==GATEWAY_SET_CPU)return gateway_cpu_draft?"ON":"OFF";
     return gateway_color_names[row==GATEWAY_SET_SPECTRUM_COLOR?gateway_spectrum_color_draft:gateway_color_draft];
+}
+static const char *gateway_settings_status(void)
+{
+    return gateway_save_notice==2?"SAVE FAILED":gateway_settings_unsaved()?"UNSAVED":gateway_save_notice==1?"SAVED":"";
 }
 
 void app_frame(void)
@@ -1051,26 +1108,55 @@ void app_frame(void)
 
 static void gateway_settings_draw(void)
 {
-    draw_text_box(6, 22, 228, &FONT_XS, "SETTINGS", C_WHITE, 0);
+    if(gateway_codec_dialog){
+        for(unsigned band=0;band<196;band+=APP_CANVAS_PX/216u){
+            unsigned h=196-band;if(h>APP_CANVAS_PX/216u)h=APP_CANVAS_PX/216u;
+            cv_begin(216,h,RGB(15,22,30));cv_oy=-(int)band;
+            cv_rect(0,0,216,1,C_GRAY);cv_rect(0,195,216,1,C_GRAY);
+            cv_rect(0,0,1,196,C_GRAY);cv_rect(215,0,1,196,C_GRAY);
+            cv_text(12,10,&FONT_XS,"Bluetooth codecs",C_WHITE);
+            for(unsigned row=0;row<4;row++){
+                unsigned y=34+row*24;
+                if(row==gateway_codec_row)cv_rect(7,y-2,198,23,RGB(25,45,65));
+                uint16_t c=gateway_codec_checks&(1u<<row)?RGB(40,220,90):C_GRAY;
+                cv_rect(15,y+5,13,13,c);cv_rect(16,y+6,11,11,RGB(15,22,30));
+                if(gateway_codec_checks&(1u<<row)){cv_line(17,y+11,20,y+14,C_WHITE);cv_line(20,y+14,25,y+8,C_WHITE);}
+                cv_text(39,y+3,&FONT_XS,gateway_codecs[row],C_WHITE);
+            }
+            if(gateway_codec_empty)gateway_fx_center(0,143,216,"Select at least one codec",RGB(255,48,48));
+            gateway_fx_center(0,166,108,"CANCEL",C_WHITE);
+            gateway_fx_center(108,166,108,"OK",C_WHITE);
+            gateway_fx_center(0,180,108,"OCT-",C_GRAY);
+            gateway_fx_center(108,180,108,"OCT+",C_GRAY);
+            cv_oy=0;cv_blit(12,26+band);
+        }
+        return;
+    }
+    /* Replace header/footer strips with their background in the same blit.
+     * They also restore the larger modal's edges without a clearing flash. */
+    for(unsigned band=18;band<42;band+=APP_CANVAS_PX/240u){
+        unsigned h=42-band;if(h>APP_CANVAS_PX/240u)h=APP_CANVAS_PX/240u;
+        cv_begin(240,h,C_BLACK);cv_text(6,22-(int)band,&FONT_XS,"SETTINGS",C_WHITE);cv_blit(0,band);
+    }
     unsigned first=gateway_settings_first;
     for(unsigned slot=0;slot<6;slot++) {
         unsigned row=first+slot;
-        for(unsigned band=0;band<27;band+=APP_CANVAS_PX/232u){
-        unsigned h=27-band;if(h>APP_CANVAS_PX/232u)h=APP_CANVAS_PX/232u;
+        for(unsigned band=0;band<28;band+=APP_CANVAS_PX/232u){
+        unsigned h=28-band;if(h>APP_CANVAS_PX/232u)h=APP_CANVAS_PX/232u;
         cv_begin(232,h,row==gateway_settings_row?RGB(18,35,55):C_BLACK);cv_oy=-(int)band;
         cv_text(6,6,&FONT_T,gateway_setting_names[row],C_WHITE);
         const char *value=gateway_settings_value(row);
         uint16_t color=C_WHITE;
         if(row==GATEWAY_SET_COLOR)color=gateway_wave_colors[gateway_color_draft];
         else if(row==GATEWAY_SET_SPECTRUM_COLOR)color=gateway_wave_colors[gateway_spectrum_color_draft];
-        else if(row==GATEWAY_SET_AUTO_SCALE || row==GATEWAY_SET_CPU){
-            int on=row==GATEWAY_SET_AUTO_SCALE?gateway_auto_scale_draft:gateway_cpu_draft;
+        else if(row==GATEWAY_SET_AUTO_SCALE || row==GATEWAY_SET_CPU || row==GATEWAY_SET_BT){
+            int on=row==GATEWAY_SET_BT?gateway_bt_draft:row==GATEWAY_SET_AUTO_SCALE?gateway_auto_scale_draft:gateway_cpu_draft;
             color=on?RGB(40,220,90):RGB(255,48,48);
         }else if((row==GATEWAY_SET_BT && !gateway_bt_draft) ||
                  (row==GATEWAY_SET_BATTERY && !gateway_battery_draft) ||
                  (row==GATEWAY_SET_FADE && !gateway_fade_draft) ||
                  (row==GATEWAY_SET_USB_OUT && !gateway_usb_out_draft))color=RGB(255,48,48);
-        cv_text(226-text_w(&FONT_T,value),6,&FONT_T,value,color);cv_blit(0,42+slot*28+band);
+        cv_text(226-text_w(&FONT_T,value),6,&FONT_T,value,color);cv_rect(0,27,232,1,C_BLACK);cv_blit(0,42+slot*28+band);
         }
     }
     /* Thumb represents the six visible rows; paint in one transfer without
@@ -1078,5 +1164,9 @@ static void gateway_settings_draw(void)
     unsigned track=6u*28u-1u,thumb=track*6u/GATEWAY_SETTING_ROWS;
     cv_begin(3,track,RGB(35,35,35));
     cv_rect(0,first*(track-thumb)/(GATEWAY_SETTING_ROWS-6u),3,thumb,RGB(160,160,160));cv_blit(237,42);
-    draw_text_box(0,218,240,&FONT_XS,gateway_save_notice?(gateway_save_notice==1?"SAVED":"SAVE FAILED"):"",RGB(255,40,40),1);
+    const char *status=gateway_settings_status();
+    for(unsigned band=210;band<240;band+=APP_CANVAS_PX/240u){
+        unsigned h=240-band;if(h>APP_CANVAS_PX/240u)h=APP_CANVAS_PX/240u;
+        cv_begin(240,h,C_BLACK);cv_text((240-text_w(&FONT_XS,status))/2,218-(int)band,&FONT_XS,status,RGB(255,40,40));cv_blit(0,band);
+    }
 }

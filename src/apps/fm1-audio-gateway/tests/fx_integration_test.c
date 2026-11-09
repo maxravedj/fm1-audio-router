@@ -32,7 +32,23 @@ static void controls(void)
         }
         turn(EN_K4,-1);assert(gateway_fx_params.band[i].on);turn(EN_K4,1);assert(gateway_fx_params.band[i].on);
     }
-    tap(B_FX);assert(gateway_fx_limiter);turn(EN_K1,INT_MAX);turn(EN_K2,INT_MAX);turn(EN_K3,INT_MIN);
+    tap(B_FX);assert(gateway_fx_limiter);
+    /* A slow detent is exactly 1 ms everywhere, including high releases where
+     * the old percentage mapping skipped multiple milliseconds. */
+    for(unsigned ms=11;ms<1000;ms++){
+        fx_params_t p=gateway_fx_params;p.release=ms;gateway_fx_publish(&p);
+        now_ms+=200;turn(EN_K2,1);assert(gateway_fx_params.release==ms+1);
+        now_ms+=200;turn(EN_K2,-1);assert(gateway_fx_params.release==ms);
+    }
+    fx_params_t fine=gateway_fx_params;fine.release=100;gateway_fx_publish(&fine);
+    now_ms+=200;turn(EN_K2,1);assert(gateway_fx_params.release==101);
+    for(unsigned i=0;i<12;i++){now_ms+=15;turn(EN_K2,1);}
+    unsigned release=gateway_fx_params.release;now_ms+=15;turn(EN_K2,1);
+    assert(gateway_fx_params.release==release+30);
+    release=gateway_fx_params.release;now_ms+=200;turn(EN_K2,-1);
+    assert(gateway_fx_params.release==release-1);
+    puts("PASS: limiter release has exact 1-ms slow detents across its range, accelerated 30-ms detents and idle reset");
+    turn(EN_K1,INT_MAX);turn(EN_K2,INT_MAX);turn(EN_K3,INT_MIN);
     assert(gateway_fx_params.input==240 && gateway_fx_params.release==1000 && gateway_fx_params.ceiling==-240);
     turn(EN_K1,INT_MIN);turn(EN_K2,INT_MIN);turn(EN_K3,INT_MAX);tap(B_SEL);
     assert(gateway_fx_params.input==-240 && gateway_fx_params.release==10 && !gateway_fx_params.ceiling && !gateway_fx_params.lim);

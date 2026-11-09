@@ -76,9 +76,17 @@ static const char *br_debug_line(uint32_t row)
                 a+=btr_output_underruns;
 #endif
                 b=btr_stats.overruns;c=btr_stats.gaps;break;
-            case 3:label="BT AAC us/mem ";a=btr_aac_max_us;b=btr_aac_memory;c=btr_aac!=0;break;
+            case 3:
+#ifdef APP_BT_APTX
+                if(brc.profile.codec>=BTR_CODEC_APTX){label="BT aptX us ";a=btr_aptx_decode_jobs?btr_aptx_decode_us/btr_aptx_decode_jobs:0;b=btr_aptx_decode_max;c=btr_aptx_decode_jobs;break;}
+#endif
+                label="BT AAC us/mem ";a=btr_aac_max_us;b=btr_aac_memory;c=btr_aac!=0;break;
             case 4:label="BT malformed ";a=btr_stats.malformed;break;
-            case 5:label="BT AAC cfg ";
+            case 5:
+#ifdef APP_BT_APTX
+                if(brc.profile.codec>=BTR_CODEC_APTX){label="BT FIR us ";a=btr_aptx_fir_blocks?btr_aptx_fir_us/btr_aptx_fir_blocks:0;b=btr_aptx_fir_max;c=btr_aptx_fir_blocks;break;}
+#endif
+                label="BT AAC cfg ";
                 if(brc.profile.codec==BTR_CODEC_AAC){a=brc.profile.conf[0];b=brc.profile.conf[3]>>7;c=((uint32_t)(brc.profile.conf[3]&127)<<16)|((uint32_t)brc.profile.conf[4]<<8)|brc.profile.conf[5];}
                 break;
             default:return 0;

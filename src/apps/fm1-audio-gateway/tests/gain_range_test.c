@@ -86,10 +86,10 @@ static void persistence(void){
   gateway_mix_db[e-EN_K1]=-600;gateway_mixer_init();turn(e,-1);
   assert(gateway_mix_db[e-EN_K1]==-601 && gateway_mix_target[e-EN_K1]>0);
  }
- now_ms+=750;app_loop();gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==24 && s.version==15);
+ now_ms+=750;app_loop();gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==24 && s.version==16);
  app_init();app_ui_init();for(unsigned i=0;i<3;i++)assert(gateway_mix_db[i]==-601);
  for(unsigned v=10;v<=13;v++){
-  s=gateway_settings();s.version=v;s.spectrum_range=v>=13?90:3;
+  s=gateway_settings();s.version=v;s.bt_reserved[0]=0;s.spectrum_range=v>=13?90:3;
   s.input_db[0]=-600;s.input_db[1]=-599;s.input_db[2]=-600;
   assert(!plat_store_save(OBJ_SETTINGS,&s,v>=12?22:20));app_init();app_ui_init();
   assert(gateway_mix_db[0]==GATEWAY_GAIN_OFF && gateway_mix_db[1]==-599 && gateway_mix_db[2]==(v>=12?GATEWAY_GAIN_OFF:0));
@@ -101,8 +101,8 @@ static void persistence(void){
   s=gateway_settings();s.input_db[i]=GATEWAY_GAIN_OFF-1;
   assert(!plat_store_save(OBJ_SETTINGS,&s,sizeof s));app_init();for(unsigned j=0;j<3;j++)assert(!gateway_mix_db[j]);
  }
- s=gateway_settings();s.version=13;s.input_db[0]=-601;
+ s=gateway_settings();s.version=13;s.bt_reserved[0]=0;s.input_db[0]=-601;
  assert(!plat_store_save(OBJ_SETTINGS,&s,sizeof s));app_init();assert(!gateway_mix_db[0]);
- puts("PASS: K1/K2/K3 cross -60 and step between -100 and OFF; v15/24-byte save/reboot, v10-v13 OFF-preserving migration and version-aware bounds");
+ puts("PASS: K1/K2/K3 cross -60 and step between -100 and OFF; v16/24-byte save/reboot, v10-v13 OFF-preserving migration and version-aware bounds");
 }
 int main(void){setbuf(stdout,NULL);palette_set(APP_PALETTE);now_ms=100;app_init();app_ui_init();curve();audio();persistence();assert(!cv_cuts && !cpu_work_depth);}

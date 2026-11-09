@@ -32,7 +32,7 @@ static void settings(void){
  setrow(GATEWAY_SET_BATTERY);turn(EN_ALGO,-1);assert(!gateway_battery_draft && gateway_battery_mode);
  store_fail=1;tap(B_SAVE);assert(gateway_save_notice==2 && gateway_wave_color==2 && gateway_battery_mode);
  store_fail=0;tap(B_SAVE);assert(gateway_wave_color==6 && gateway_spectrum_color==6 && !gateway_battery_mode);
- gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==sizeof s && s.version==15 && s.spectrum_reserved==6 && !s.reserved);
+ gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==sizeof s && s.version==16 && s.spectrum_reserved==6 && !s.reserved);
  app_init();app_ui_init();assert(gateway_wave_color==6 && gateway_spectrum_color==6 && !gateway_battery_mode);
  for(unsigned color=0;color<7;color++){
   tap(B_EDIT);setrow(GATEWAY_SET_SPECTRUM_COLOR);turn(EN_ALGO,-99);turn(EN_ALGO,color);tap(B_SAVE);

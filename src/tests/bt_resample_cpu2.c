@@ -20,6 +20,7 @@
 #undef plat_work_free
 #undef PLAT_HOST
 #define APP_BT_AAC
+#define APP_BT_APTX
 #define APP_BT_SBC_CPU2
 #define APP_BT_RESAMPLE_CPU2
 #define APP_AUDIO_MONITOR
