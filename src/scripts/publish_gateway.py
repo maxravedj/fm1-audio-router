@@ -14,7 +14,7 @@ from build_version import release_filename
 
 NOTICES = ('LICENSE', 'LICENSING.md', 'CREDITS.md', 'Apache-2.0.txt',
            'BSD-2-Clause-micro-ecc.txt', 'BSP-NOTICE.txt', 'BSP-LICENSING.md',
-           'AAC-NOTICE.txt', 'MBOOT-LICENSE.txt', 'MBOOT-NOTICE.md')
+           'AAC-NOTICE.txt', 'LGPL-2.1.txt', 'APTX-NOTICE.md', 'MBOOT-LICENSE.txt', 'MBOOT-NOTICE.md')
 MARKER = '<!-- audio-router-distribution -->'
 
 
@@ -60,9 +60,10 @@ def prune_assets(tag, filename):
             gh('release', 'delete-asset', tag, asset['name'], '--yes')
 
 
-def publish(directory, tag, repo, existing, recreate=False):
+def publish(directory, tag, repo, existing, recreate=False, notes_text=None):
     with tempfile.TemporaryDirectory() as temp:
-        asset, notes = prepare(directory, tag, repo, existing['body'] if existing else '', Path(temp))
+        body = notes_text if notes_text is not None else existing['body'] if existing else ''
+        asset, notes = prepare(directory, tag, repo, body, Path(temp))
         if existing and recreate:
             # Validate the replacement before deleting the old release. Keep the
             # Git tag: it already points at the commit being published.
@@ -101,11 +102,13 @@ def main():
     parser.add_argument('--directory', type=Path, default=Path('release'))
     parser.add_argument('--tidy-legacy', action='store_true')
     parser.add_argument('--recreate', action='store_true', help='delete an existing release before publishing it again')
+    parser.add_argument('--notes-file', type=Path, help='release summary placed before distribution notices')
     args = parser.parse_args()
     repo = os.environ['GH_REPO']
     releases = json.loads(gh('release', 'list', '--limit', '100', '--json', 'tagName'))
     existing = view(args.tag) if any(r['tagName'] == args.tag for r in releases) else None
-    publish(args.directory, args.tag, repo, existing, recreate=args.recreate)
+    notes_text = args.notes_file.read_text() if args.notes_file else None
+    publish(args.directory, args.tag, repo, existing, recreate=args.recreate, notes_text=notes_text)
     if args.tidy_legacy:
         for release in releases:
             if release['tagName'] != args.tag:

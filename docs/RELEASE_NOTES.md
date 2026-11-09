@@ -1,0 +1,2 @@
+- aptX and aptX HD support
+- ui improvements

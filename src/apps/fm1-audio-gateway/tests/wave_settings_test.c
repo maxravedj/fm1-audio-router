@@ -9,44 +9,44 @@ static void turn(int e,int n){enc_acc[e]=n;app_input_only();}
 static void row(unsigned r){turn(EN_SELECT,INT_MIN);turn(EN_SELECT,r);assert(gateway_settings_row==r);}
 static void settings(void)
 {
-    assert(gateway_master_wave_auto_scale && gateway_wave_color==2);
-    tap(B_EDIT);row(2);turn(EN_ALGO,-1);
-    assert(!gateway_auto_scale_draft && gateway_master_wave_auto_scale);
-    row(3);turn(EN_ALGO,3);assert(gateway_color_draft==5 && gateway_wave_color==2);
+    assert(!gateway_master_wave_auto_scale && gateway_wave_color==1);
+    tap(B_EDIT);row(2);turn(EN_ALGO,1);
+    assert(gateway_auto_scale_draft && !gateway_master_wave_auto_scale);
+    row(3);turn(EN_ALGO,4);assert(gateway_color_draft==5 && gateway_wave_color==1);
     unsigned writes=store_writes;now_ms+=1000;app_loop();assert(store_writes==writes);
-    store_fail=1;tap(B_SAVE);assert(gateway_save_notice==2 && gateway_wave_color==2 && gateway_master_wave_auto_scale);
-    store_fail=0;tap(B_SAVE);assert(gateway_save_notice==1 && gateway_wave_color==5 && !gateway_master_wave_auto_scale);
+    store_fail=1;tap(B_SAVE);assert(gateway_save_notice==2 && gateway_wave_color==1 && !gateway_master_wave_auto_scale);
+    store_fail=0;tap(B_SAVE);assert(gateway_save_notice==1 && gateway_wave_color==5 && gateway_master_wave_auto_scale);
     app_loop();unsigned blit=blits;now_ms+=1000;app_loop();assert(blits<=blit+1 && gateway_save_notice==1);
     turn(EN_ALGO,-1);assert(!gateway_save_notice && gateway_wave_color==5 && gateway_color_draft==4);
-    tap(B_HOME);tap(B_EDIT);assert(gateway_color_draft==5 && !gateway_auto_scale_draft);
-    app_init();app_ui_init();assert(gateway_wave_color==5 && !gateway_master_wave_auto_scale);
+    tap(B_HOME);tap(B_EDIT);assert(gateway_color_draft==5 && gateway_auto_scale_draft);
+    app_init();app_ui_init();assert(gateway_wave_color==5 && gateway_master_wave_auto_scale);
     /* All combinations persist atomically with codec/monitor in 16 bytes. */
     for(unsigned scale=0;scale<2;scale++)for(unsigned color=0;color<7;color++){
         tap(B_EDIT);row(2);turn(EN_ALGO,scale?INT_MAX:INT_MIN);
         row(3);turn(EN_ALGO,INT_MIN);turn(EN_ALGO,color);tap(B_SAVE);
-        gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==sizeof s && s.version==14);
+        gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==sizeof s && s.version==16);
         assert(s.bt_reserved[2]==(scale | color<<1));app_init();app_ui_init();
         assert(gateway_master_wave_auto_scale==scale && gateway_wave_color==color);
     }
-    puts("PASS: four settings rows, draft-only edits, failed SAVE atomicity, discard, red SAVED lifetime, all 12 auto-scale/color combinations persist and restore");
+    puts("PASS: four settings rows, draft-only edits, failed SAVE atomicity, discard, red SAVED lifetime, all 14 auto-scale/color combinations persist and restore");
 }
 static void migration(void)
 {
     for(unsigned version=1;version<6;version++){
-        gateway_settings_t s=gateway_settings();s.version=version;s.spectrum_range=3;s.zoom=9;s.reserved=s.spectrum_reserved=0;
+        gateway_settings_t s=gateway_settings();s.version=version;s.bt_reserved[0]=0;s.spectrum_range=3;s.zoom=9;s.reserved=s.spectrum_reserved=0;
         s.bluetooth=1;s.bt_reserved[0]=version==5?2:0;s.bt_reserved[1]=version==5?2:0;s.bt_reserved[2]=0;
         unsigned size=version<3?8:version==3?12:16;s.mode=0;
         plat_store_save(OBJ_SETTINGS,&s,size);app_init();app_ui_init();
-        assert(gateway_zoom==9 && gateway_master_wave_auto_scale && gateway_wave_color==2);
-        assert(gateway_monitor==(version==5?2:0) && gateway_codec_preference==(version==5?2:0));
+        assert(gateway_zoom==9 && !gateway_master_wave_auto_scale && gateway_wave_color==1);
+        assert(gateway_monitor==(version==5?2:0) && gateway_codec_preference==(version==5?1:3));
     }
     for(unsigned packed=14;packed<256;packed++){
         gateway_settings_t s=gateway_settings();s.zoom=10;s.bt_reserved[2]=packed;
         plat_store_save(OBJ_SETTINGS,&s,sizeof s);app_init();
-        assert(gateway_zoom==6 && gateway_master_wave_auto_scale && gateway_wave_color==2);
+        assert(gateway_zoom==6 && !gateway_master_wave_auto_scale && gateway_wave_color==1);
     }
     app_ui_init();
-    puts("PASS: v1-v5 migrations preserve prior controls with ON/BLUE defaults; all 244 invalid packed v6 values rejected");
+    puts("PASS: v1-v5 migrations preserve prior controls with OFF/GREEN defaults; all 244 invalid packed v6 values rejected");
 }
 static void waveform(void)
 {

@@ -89,7 +89,7 @@ static void controls(void){
 static void settings(void){
     setup(3,5,10);gateway_screen=GATEWAY_MIXER;gateway_view_changed();
     gateway_settings_changed();now_ms+=750;app_loop();
-    gateway_settings_t s;assert(sizeof s==24 && plat_store_load(OBJ_SETTINGS,&s,sizeof s)==24 && s.version==15);
+    gateway_settings_t s;assert(sizeof s==24 && plat_store_load(OBJ_SETTINGS,&s,sizeof s)==24 && s.version==16);
     assert(s.mixer_controls==(5|10<<3) && s.fade_time==3);
     app_init();app_ui_init();assert(gateway_mix_mutes==5 && gateway_mix_solos==10 && gateway_fade_time==3);
     assert(!gateway_gate[0].gain && !gateway_gate[2].gain && master_fade_gain==65536);
@@ -105,7 +105,7 @@ static void settings(void){
     turn(EN_ALGO,-1);assert(gateway_fade_draft==4 && gateway_fade_time==5);
     tap(B_HOME);tap(B_EDIT);assert(gateway_fade_draft==5 && gateway_fade_time==5);
     /* Legacy length must remain 22, and retain finite/OFF trim semantics. */
-    s=gateway_settings();s.version=14;s.input_db[0]=-1000;s.input_db[1]=GATEWAY_GAIN_OFF;s.muted=1;s.zoom=9;
+    s=gateway_settings();s.version=14;s.bt_reserved[0]=0;s.input_db[0]=-1000;s.input_db[1]=GATEWAY_GAIN_OFF;s.muted=1;s.zoom=9;
     assert(!plat_store_save(OBJ_SETTINGS,&s,22));app_init();app_ui_init();
     assert(gateway_zoom==9 && gateway_muted && !master_fade_gain && !gateway_mix_mutes && !gateway_mix_solos && gateway_fade_time==2);
     assert(gateway_mix_db[0]==-1000 && gateway_mix_db[1]==GATEWAY_GAIN_OFF);
@@ -113,12 +113,12 @@ static void settings(void){
         s=gateway_settings();s.zoom=9;
         if(bad==0)s.fade_time=6;
         if(bad==1)s.mixer_controls=128;
-        if(bad==2)s.version=14;
+        if(bad==2)s.version=14;s.bt_reserved[0]=0;
         unsigned len=bad==3?22:sizeof s;
         assert(!plat_store_save(OBJ_SETTINGS,&s,len));app_init();app_ui_init();
         assert(gateway_zoom==6 && !gateway_muted && !gateway_mix_mutes && !gateway_mix_solos && gateway_fade_time==2);
     }
-    puts("PASS: v15/24-byte controls autosave/reboot without startup leak, fade draft/SAVE/failure/discard, v14 migration and strict malformed length/flags/fade validation");
+    puts("PASS: v16/24-byte controls autosave/reboot without startup leak, fade draft/SAVE/failure/discard, v14 migration and strict malformed length/flags/fade validation");
 }
 static void pixels(void){
     setup(3,0,0);gateway_screen=GATEWAY_MIXER;gateway_view_changed();

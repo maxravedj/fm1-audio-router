@@ -57,6 +57,7 @@ void app_input_only(void);
 void app_say(const char *a, const char *b);
 
 #define APP_BT_AAC
+#define APP_BT_APTX
 #ifndef PLAT_HOST
 #define APP_BT_SBC_CPU2
 #define APP_BT_RESAMPLE_CPU2

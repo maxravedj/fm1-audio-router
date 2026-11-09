@@ -5,6 +5,8 @@ static const uint16_t gateway_fx_colors[]={RGB(75,210,150),RGB(75,155,255),RGB(2
 #define FX_GRAPH_W 214u
 #define FX_GRAPH_TOP 34u
 #define FX_GRAPH_BOTTOM 140u
+#define FX_LIMITER_METER_X 163u
+#define FX_LIMITER_SCALE_RIGHT (FX_LIMITER_METER_X-7u)
 static void gateway_fx_format(char text[40],const char *prefix,int value,unsigned decimals,const char *suffix)
 {
     char digits[12];unsigned n=0,k=0;uint32_t v=value<0?(uint32_t)-value:(uint32_t)value;
@@ -49,6 +51,7 @@ static void gateway_fx_curves(const fx_params_t *p,uint8_t curves[6][FX_GRAPH_W]
         for(unsigned j=0;j<counts[i];j++)shapes[i][j]=fx_shape(&p->band[i],fx_stage_q(&p->band[i],counts[i],j));
     }
     for(unsigned x=0;x<FX_GRAPH_W;x++){
+        if(!(x&7u))plat_bt_receiver_service();
         float hz=20.0f*fm_exp2f((float)x*(9.965784285f/(FX_GRAPH_W-1u)));
         float warped=fm_tanf(FM_PI*hz/FX_RATE),total=(float)p->post*0.1f;
         for(unsigned i=0;i<FX_BANDS;i++){
@@ -113,13 +116,13 @@ static void gateway_fx_cards(void)
         cv_rect(1,0,46,selected?3:1,color);cv_rect(47,0,1,70,C_BLACK);
         gateway_fx_format(text,"",i+1,0,"");cv_text(3,4,&FONT_T,text,color);
         gateway_fx_icon(b->type,15,8,color);
-        if(b->hz<1000)gateway_fx_format(text,"",b->hz,0,"Hz");
-        else gateway_fx_format(text,"",(b->hz+5)/10,2,"k");
+        if(b->hz<1000)gateway_fx_format(text,"",b->hz,0," Hz");
+        else gateway_fx_format(text,"",(b->hz+5)/10,2," kHz");
         gateway_fx_center(0,28,48,text,C_WHITE);
-        if(b->type==FX_LOW_PASS || b->type==FX_HIGH_PASS)gateway_fx_format(text,"",12*(gateway_fx_params.slope[i]+1),0,"dB/oct");
-        else gateway_fx_format(text,b->gain>0?"+":"",b->gain,1,"dB");
+        if(b->type==FX_LOW_PASS || b->type==FX_HIGH_PASS)gateway_fx_format(text,"",12*(gateway_fx_params.slope[i]+1),0," dB/oct");
+        else gateway_fx_format(text,b->gain>0?"+":"",b->gain,1," dB");
         gateway_fx_center(0,41,48,text,color);
-        gateway_fx_format(text,b->type==FX_BELL?"Q":"R",b->q,2,"");gateway_fx_center(0,54,48,text,C_GRAY);
+        gateway_fx_format(text,b->type==FX_BELL?"Q ":"R ",b->q,2,"");gateway_fx_center(0,54,48,text,C_GRAY);
         cv_blit(i*48,170);
     }
 }
@@ -133,7 +136,7 @@ static void gateway_fx_eq_draw(void)
     cv_begin(240,15,C_BLACK);
     const char *hint=gateway_fx_row==1?"K1 POST":gateway_fx_types[p->band[gateway_fx_row-2].type];
     cv_text(3,1,&FONT_T,hint,C_GRAY);
-    gateway_fx_format(text,"post EQ gain: ",p->post,1,"dB");
+    gateway_fx_format(text,"post EQ gain: ",p->post,1," dB");
     int x=237-text_w(&FONT_T,text);
     if(gateway_fx_row==1){cv_rect(x-3,0,text_w(&FONT_T,text)+6,15,RGB(24,46,65));cv_rect(x-3,0,2,15,RGB(75,210,150));}
     cv_text(x,1,&FONT_T,text,C_WHITE);cv_blit(0,155);
@@ -149,6 +152,18 @@ static void gateway_fx_view(void)
     memset(gateway_fx_meter,0,sizeof gateway_fx_meter);gateway_fx_reduction=0;gateway_fx_status_valid=0;
     gateway_fx_meter_ms=plat_ms();gateway_fx_draw_ms=plat_ms()-48u;
 }
+static void gateway_fx_limiter_value(unsigned y,const char *label,int value,unsigned decimals,const char *suffix)
+{
+    char text[40];
+    /* The meter's scale labels occupy the space before its bars too. */
+    int width=FX_LIMITER_SCALE_RIGHT-text_w(&FONT_T,"-60");
+    gateway_fx_center(0,y,width,label,C_GRAY);
+    gateway_fx_format(text,"",value,decimals,"");
+    int value_w=text_w(&FONT_L,text),gap=text_w(&FONT_L," ");
+    int x=(width-value_w-gap-text_w(&FONT_L,suffix))/2;
+    cv_text(x,y+16,&FONT_L,text,C_WHITE);
+    cv_text(x+value_w+gap,y+16,&FONT_L,suffix,C_WHITE);
+}
 static void gateway_fx_limiter_region(unsigned left,unsigned top,unsigned width,unsigned height,int full)
 {
     unsigned active=gateway_fx_params.lim;
@@ -156,9 +171,9 @@ static void gateway_fx_limiter_region(unsigned left,unsigned top,unsigned width,
         unsigned h=top+height-band;if(h>APP_CANVAS_PX/width)h=APP_CANVAS_PX/width;
         cv_begin(width,h,C_BLACK);cv_oy=-(int)band;
         static const char *const ticks[]={"0","-12","-24","-36","-48","-60"};
-        if(full)for(unsigned i=0;i<6;i++)cv_text(156-text_w(&FONT_T,ticks[i]),44+36*i,&FONT_T,ticks[i],C_GRAY);
+        if(full)for(unsigned i=0;i<6;i++)cv_text(FX_LIMITER_SCALE_RIGHT-text_w(&FONT_T,ticks[i]),44+36*i,&FONT_T,ticks[i],C_GRAY);
         if(full || left)for(unsigned ch=0;ch<2;ch++){
-            const gateway_meter_t *m=&gateway_fx_meter[ch];int x=163+27*ch-(int)left;
+            const gateway_meter_t *m=&gateway_fx_meter[ch];int x=FX_LIMITER_METER_X+27*ch-(int)left;
             for(unsigned i=0;i<60;i++)cv_rect(x,227-3*i,22,2,m->level>=(i+1)*10?
                 (!active?RGB(90,90,90):i>=54?RGB(255,60,45):i>=42?RGB(235,185,45):RGB(40,195,100)):RGB(22,27,29));
             if(m->held)cv_rect(x,230-m->held*179/600,22,1,active?C_WHITE:C_GRAY);
@@ -167,12 +182,13 @@ static void gateway_fx_limiter_region(unsigned left,unsigned top,unsigned width,
         unsigned gr_height=gateway_fx_reduction*180/240;if(gr_height>180)gr_height=180;
         if(full || left)cv_rect(224-(int)left,50,5,gr_height,active?RGB(255,55,60):RGB(75,60,60));
         char text[40];
-        if(!left){gateway_fx_format(text,"GR ",gateway_fx_reduction,1,"dB");cv_text(6,204,&FONT_T,text,active?RGB(255,80,80):C_GRAY);}
-        if(full || left){gateway_fx_format(text,"",(int)(gateway_fx_meter[0].held>gateway_fx_meter[1].held?gateway_fx_meter[0].held:gateway_fx_meter[1].held)-600,1,"dB");
-        gateway_fx_center(158-(int)left,35,58,text,active?C_WHITE:C_GRAY);}
-        if(full){cv_text(6,48,&FONT_T,"K1 INPUT",C_GRAY);gateway_fx_format(text,"",gateway_fx_params.input,1,"dB");cv_text(6,64,&FONT_XS,text,C_WHITE);
-        cv_text(6,99,&FONT_T,"K2 RELEASE",C_GRAY);gateway_fx_format(text,"",gateway_fx_params.release,0,"ms");cv_text(6,115,&FONT_XS,text,C_WHITE);
-        cv_text(6,150,&FONT_T,"K3 CEILING",C_GRAY);gateway_fx_format(text,"",gateway_fx_params.ceiling,1,"dB");cv_text(6,166,&FONT_XS,text,C_WHITE);}
+        if(!left){gateway_fx_format(text,"GR ",gateway_fx_reduction,1," dB");
+        cv_text((FX_LIMITER_SCALE_RIGHT-text_w(&FONT_T,"-60")-text_w(&FONT_XS,text))/2,204,&FONT_XS,text,active?RGB(255,80,80):C_GRAY);}
+        if(full || left){gateway_fx_format(text,"",(int)(gateway_fx_meter[0].held>gateway_fx_meter[1].held?gateway_fx_meter[0].held:gateway_fx_meter[1].held)-600,1,"");
+        cv_text(158-(int)left+(58-text_w(&FONT_XS,text))/2,35,&FONT_XS,text,active?C_WHITE:C_GRAY);}
+        if(full){gateway_fx_limiter_value(48,"K1 INPUT",gateway_fx_params.input,1,"dB");
+        gateway_fx_limiter_value(99,"K2 RELEASE",gateway_fx_params.release,0,"ms");
+        gateway_fx_limiter_value(150,"K3 CEILING",gateway_fx_params.ceiling,1,"dB");}
         cv_oy=0;cv_blit(left,band);
     }
 }

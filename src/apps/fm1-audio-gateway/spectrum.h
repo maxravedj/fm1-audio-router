@@ -90,6 +90,7 @@ static void gateway_spectrum_analyze(void)
     float mean_l, mean_r;
     if (!gateway_twiddle_ready) {
         for (i = 0; i < PLAT_SPECTRUM_FRAMES / 2u; i++) {
+            if(!(i&31u))plat_bt_receiver_service();
             float angle = FM_TWO_PI * (float)i / (float)PLAT_SPECTRUM_FRAMES;
             gateway_twiddle[i][0] = fm_cosf(angle);
             gateway_twiddle[i][1] = -fm_sinf(angle);
@@ -97,18 +98,21 @@ static void gateway_spectrum_analyze(void)
         gateway_twiddle_ready = 1;
     }
     for (i = 0; i < PLAT_SPECTRUM_FRAMES; i++) {
+        if(!(i&127u))plat_bt_receiver_service();
         sum_l += gateway_spectrum_pcm[i][0];
         sum_r += gateway_spectrum_pcm[i][1];
     }
     mean_l = (float)sum_l / (float)PLAT_SPECTRUM_FRAMES;
     mean_r = (float)sum_r / (float)PLAT_SPECTRUM_FRAMES;
     for (i = 0; i < PLAT_SPECTRUM_FRAMES; i++) {
+        if(!(i&127u))plat_bt_receiver_service();
         float c = gateway_twiddle[i & (PLAT_SPECTRUM_FRAMES/2u - 1u)][0];
         float window = 0.5f - 0.5f * (i < PLAT_SPECTRUM_FRAMES/2u ? c : -c);
         gateway_fft[i][0] = ((float)gateway_spectrum_pcm[i][0] - mean_l) * window / 32768.0f;
         gateway_fft[i][1] = ((float)gateway_spectrum_pcm[i][1] - mean_r) * window / 32768.0f;
     }
     for (i = 1, j = 0; i < PLAT_SPECTRUM_FRAMES; i++) {
+        if(!(i&127u))plat_bt_receiver_service();
         bit = PLAT_SPECTRUM_FRAMES / 2u;
         while (j & bit) { j ^= bit; bit >>= 1; }
         j ^= bit;
@@ -122,6 +126,7 @@ static void gateway_spectrum_analyze(void)
         uint32_t half = len / 2u, stride = PLAT_SPECTRUM_FRAMES / len;
         for (start = 0; start < PLAT_SPECTRUM_FRAMES; start += len)
             for (j = 0; j < half; j++) {
+                if(!((start+j)&127u))plat_bt_receiver_service();
                 uint32_t a = start + j, z = a + half;
                 float wr = gateway_twiddle[j * stride][0], wi = gateway_twiddle[j * stride][1];
                 float re = wr * gateway_fft[z][0] - wi * gateway_fft[z][1];
@@ -132,6 +137,7 @@ static void gateway_spectrum_analyze(void)
             }
     }
     for (b = 0; b < GATEWAY_SPECTRUM_BANDS; b++) {
+        plat_bt_receiver_service();
         float left = 0.0f, right = 0.0f, power, db;
         float lo = gateway_spectrum_edges[b], hi = gateway_spectrum_edges[b+1u];
         for (i = (uint32_t)(lo + 0.5f); (float)i - 0.5f < hi; i++) {

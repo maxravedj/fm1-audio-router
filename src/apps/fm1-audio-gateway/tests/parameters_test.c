@@ -20,7 +20,7 @@ static void leds(int muted)
 }
 static void defaults_and_saved_preferences(void)
 {
-    static const char *const defaults[]={"RECEIVER","AUTO","OFF","GREEN","YELLOW","PERCENT","ON","OFF","50ms"};
+    static const char *const defaults[]={"ON","SEL","OFF","GREEN","YELLOW","PERCENT","ON","OFF","50ms"};
     app_init();app_boot();app_ui_init();
     assert(btr_host_on && !btr_host_pairing && !gateway_bt_seen);
     assert(master_fade_frames==2205 && !gateway_usb_pcm);

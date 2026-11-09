@@ -89,6 +89,8 @@ When you choose a version, tag the reviewed master commit and push that tag:
 
 Update the README's direct latest-firmware link to the chosen asset filename
 before tagging (for example, `fm1-audio-router-v0.1.1.fwsc`).
+Write the short release summary in `docs/RELEASE_NOTES.md`; the tag workflow
+uses it above the collapsed distribution notices.
 
 ```sh
 git switch master

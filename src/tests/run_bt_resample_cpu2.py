@@ -5,7 +5,7 @@ import argparse,subprocess,os
 src=Path(__file__).resolve().parents[1];root=src.parent
 p=argparse.ArgumentParser();p.add_argument('--out',type=Path,required=True);p.add_argument('--fixtures',type=Path,required=True);p.add_argument('--sbc',type=Path,required=True);a=p.parse_args();a.out.mkdir(parents=True,exist_ok=True)
 mod=src/'bt/br/aac_dec';exe=a.out/'pipeline'
-cmd=[os.environ.get('CC','cc'),'-std=c99','-O1','-g','-fwrapv','-fsanitize=address,undefined','-fno-sanitize=shift-base','-fno-sanitize-recover=all','-pthread','-Wno-attributes','-include',mod/'pvaac/pv_fm1.h',f'-I{mod}',f'-I{src}/bt/br/sbc_dec',src/'tests/bt_resample_cpu2.c',mod/'aac_dec.c',*[mod/p for p in (mod/'sources.txt').read_text().splitlines()],*sorted((src/'bt/br/sbc_dec').glob('*.c')),'-o',exe]
+cmd=[os.environ.get('CC','cc'),'-std=c99','-O1','-g','-fwrapv','-fsanitize=address,undefined','-fno-sanitize=shift-base','-fno-sanitize-recover=all','-pthread','-Wno-attributes','-include',mod/'pvaac/pv_fm1.h',f'-I{mod}',f'-I{src}/bt/br/sbc_dec',src/'tests/bt_resample_cpu2.c',src/'bt/br/aptx_dec/aptx_dec.c',src/'bt/br/aptx_dec/aptx_fir.c',mod/'aac_dec.c',*[mod/p for p in (mod/'sources.txt').read_text().splitlines()],*sorted((src/'bt/br/sbc_dec').glob('*.c')),'-o',exe]
 subprocess.run(list(map(str,cmd)),check=True)
 for i,fixture in enumerate(sorted(a.fixtures.glob('*.rtp'))):
  sbc=a.sbc/f'{i%6}.sbc';spcm=a.out/'sbc.pcm';apcm=a.out/'aac.pcm'

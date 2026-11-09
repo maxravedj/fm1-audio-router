@@ -52,7 +52,15 @@ static void btr_worker_stop(void)
 #define BTR_RING 8192u
 #define BTR_TARGET 6144u
 #endif
-static int16_t btr_pcm[BTR_RING][2];
+/* aptX's stereo lane kernel loads each signed high-word pair as one word. */
+static int16_t btr_pcm[BTR_RING][2] __attribute__((aligned(4)));
+#if defined(APP_BT_APTX) && defined(APP_BT_RESAMPLE_CPU2)
+/* Optional low byte, allocated with aptX state. Other codecs keep exact 16-bit FIR arithmetic. */
+static uint8_t (*btr_pcm_low)[2];
+#include "aptx_dec/aptx_fir.h"
+static uint32_t btr_aptx_decode_us,btr_aptx_decode_max,btr_aptx_decode_jobs;
+static uint32_t btr_aptx_fir_us,btr_aptx_fir_max,btr_aptx_fir_blocks;
+#endif
 static volatile uint32_t btr_w,btr_r;
 #ifdef APP_BT_RESAMPLE_CPU2
 static uint32_t btr_pcm_space(void)
@@ -107,6 +115,17 @@ static void btr_resample_fill(void)
         int32_t error=((int32_t)avail-(int32_t)BTR_TARGET)/16;
         if(error>66)error=66;if(error< -66)error= -66;
         btr_servo+=(error*256-btr_servo)/32;btr_step=base+btr_servo/256;
+#ifdef APP_BT_APTX
+        uint32_t fir_start=btr_pcm_low?plat_ticks24():0;
+        if(btr_pcm_low){
+            for(uint32_t i=0;i<BTR_RESAMPLE_BLOCK;i++){
+                btr_fir24(btr_pcm,btr_pcm_low,r,filter[btr_phase>>10],btr_phase&1023u,btr_output[(ow+i)&(BTR_OUT_RING-1)]);
+                btr_phase+=btr_step;r+=btr_phase>>16;btr_phase&=65535;
+            }
+            unsigned us=(plat_ticks24()-fir_start)/PLAT_TICKS_PER_US;
+            btr_aptx_fir_us+=us;btr_aptx_fir_blocks++;if(us>btr_aptx_fir_max)btr_aptx_fir_max=us;
+        }else
+#endif
         for(uint32_t i=0;i<BTR_RESAMPLE_BLOCK;i++) {
             int64_t sum[2]={0,0};
             uint32_t phase=btr_phase>>10,frac=btr_phase&1023u,k,half;
@@ -161,6 +180,9 @@ void btr_pcm_mix(int32_t *lr,uint32_t n,uint32_t gain)
         if(r==w){btr_output_underruns++;btr_primed=0;break;}
         const int32_t *p=btr_output[r&(BTR_OUT_RING-1)];
 #ifdef APP_AUDIO_MONITOR
+        #ifdef APP_BT_APTX
+        if(btr_pcm_low)plat_audio_monitor_bt_sample(p[0],p[1]);else
+#endif
         plat_audio_monitor_bt_sample(p[0]*256,p[1]*256);
 #endif
 #ifdef APP_INPUT_FADERS
@@ -170,8 +192,15 @@ void btr_pcm_mix(int32_t *lr,uint32_t n,uint32_t gain)
 #endif
 #endif
         for(uint32_t ch=0;ch<2;ch++) {
-            int32_t scaled=p[ch]*(int32_t)gain;
+            int32_t scaled;
+#ifdef APP_BT_APTX
+            if(btr_pcm_low)scaled=0;else
+#endif
+            scaled=p[ch]*(int32_t)gain;
             int32_t sample=(scaled+(scaled<0?15:0))>>4;
+#ifdef APP_BT_APTX
+            if(btr_pcm_low){int64_t full=(int64_t)p[ch]*gain;sample=(int32_t)((full+(full<0?4095:0))>>12);}
+#endif
 #ifdef APP_USB_OUT_ROUTING
             int32_t raw_sample=sample;
 #endif

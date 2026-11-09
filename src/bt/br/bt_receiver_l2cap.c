@@ -141,10 +141,13 @@ static __attribute__((noinline)) void br_frame(const uint8_t *p,uint32_t n)
             app_bt_aac_prepare();
 #endif
         if(was!=brc.profile.state || (len && out[1]==5 && (out[0]&3)==2)) {
-            BTR_FLUSH(brc.profile.codec==BTR_CODEC_AAC?(brc.profile.conf[2]&0x80?48000:44100):(brc.profile.conf[0]&0x10?48000:44100));
+            BTR_FLUSH(btr_config_rate(&brc.profile));
             ba_live=brc.profile.state==BTR_STREAMING;
         }
     } else if(brc.profile.state==BTR_STREAMING) {
+#if defined(APP_BT_APTX) && !defined(PLAT_HOST)
+        if(brc.profile.codec>=BTR_CODEC_APTX){btr_aptx_media(p+4,len,brc.profile.codec==BTR_CODEC_APTX_HD);return;}
+#endif
 #ifdef APP_BT_AAC
         if(brc.profile.codec==BTR_CODEC_AAC)btr_aac_media(p+4,len,brc.profile.conf);
         else

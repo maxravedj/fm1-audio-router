@@ -45,6 +45,11 @@ static void lcd_spin(uint32_t n)
 
 static void lcd_sync(void)          /* finish the running transfer (before touching its buffer) */
 {
+#if defined(APP_BT_RECEIVER) && defined(APP_BT_RESAMPLE_CPU2)
+    /* Long page clears/repaints must keep feeding CPU1. This media-only pump
+     * cannot redraw, free the canvas/graph, or process connection changes. */
+    plat_bt_receiver_service();
+#endif
 #if FM1B_SD
     sd_lcd();
 #endif

@@ -37,3 +37,5 @@
   filter derivation ([technical papers](https://cytomic.com/technical-papers/)),
   used by Audio Router's original master EQ implementation. Responses are
   independently checked against the W3C Audio EQ Cookbook formulas.
+
+aptX and aptX HD decoding uses [libfreeaptx](https://github.com/regularhunter/libfreeaptx), by Aurelien Jacobs, Pali Rohár and Hunter Wardlaw (LGPL-2.1-or-later). See `src/bt/br/aptx_dec/README.md`.

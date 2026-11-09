@@ -15,23 +15,18 @@ static uint32_t hash_area(unsigned x,unsigned y,unsigned w,unsigned h)
 static void settings(void)
 {
     gateway_settings_t s;now_ms=100;app_init();app_ui_init();app_loop();
-    tap(B_EDIT);turn(EN_SELECT,1);assert(gateway_settings_row==1);
-    turn(EN_ALGO,1);assert(gateway_codec_draft==1 && gateway_codec_preference==0 && !btr_codec_preference);
-    now_ms+=1000;app_loop();assert(!store_writes); /* draft stays volatile */
-    store_fail=1;tap(B_SAVE);assert(gateway_save_notice==2 && !btr_codec_preference);
-    store_fail=0;tap(B_SAVE);assert(gateway_save_notice==1 && btr_codec_preference==1);
-    assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==sizeof s && s.version==14 && s.bt_reserved[0]==1);
-    turn(EN_ALGO,1);assert(!gateway_save_notice && gateway_codec_draft==2);
-    tap(B_HOME);tap(B_EDIT);assert(gateway_codec_draft==1); /* discard uncommitted draft */
-    turn(EN_ALGO,1);tap(B_SAVE);assert(btr_codec_preference==2);
+    tap(B_EDIT);turn(EN_SELECT,1);tap(B_SEL);tap(B_SEL); /* SBC off, AAC only */
+    assert(gateway_codec_draft==2 && gateway_codec_preference==3 && btr_codec_mask==3);
+    store_fail=1;tap(B_SAVE);assert(gateway_save_notice==2 && btr_codec_mask==3 && gateway_codec_dialog);
+    store_fail=0;tap(B_SAVE);assert(gateway_save_notice==1 && btr_codec_mask==2 && !gateway_codec_dialog);
+    assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==sizeof s && s.version==16 && s.bt_reserved[0]==2);
     app_init();app_ui_init();assert(gateway_codec_preference==2);
-    /* v4 records migrate without reinterpreting reserved data. */
-    s=gateway_settings();s.version=4;s.spectrum_range=3;s.reserved=s.spectrum_reserved=0;memset(s.bt_reserved,0,3);s.zoom=9;
+    s=gateway_settings();s.version=4;s.bt_reserved[0]=0;s.spectrum_range=3;s.reserved=s.spectrum_reserved=0;memset(s.bt_reserved,0,3);s.zoom=9;
     plat_store_save(OBJ_SETTINGS,&s,16);app_init();app_ui_init();
-    assert(gateway_zoom==9 && !gateway_monitor && !gateway_codec_preference);
-    s=gateway_settings();s.bt_reserved[0]=3;plat_store_save(OBJ_SETTINGS,&s,sizeof s);app_init();app_ui_init();
-    assert(gateway_zoom==6 && !gateway_codec_preference);
-    puts("PASS: AUTO/AAC/SBC draft/save/failure/discard/restore, v4 migration and invalid v6 defaults");
+    assert(gateway_zoom==9 && !gateway_monitor && gateway_codec_preference==3);
+    s=gateway_settings();s.bt_reserved[0]=0;plat_store_save(OBJ_SETTINGS,&s,sizeof s);app_init();app_ui_init();
+    assert(gateway_zoom==6 && gateway_codec_preference==3);
+    puts("PASS: codec mask draft/save/failure/restore, v4 migration and invalid-mask defaults");
 }
 static void capture_sources(void)
 {
@@ -67,7 +62,7 @@ static void capture_sources(void)
     uint32_t header=hash_area(0,0,240,22);gateway_draw_meter(1);assert(header==hash_area(0,0,240,22));
     tap(B_PLAY);app_loop();app_frame();
     assert(usb_hash==hash_area(26,44,34,165) && bt_hash==hash_area(80,44,34,165));
-    assert(master_hash!=hash_area(188,44,34,165)); /* only MASTER grays */
+    assert(master_hash==hash_area(188,44,34,165)); /* muted meters gray only on Mixer */
     turn(EN_SELECT,-1);assert(gateway_monitor==PLAT_MONITOR_MASTER);
     app_loop();app_frame(); /* SELECT is inactive on meters. */
     tap(B_EDIT);at=usb_wave_count;

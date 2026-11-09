@@ -8,6 +8,7 @@ static int own_bt_trims(struct ble_rf_trims *t) {*t=OWN_TRIMS;fm1_rf_cal_on=1;re
 #define BTI_RADIO_TRIMS own_bt_trims
 #include "bt_inq.c"
 #pragma pop_macro("FELUCCA_CDC")
+#include "../bt/br/bt_receiver_ui.h"
 static void own_bta_load(void)
 {
     memcpy(bta.own,own.bta_own,6);bta.own_set=own.bta_own_set;
@@ -25,6 +26,9 @@ static void own_bta_poll(void) {
 #endif
 #ifdef APP_BT_SBC_CPU2
     btr_sbc_poll();
+#endif
+#ifdef APP_BT_APTX
+    btr_aptx_poll();
 #endif
 #ifdef APP_BT_AAC
     btr_aac_poll();
@@ -52,7 +56,8 @@ int plat_bt_receiver_codec(void)
 {
     if(!plat_bt_receiver_connected() || brc.profile.state==BTR_IDLE)return PLAT_BT_CODEC_NONE;
     return brc.profile.codec==BTR_CODEC_SBC?PLAT_BT_CODEC_SBC:
-        brc.profile.codec==BTR_CODEC_AAC?PLAT_BT_CODEC_AAC:PLAT_BT_CODEC_NONE;
+        brc.profile.codec==BTR_CODEC_AAC?PLAT_BT_CODEC_AAC:
+        brc.profile.codec==BTR_CODEC_APTX?PLAT_BT_CODEC_APTX:brc.profile.codec==BTR_CODEC_APTX_HD?PLAT_BT_CODEC_APTX_HD:PLAT_BT_CODEC_NONE;
 }
 void plat_bt_receiver_mix(int32_t *lr,uint32_t n,uint32_t gain) {if(brl.on)btr_pcm_mix(lr,n,gain);}
 static int own_bta_feed(const int32_t *o,uint32_t n) {(void)o;(void)n;return 0;}
@@ -64,7 +69,11 @@ uint32_t plat_bta_job_inline(void) {return 0;}
 
 void plat_bt_receiver_preference(int preference)
 {
-    if(preference<0 || preference>2 || btr_codec_preference==preference)return;
-    btr_codec_preference=(uint8_t)preference;
+    if(preference>=0 && preference<=2)plat_bt_receiver_codecs(preference==1?2:preference==2?1:3);
+}
+void plat_bt_receiver_codecs(unsigned mask)
+{
+    if(!mask || mask>15 || btr_codec_mask==mask)return;
+    btr_codec_mask=(uint8_t)mask;
     if(brl.on && brl.phase>=BR_CONNECTING)br_drop(1,BR_FAIL_USER,0);
 }

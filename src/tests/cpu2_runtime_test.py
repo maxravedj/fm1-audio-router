@@ -9,9 +9,11 @@ p=argparse.ArgumentParser();p.add_argument('build',type=Path);a=p.parse_args();o
 elf=out/'fm1audio.elf';dis=(out/'fm1audio.dis').read_text()
 syms=subprocess.check_output([str(root/'tools/jieli-open/common/bin/objdump'),'-t',str(elf)],text=True)
 sym=lambda name:ramcode.symbol(syms,name)
-for fn in ('fm1_cpu1_entry','fm1_cpu1_main','cpu2_job','btr_aac_job','btr_sbc_job','btr_resample_job','OI_CODEC_SBC_DecodeFrame','aac_dec_decode','fx_process','fx_detector_reset'):
+for fn in ('fm1_cpu1_entry','fm1_cpu1_main','cpu2_job','btr_aac_job','btr_sbc_job','btr_resample_job','btr_aptx_job','aptx_decode_sync','aptx_mul32','aptx_dot2','btr_fir24','aptx_fir24_half','fm1_aptx_fir24_span','OI_CODEC_SBC_DecodeFrame','aac_dec_decode','fx_process','fx_detector_reset'):
  assert sym('_rt_start')<=sym(fn)<sym('_rt_end'),fn
+assert not any(line.rstrip().endswith(' '+fn) for line in syms.splitlines() for fn in ('aptx_encode','aptx_encode_finish','aptx_init','aptx_finish')), 'target must not link encoder/heap entry points'
 assert sym('_sram_start')<=sym('fx_ceiling_q23')<sym('_sram_end')
+assert sym('btr_pcm')%4==0,'packed stereo high words require word alignment'
 assert 0x02000120<=sym('fm1_ram_prestart')<sym('_etext')<=0x02000220
 assert dis.index('<fm1_ram_prestart :')<dis.index('<_rt_load :')
 bootstrap=dis.split('fm1_ram_prestart:\n',1)[1].split('\n\n',1)[0]
@@ -26,6 +28,29 @@ for name,limit in (('_start',8192),('fm1_cpu1_main',6144-256)):
 assert stack_depth.need(r['irq_total'])<=7936
 assert not r['notes']['var'] and not r['notes']['unknown'] and not stack_depth.STRADDLE
 assert not r['notes']['recursion'];assert set(r['notes']['indirect, all taken'])<={'_start'}
+import importlib.util
+spec=importlib.util.spec_from_file_location('gateway_build',src/'tools/build.py');build=importlib.util.module_from_spec(spec);spec.loader.exec_module(build)
+assert not any('aptx' in fn for fn in build.mul64_near_loads(dis)), 'aptX multiply/load erratum'
+fir_body=dis.split('fm1_aptx_fir24_span:\n',1)[1].split('\n\n',1)[0]
+fir_ins=[(int(m[1],16),m[2]) for line in fir_body.splitlines()
+         if (m:=re.match(r'\s*([0-9a-f]+):\s+(?:[0-9a-f]{2} )+\s*(.*)',line))]
+tap_loops=[]
+for addr,op in fir_ins:
+ if (branch:=re.search(r'goto -\d+ <[^>]+ : ([0-9a-f]+) >',op)):
+  body=[ins for pc,ins in fir_ins if int(branch[1],16)<=pc<=addr]
+  if sum('*|*' in ins for ins in body)==2 and not any('goto -' in ins for ins in body[:-1]):tap_loops.append(body)
+assert tap_loops,'24-bit FIR tap loop missing'
+tap_loop=min(tap_loops,key=len)
+assert len(tap_loop)<=17,'24-bit FIR stereo lane loop regressed'
+assert not any('[sp' in ins or 'call ' in ins for ins in tap_loop),'24-bit FIR per-tap stack traffic/call'
+print('PASS: 24-bit FIR loop',len(tap_loop),'instructions per stereo tap, no per-tap stack traffic or calls')
+dot=dis.split('aptx_dot2:\n',1)[1].split('\n\n',1)[0]
+assert len(re.findall(r'r\d+_r\d+ = r\d+ \* r\d+',dot))==2
+assert not re.search(r'\br\d+ = [hb]?\[|\bcall\b',dot),'paired multiplier must consume only register arguments'
+assert '[sp' not in dot and '[--sp' not in dot,'paired multiplier must not spill'
+sys.path.insert(0,str(src/'tests'))
+from bt_aptx_native import check_native
+check_native(dis,src/'bt/br/bt_receiver_fir.h')
 print('IRQ',r['irq_total'],'bytes; assembly _start indirect calls conservatively include all taken targets')
 sizes=json.loads((out/'sizes.json').read_text());free=sym('_sram_end')-sym('_sram_start')-sum(sizes[k] for k in ('ram','pool','ramtext'))
 ir=(out/'unity.opt.ll').read_text()
@@ -36,6 +61,12 @@ sbc_alloc=re.search(r'@plat_work_alloc_top\(i32(?: \w+)* (\d+)\)',ir)
 assert sbc_alloc,'SBC high-end allocation must be identifiable in target IR'
 sbc_context=int(sbc_alloc[1]);assert 4248<=sbc_context<=4280
 sbc=(sbc_context+7)&~7
+aptx_ir=next(q.read_text() for q in out.rglob('*.opt.ll') if re.search(r'define[^\n]*@aptx_context_size',q.read_text()))
+aptx_context=int(re.search(r'define[^\n]*@aptx_context_size[^}]+ret i32 (\d+)',aptx_ir)[1])
+aptx_alloc=re.search(r'@aptx_context_size\(\)[^\n]*\n[^\n]*add i32 [^,]+, (\d+)',ir)
+assert aptx_alloc
+aptx=(aptx_context+int(aptx_alloc[1])+7)&~7
+# This includes compressed queue, low-byte PCM, decoder state and alignment.
 # FIR/output preparation has no path from the CPU0 mixer. Only a nonblocking
 # mailbox kick crosses that boundary; the audio IRQ cannot join the worker.
 functions=stack_depth.parse(dis);seen=set();todo=['btr_pcm_mix','btr_decode_poll_irq']
@@ -43,7 +74,8 @@ while todo:
  fn=todo.pop()
  if fn in seen or fn not in functions:continue
  seen.add(fn);todo.extend(c[0] for c in functions[fn]['calls'])
-assert not seen.intersection({'btr_resample_fill','btr_aac_job','btr_sbc_job','plat_cpu2_wait','fm1_cpu1_wait','plat_work_alloc','plat_work_alloc_top','plat_work_free','aac_dec_decode','OI_CODEC_SBC_DecodeFrame'}),seen
+assert not seen.intersection({'btr_resample_fill','btr_fir24','aptx_fir24_half','fm1_aptx_fir24_span','btr_aac_job','btr_sbc_job','plat_cpu2_wait','fm1_cpu1_wait','plat_work_alloc','plat_work_alloc_top','plat_work_free','aac_dec_decode','OI_CODEC_SBC_DecodeFrame','btr_aptx_job','aptx_decode_sync'}),seen
+assert 'plat_bt_receiver_service' not in seen,'UI RX service must remain foreground-only'
 print('PASS: linked CPU0 audio/tick decode pump has no FIR/decoder/wait/allocator call path')
 fx_seen=set();fx_todo=['fx_process']
 while fx_todo:
@@ -59,6 +91,7 @@ fx_line=next(x for x in syms.splitlines() if x.rstrip().endswith(' gateway_fx'))
 fx_bytes=int(fx_line.split()[-2],16)
 record=(2048+fx_bytes+7)&~7
 assert free-8192>=98304+record+sbc and free-8192>=aac+record
+assert free-8192>=98304+record+aptx
 loop=dis.split('fm1_cpu1_main:\n',1)[1].split('\n\n',1)[0]
 if 'ui_profile_idle_spins' in loop:
  assert re.search(r'@ui_profile_idle_spins = .*global i32 64,',ir)
@@ -74,6 +107,7 @@ if 'ui_profile_idle_spins' in loop:
 else:
  assert re.search(r'0x40|64',loop),'idle backoff must survive target optimization'
 report={'ram_free':free,'aac_context_bytes':context,'aac_workspace_bytes':48768,'aac_dynamic_bytes':aac,
+ 'aptx_context_bytes':aptx_context,'aptx_dynamic_bytes':aptx,'usb_record_aptx_spectrum_margin':free-8192-98304-record-aptx,
  'sbc_dynamic_bytes':sbc,'sbc_context_bytes':sbc_context,'fx_engine_bytes':fx_bytes,'usb_record_max_workspace_bytes':record,
  'usb_record_spectrum_margin':free-8192-98304-record-sbc,'usb_record_aac_margin':free-8192-aac-record,
  'cpu0_main_stack_bytes':8192,'cpu1_job_stack_bytes':6144,'cpu0_static_stack_depth':r['main'][0],

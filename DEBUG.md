@@ -45,12 +45,18 @@ python src/tools/fm1_remote.py log > bluetooth-log.txt
 python src/tools/fm1_remote.py crashes --elf build/gateway/fm1audio.elf
 ```
 
-Report source OS, SBC/AAC selection, whether FM-1 or the source initiated the
+Report source OS, selected codec, whether FM-1 or the source initiated the
 connection, manual disconnect versus range loss, and whether power cycling
 changes it. Authentication/encryption, profile/AVDTP/config, codec/audio/queue
 rows distinguish a paired link from an actual audio stream. A radio skipped
 after a crash is intentional protection; collect logs, then Settings SAVE can
-explicitly retry Bluetooth RECEIVER.
+explicitly retry Bluetooth ON.
+
+During aptX/aptX HD playback, `BT aptX us` reports average/max decode-job time
+and job count (at most 256 PCM frames per job); `BT FIR us` reports average/max time for a 256-frame resampler
+block and block count. Times are CPU1 wall microseconds. `BT queue` lists
+underruns, PCM overruns and compressed packet gaps/drops. Capture these rows
+while the problem is happening; disconnecting releases codec timing data.
 
 ## Screenshots
 

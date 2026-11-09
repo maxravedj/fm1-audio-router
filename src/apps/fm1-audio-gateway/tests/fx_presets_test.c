@@ -10,7 +10,8 @@ static void save(void){unsigned writes=store_writes;tap(B_SAVE);assert(gateway_f
 static void hold_save(void){held_btn=1u<<B_SAVE;app_input_only();now_ms+=999;app_input_only();assert(!gateway_fx_dialog);now_ms++;app_input_only();assert(gateway_fx_dialog==2);held_btn=0;app_input_only();}
 static void reboot(void){held_btn=0;app_init();app_ui_init();tap(B_FX);assert(gateway_screen==GATEWAY_FX && !gateway_fx_limiter);}
 static void title(void){
- assert(!!(dim_btn&(1u<<B_SAVE))==gateway_fx_preset_dirty(gateway_fx_limiter));
+ assert(!!(lights_b&(1u<<B_SAVE))==gateway_fx_preset_dirty(gateway_fx_limiter));
+ assert(!(dim_btn&(1u<<B_SAVE)));
  app_loop();const char *t=gateway_fx_limiter?"FX: PEAK LIMITER":"FX: EQUALIZER";char label[40];
  gateway_fx_format(label,"Preset ",gateway_fx_selected[gateway_fx_limiter]+1,0,"");
  static uint16_t actual[240*16];memcpy(actual,fb+18*240,sizeof actual);

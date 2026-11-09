@@ -76,6 +76,8 @@ def main():
             ('bsp/NOTICE', 'BSP-NOTICE.txt'),
             ('bsp/LICENSING.md', 'BSP-LICENSING.md'),
             ('bt/br/aac_dec/pvaac/NOTICE', 'AAC-NOTICE.txt'),
+            ('bt/br/aptx_dec/COPYING', 'LGPL-2.1.txt'),
+            ('bt/br/aptx_dec/README.md', 'APTX-NOTICE.md'),
             ('boot/m-bootloader/LICENSE', 'MBOOT-LICENSE.txt'),
             ('boot/m-bootloader/NOTICE.md', 'MBOOT-NOTICE.md'),
         ):

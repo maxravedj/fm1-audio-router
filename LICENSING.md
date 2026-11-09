@@ -63,6 +63,7 @@ own headers:
 | The radio's calibration at every start: JieLi's SDK calibration (`wl_rf_common.a`, Copyright (c) 2024-2026 Zhuhai Jieli Technology Co., Ltd.) rewritten in C by Charles Vestal; the header states the changes | Apache-2.0 | `bsp/chip/fm1_rf_cal.h` (`bsp/NOTICE`; how it works: `docs/bt/RF-CALIBRATION.md`) |
 | Register writes recorded in an emulator from stock V15 and the SDK's `demo_ble` (the same JieLi and M-VAVE sources as the tables above), for reference | Apache-2.0 | `docs/bt/ble-traces/` |
 | The Bluetooth Core Specification's sample data, for the tests | the specification's | `tests/bt/bt_crypto_vectors.h` |
+| libfreeaptx by Aurelien Jacobs, Pali Rohár and Hunter Wardlaw; pinned source, caller-owned storage and pi32v2 multiply fixes documented in its README | LGPL-2.1-or-later (`bt/br/aptx_dec/COPYING`) | `src/bt/br/aptx_dec/`; matching complete sources/build scripts permit modification and relinking |
 
 A firmware built with the own stack carries Apache-2.0 and BSD-2-Clause code: ship `LICENSES/Apache-2.0.txt` and
 `LICENSES/BSD-2-Clause-micro-ecc.txt` with it (BSD-2-Clause asks for its notice in the documentation of a binary).
