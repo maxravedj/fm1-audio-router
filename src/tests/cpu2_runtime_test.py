@@ -9,7 +9,7 @@ p=argparse.ArgumentParser();p.add_argument('build',type=Path);a=p.parse_args();o
 elf=out/'fm1audio.elf';dis=(out/'fm1audio.dis').read_text()
 syms=subprocess.check_output([str(root/'tools/jieli-open/common/bin/objdump'),'-t',str(elf)],text=True)
 sym=lambda name:ramcode.symbol(syms,name)
-for fn in ('fm1_cpu1_entry','fm1_cpu1_main','cpu2_job','btr_aac_job','btr_sbc_job','btr_resample_job','btr_aptx_job','aptx_decode_sync','aptx_mul32','aptx_dot2','btr_fir24','aptx_fir24_half','fm1_aptx_fir24_span','OI_CODEC_SBC_DecodeFrame','aac_dec_decode','fx_process','fx_detector_reset'):
+for fn in ('fm1_cpu1_entry','fm1_cpu1_main','cpu2_job','btr_aac_job','btr_sbc_job','btr_resample_job','btr_aptx_job','btr_ldac_job','fm1_ldac_dec_frame','fm1_ldac_dec_check','aptx_decode_sync','aptx_mul32','aptx_dot2','btr_fir24','aptx_fir24_half','fm1_aptx_fir24_span','OI_CODEC_SBC_DecodeFrame','aac_dec_decode','fx_process','fx_detector_reset'):
  assert sym('_rt_start')<=sym(fn)<sym('_rt_end'),fn
 assert not any(line.rstrip().endswith(' '+fn) for line in syms.splitlines() for fn in ('aptx_encode','aptx_encode_finish','aptx_init','aptx_finish')), 'target must not link encoder/heap entry points'
 assert sym('_sram_start')<=sym('fx_ceiling_q23')<sym('_sram_end')
@@ -31,6 +31,7 @@ assert not r['notes']['recursion'];assert set(r['notes']['indirect, all taken'])
 import importlib.util
 spec=importlib.util.spec_from_file_location('gateway_build',src/'tools/build.py');build=importlib.util.module_from_spec(spec);spec.loader.exec_module(build)
 assert not any('aptx' in fn for fn in build.mul64_near_loads(dis)), 'aptX multiply/load erratum'
+assert not any('ldac' in fn for fn in build.mul64_near_loads(dis)), 'LDAC multiply/load erratum'
 fir_body=dis.split('fm1_aptx_fir24_span:\n',1)[1].split('\n\n',1)[0]
 fir_ins=[(int(m[1],16),m[2]) for line in fir_body.splitlines()
          if (m:=re.match(r'\s*([0-9a-f]+):\s+(?:[0-9a-f]{2} )+\s*(.*)',line))]
@@ -51,6 +52,8 @@ assert '[sp' not in dot and '[--sp' not in dot,'paired multiplier must not spill
 sys.path.insert(0,str(src/'tests'))
 from bt_aptx_native import check_native
 check_native(dis,src/'bt/br/bt_receiver_fir.h')
+from bt_ldac_native import check_native as check_ldac_native
+check_ldac_native(dis)
 print('IRQ',r['irq_total'],'bytes; assembly _start indirect calls conservatively include all taken targets')
 sizes=json.loads((out/'sizes.json').read_text());free=sym('_sram_end')-sym('_sram_start')-sum(sizes[k] for k in ('ram','pool','ramtext'))
 ir=(out/'unity.opt.ll').read_text()
@@ -66,6 +69,17 @@ aptx_context=int(re.search(r'define[^\n]*@aptx_context_size[^}]+ret i32 (\d+)',a
 aptx_alloc=re.search(r'@aptx_context_size\(\)[^\n]*\n[^\n]*add i32 [^,]+, (\d+)',ir)
 assert aptx_alloc
 aptx=(aptx_context+int(aptx_alloc[1])+7)&~7
+ldac_ir=next(q.read_text() for q in out.rglob('*.opt.ll') if re.search(r'define[^\n]*@fm1_ldac_dec_size',q.read_text()))
+ldac_workspace=int(re.search(r'define[^\n]*@fm1_ldac_dec_size[^}]+ret i32 (\d+)',ldac_ir)[1])
+ldac_alloc=re.search(r'@fm1_ldac_dec_size\(\)[^\n]*\n[^\n]*add i32 [^,]+, (\d+)',ir)
+assert ldac_alloc,'LDAC high-end allocation must be identifiable in target IR'
+ldac=(ldac_workspace+int(ldac_alloc[1])+7)&~7
+# Verify both graph operands against the actual target allocation IR. Capture
+# keeps two full FFT windows; PCM expands backwards into its FFT workspace.
+graph_ir=re.search(r'define[^\n]*@gateway_acquire_display\([^}]+}',ir)[0]
+assert '[ 40968,' in graph_ir and '[ 32768,' in graph_ir
+assert '[ 3656,' in graph_ir and '[ 57344,' in graph_ir
+graph=40968+32768;wave=3656+57344
 # This includes compressed queue, low-byte PCM, decoder state and alignment.
 # FIR/output preparation has no path from the CPU0 mixer. Only a nonblocking
 # mailbox kick crosses that boundary; the audio IRQ cannot join the worker.
@@ -74,7 +88,7 @@ while todo:
  fn=todo.pop()
  if fn in seen or fn not in functions:continue
  seen.add(fn);todo.extend(c[0] for c in functions[fn]['calls'])
-assert not seen.intersection({'btr_resample_fill','btr_fir24','aptx_fir24_half','fm1_aptx_fir24_span','btr_aac_job','btr_sbc_job','plat_cpu2_wait','fm1_cpu1_wait','plat_work_alloc','plat_work_alloc_top','plat_work_free','aac_dec_decode','OI_CODEC_SBC_DecodeFrame','btr_aptx_job','aptx_decode_sync'}),seen
+assert not seen.intersection({'btr_resample_fill','btr_fir24','aptx_fir24_half','fm1_aptx_fir24_span','btr_aac_job','btr_sbc_job','plat_cpu2_wait','fm1_cpu1_wait','plat_work_alloc','plat_work_alloc_top','plat_work_free','aac_dec_decode','OI_CODEC_SBC_DecodeFrame','btr_aptx_job','aptx_decode_sync','btr_ldac_job','fm1_ldac_dec_frame','fm1_ldac_dec_check','fm1_ldac_dec_init','fm1_ldac_dec_reset','fm1_ldac_dec_destroy'}),seen
 assert 'plat_bt_receiver_service' not in seen,'UI RX service must remain foreground-only'
 print('PASS: linked CPU0 audio/tick decode pump has no FIR/decoder/wait/allocator call path')
 fx_seen=set();fx_todo=['fx_process']
@@ -90,8 +104,9 @@ for name,size in [('btr_pcm',8192),('btr_output',16384),('st_buf',256),('gateway
 fx_line=next(x for x in syms.splitlines() if x.rstrip().endswith(' gateway_fx'))
 fx_bytes=int(fx_line.split()[-2],16)
 record=(2048+fx_bytes+7)&~7
-assert free-8192>=98304+record+sbc and free-8192>=aac+record
-assert free-8192>=98304+record+aptx
+assert free-8192>=graph+record+sbc and free-8192>=aac+record
+assert free-8192>=graph+record+aptx
+assert free-8192>=ldac+record
 loop=dis.split('fm1_cpu1_main:\n',1)[1].split('\n\n',1)[0]
 if 'ui_profile_idle_spins' in loop:
  assert re.search(r'@ui_profile_idle_spins = .*global i32 64,',ir)
@@ -107,9 +122,12 @@ if 'ui_profile_idle_spins' in loop:
 else:
  assert re.search(r'0x40|64',loop),'idle backoff must survive target optimization'
 report={'ram_free':free,'aac_context_bytes':context,'aac_workspace_bytes':48768,'aac_dynamic_bytes':aac,
- 'aptx_context_bytes':aptx_context,'aptx_dynamic_bytes':aptx,'usb_record_aptx_spectrum_margin':free-8192-98304-record-aptx,
+ 'aptx_context_bytes':aptx_context,'aptx_dynamic_bytes':aptx,'usb_record_aptx_spectrum_margin':free-8192-graph-record-aptx,
+ 'spectrum_workspace_bytes':graph,'waveform_workspace_bytes':wave,'ldac_workspace_bytes':ldac_workspace,'ldac_dynamic_bytes':ldac,
+ 'usb_record_ldac_margin':free-8192-ldac-record,'usb_record_ldac_waveform_margin':free-8192-ldac-record-wave,
+ 'usb_record_ldac_spectrum_margin':free-8192-ldac-record-graph,
  'sbc_dynamic_bytes':sbc,'sbc_context_bytes':sbc_context,'fx_engine_bytes':fx_bytes,'usb_record_max_workspace_bytes':record,
- 'usb_record_spectrum_margin':free-8192-98304-record-sbc,'usb_record_aac_margin':free-8192-aac-record,
+ 'usb_record_spectrum_margin':free-8192-graph-record-sbc,'usb_record_aac_margin':free-8192-aac-record,
  'cpu0_main_stack_bytes':8192,'cpu1_job_stack_bytes':6144,'cpu0_static_stack_depth':r['main'][0],
  'cpu1_static_stack_depth':r['depth']('fm1_cpu1_main')[0],'irq_static_stack_depth':r['irq_total']}
 (out/'cpu2-budget.json').write_text(json.dumps(report,indent=2)+'\n')

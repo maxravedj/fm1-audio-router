@@ -16,13 +16,14 @@ static uint8_t gateway_fx_tracking,gateway_fx_held;
 static uint32_t gateway_fx_press_ms;
 static void gateway_lights(void);
 static void *gateway_display_block;
-static uint8_t gateway_aac_active;
+static uint8_t gateway_aac_active,gateway_ldac_active;
+static uint8_t gateway_graph_mask=3;
 static uint8_t gateway_display_kind; /* 0 none, 1 waveform, 2 spectrum */
 static uint8_t gateway_codec_preference, gateway_codec_draft, gateway_monitor;
 static const char *const gateway_sources[]={"USB IN","BT IN","MASTER","USB OUT"};
 /* Stable stored IDs; visual order is independent of their numeric values. */
 static const uint8_t gateway_source_order[]={PLAT_MONITOR_USB,PLAT_MONITOR_BT,PLAT_MONITOR_OUT,PLAT_MONITOR_MASTER};
-static const char *const gateway_codecs[]={"SBC","AAC","aptX","aptX HD"};
+static const char *const gateway_codecs[]={"SBC","AAC","aptX","aptX HD","LDAC"};
 static uint8_t gateway_codec_dialog,gateway_codec_row,gateway_codec_empty,gateway_codec_checks;
 enum { GATEWAY_SET_BT, GATEWAY_SET_CODEC, GATEWAY_SET_AUTO_SCALE, GATEWAY_SET_COLOR, GATEWAY_SET_SPECTRUM_COLOR, GATEWAY_SET_BATTERY, GATEWAY_SET_CPU, GATEWAY_SET_USB_OUT, GATEWAY_SET_FADE, GATEWAY_SETTING_ROWS };
 enum { GATEWAY_WAVE_RED, GATEWAY_WAVE_GREEN, GATEWAY_WAVE_BLUE, GATEWAY_WAVE_YELLOW,
@@ -44,6 +45,7 @@ static uint32_t gateway_oct_ms;
 static uint32_t gateway_bar_key=~0u;
 static uint8_t gateway_settings_row,gateway_settings_first;
 static void gateway_settings_draw(void);
+static void gateway_peak_label(char label[8],uint32_t peak);
 #include "fx/master_fx.h"
 #include "gain.h"
 static void gateway_usb_out_publish(const fx_bank_t *b);
@@ -59,7 +61,7 @@ static int gateway_has_meters(void)
 {
     return gateway_screen == GATEWAY_MAIN || gateway_screen==GATEWAY_MIXER;
 }
-static int gateway_wide_meters(void){return gateway_aac_active || gateway_mode==GATEWAY_MODE_METERS;}
+static int gateway_wide_meters(void){return gateway_aac_active || gateway_mode==GATEWAY_MODE_METERS || (gateway_ldac_active && !gateway_display_kind);}
 static int gateway_has_spectrum(void)
 {
     return gateway_screen == GATEWAY_MAIN && gateway_mode == GATEWAY_MODE_SPECTRUM && gateway_display_kind == 2;
@@ -67,6 +69,7 @@ static int gateway_has_spectrum(void)
 static uint32_t gateway_buttons, gateway_cpu_ms, gateway_cpu_drawn;
 static char gateway_message[2][24];
 static gateway_meter_t gateway_meter[8]; /* USB/selected, MASTER, BT, OUT stereo pairs */
+static uint8_t gateway_meter_layout_wide,gateway_visible_wide;
 static uint32_t gateway_meter_drawn[8];
 static uint32_t gateway_peak_drawn[4];
 static uint8_t gateway_meter_chrome_redraw;
@@ -109,7 +112,7 @@ static uint32_t gateway_settings_ms, gateway_settings_retry_ms;
 
 static gateway_settings_t gateway_settings(void)
 {
-    gateway_settings_t s = {{'A', 'R', 'T'}, 16, (uint8_t)gateway_zoom, gateway_muted, gateway_mode, gateway_battery_mode | (!gateway_cpu_mode<<1) | (gateway_usb_out_mode<<2),
+    gateway_settings_t s = {{'A', 'R', 'T'}, 17, (uint8_t)gateway_zoom, gateway_muted, gateway_mode, gateway_battery_mode | (!gateway_cpu_mode<<1) | (gateway_usb_out_mode<<2),
         gateway_spectrum_rate, gateway_spectrum_max, gateway_spectrum_min, gateway_spectrum_color, gateway_bt_mode,
         {gateway_codec_preference,gateway_monitor,gateway_master_wave_auto_scale | gateway_wave_color<<1},
         {gateway_mix_db[0],gateway_mix_db[1],gateway_mix_db[2]},gateway_mix_mutes | gateway_mix_solos<<3,gateway_fade_time};
@@ -209,14 +212,20 @@ static void gateway_acquire_display(void)
     uint32_t ui_bytes = 0, capture_bytes = 0;
     if(gateway_display_block)gateway_release_display();
     gateway_display_retry_ms=plat_ms();
-    if (gateway_screen != GATEWAY_MAIN || gateway_aac_active) return;
+    if (gateway_screen != GATEWAY_MAIN) return;
     if (gateway_mode == GATEWAY_MODE_FULL) {
+        if(!(gateway_graph_mask&1u))return;
         ui_bytes = (sizeof(gateway_wave_buffers_t) + 7u) & ~7u;
         capture_bytes = plat_usb_wave_mem_bytes();
     } else if (gateway_mode == GATEWAY_MODE_SPECTRUM) {
+        if(!(gateway_graph_mask&2u))return;
         ui_bytes = sizeof(gateway_spectrum_buffers_t);
         capture_bytes = plat_usb_spectrum_mem_bytes();
     } else return;
+    /* Keep recording capacity even with the larger LDAC decoder. If this
+     * view cannot coexist, leave all meters/footer alive and retry later. */
+    if(plat_bt_receiver_codec()==PLAT_BT_CODEC_LDAC && !gateway_usb_pcm &&
+       ui_bytes+capture_bytes+gateway_usb_out_bytes(GATEWAY_USB_BT_FX)>plat_work_available())return;
     gateway_display_block = plat_work_alloc(ui_bytes + capture_bytes);
     if (!gateway_display_block) return;
     if (gateway_mode == GATEWAY_MODE_FULL) {
@@ -232,8 +241,15 @@ static void gateway_acquire_display(void)
 }
 
 #include "profile.h"
-static void gateway_view_changed(void)
+static void gateway_update_view(int preserve_meters)
 {
+    /* Codec workspace changes have no body to rebuild on nongraph pages.
+     * Keep telemetry, cached bars/labels, dialogs and pending edits intact;
+     * the independently cached status bar reflects any connection change. */
+    if(preserve_meters && (gateway_screen!=GATEWAY_MAIN || gateway_mode==GATEWAY_MODE_METERS)){
+        gateway_bt_badge_redraw=1;
+        return;
+    }
     gateway_screenshot_cancel();
     if(gateway_screen!=GATEWAY_FX)gateway_fx_dialog=0;
     gateway_fx_save_tracking=gateway_fx_save_held=0;
@@ -241,7 +257,14 @@ static void gateway_view_changed(void)
     plat_profile_stop(); /* never mix view/source lifetimes in one measurement */
 #endif
     uint32_t i, now = plat_ms();
+    int was_wide=gateway_meter_layout_wide;
     gateway_acquire_display();
+    /* A graph that still cannot allocate already shows full meters. Failed
+     * reservations must not blank/repaint those same meters with blits. */
+    if(preserve_meters && was_wide && gateway_wide_meters()){
+        gateway_bt_badge_redraw=1;
+        return;
+    }
     gateway_fx_view();gateway_mixer_redraw=1;
     gateway_mixer_observe(gateway_screen==GATEWAY_MIXER);
     gateway_out_observe(gateway_screen!=GATEWAY_MIXER && gateway_has_meters() && (gateway_wide_meters() || gateway_monitor==PLAT_MONITOR_OUT));
@@ -251,24 +274,46 @@ static void gateway_view_changed(void)
     plat_usb_spectrum_enable(gateway_has_spectrum());
     gateway_spectrum_reset(now);
     gateway_bt_badge_redraw = 1;
-    gateway_bar_key=~0u;gateway_page_clear = 1;
+    gateway_bar_key=~0u;
+    int wide=gateway_wide_meters();
+    if(!preserve_meters)gateway_page_clear=1;
     gateway_page_redraw = gateway_redraw = gateway_meter_chrome_redraw = 1;
     if (gateway_has_wave()) gateway_plot_valid[0] = gateway_plot_valid[1] = 0;
-    for (i = 0; i < 8u; i++) gateway_meter[i] = (gateway_meter_t){0};
+    if(!preserve_meters){
+        for (i = 0; i < 8u; i++) gateway_meter[i] = (gateway_meter_t){0};
+        gateway_meter_ms=now;
+    }else if(was_wide!=wide && gateway_screen==GATEWAY_MAIN){
+        /* Scratch availability can change the visible layout, but not the
+         * monitored signal. Carry its ballistics to the matching stereo pair
+         * instead of clearing a held quiet peak or showing another source. */
+        unsigned pair=gateway_monitor==PLAT_MONITOR_BT?4:gateway_monitor==PLAT_MONITOR_MASTER?2:
+            gateway_monitor==PLAT_MONITOR_OUT?6:0;
+        unsigned from=was_wide?pair:0,to=wide?pair:0;
+        gateway_meter_t left=gateway_meter[from],right=gateway_meter[from+1];
+        for(i=0;i<8u;i++)gateway_meter[i]=(gateway_meter_t){0};
+        gateway_meter[to]=left;gateway_meter[to+1]=right;
+    }
+    gateway_meter_layout_wide=(uint8_t)wide;
     gateway_wave_ms = now - GATEWAY_WAVE_INTERVAL;
     gateway_wave_scale=32768u;gateway_wave_auto_seen=0;
-    gateway_wave_seen_ms = gateway_meter_ms = now;
+    gateway_wave_seen_ms = now;
     gateway_wave_head = gateway_has_wave() ? plat_usb_input_wave_position() : 0;
     gateway_cpu_ms = now - 250u;
     gateway_cpu_drawn = 4294967295u;
     gateway_lights();
 }
+static void gateway_view_changed(void){gateway_update_view(0);}
 
 void app_bt_aac_prepare(void)
 {
     if(gateway_aac_active)return;
     gateway_aac_active=1;
-    gateway_view_changed();
+    gateway_graph_mask=0;
+    gateway_update_view(1);
+}
+void app_bt_ldac_prepare(void)
+{
+    gateway_ldac_active=1;gateway_graph_mask=0;gateway_update_view(1);
 }
 
 void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
@@ -315,7 +360,8 @@ void app_init(void)
     gateway_message[0][0] = gateway_message[1][0] = 0;
     gateway_mix_db[0]=gateway_mix_db[1]=gateway_mix_db[2]=0;
     gateway_mix_mutes=gateway_mix_solos=0;gateway_fade_time=gateway_fade_draft=2;
-    gateway_monitor = gateway_aac_active = 0;
+    gateway_monitor = gateway_aac_active = gateway_ldac_active = 0;
+    gateway_graph_mask=3;
     gateway_codec_preference = gateway_codec_draft = 3; /* preserve SBC+AAC default */
     gateway_codec_dialog=gateway_codec_row=gateway_codec_empty=gateway_codec_checks=0;
     gateway_master_wave_auto_scale = 0;
@@ -341,8 +387,8 @@ void app_init(void)
             s.zoom < GATEWAY_ZOOMS && s.muted <= 1u && (s.version>=8?s.reserved<=(s.version>=11?27u:s.version>=9?3u:1u):!s.reserved) &&
             (s.version == 1 ? s.mode == 0 : s.mode < GATEWAY_MODES) &&
             (((s.version == 1 || s.version == 2) && size == 8u) ||
-             ((s.version == 3 ? size == 12u : (s.version >= 4 && s.version <= 16) && size == (s.version>=15?sizeof s:s.version>=12?22u:s.version>=10?20u:16u) &&
-               s.bluetooth <= 1u && (s.version==4 ? !s.bt_reserved[0] && !s.bt_reserved[1] : (s.version>=16?(s.bt_reserved[0]>0 && s.bt_reserved[0]<=15):s.bt_reserved[0]<=2) && s.bt_reserved[1]<=(s.version>=12?3:2)) &&
+             ((s.version == 3 ? size == 12u : (s.version >= 4 && s.version <= 17) && size == (s.version>=15?sizeof s:s.version>=12?22u:s.version>=10?20u:16u) &&
+               s.bluetooth <= 1u && (s.version==4 ? !s.bt_reserved[0] && !s.bt_reserved[1] : (s.version>=16?(s.bt_reserved[0]>0 && s.bt_reserved[0]<=(s.version>=17?31:15)):s.bt_reserved[0]<=2) && s.bt_reserved[1]<=(s.version>=12?3:2)) &&
                (s.version>=6 ? s.bt_reserved[2] < (s.version>=8?2u*GATEWAY_WAVE_COLORS:12u) : !s.bt_reserved[2])) && s.spectrum_rate < 3u &&
               (s.version>=13 ? s.spectrum_max<150u && s.spectrum_range>s.spectrum_max && s.spectrum_range<=150u : s.spectrum_max<=60u && s.spectrum_range<4u) && (s.version>=8?s.spectrum_reserved<GATEWAY_WAVE_COLORS:!s.spectrum_reserved)))) {
         gateway_zoom = s.zoom;
@@ -469,8 +515,8 @@ void app_input_only(void)
         for(i=0;i<NE;i++){
             int delta=plat_enc((int)i);
             if(i==EN_SELECT && delta){
-                int row=(int)gateway_codec_row+(delta>4?4:delta< -4?-4:delta);
-                if(row<0)row=0;if(row>3)row=3;
+                int row=(int)gateway_codec_row+(delta>5?5:delta< -5?-5:delta);
+                if(row<0)row=0;if(row>4)row=4;
                 gateway_codec_row=(uint8_t)row;
                 gateway_page_redraw=1;
             }
@@ -502,10 +548,19 @@ void app_input_only(void)
         gateway_fx_tracking=1;gateway_fx_held=0;gateway_fx_press_ms=plat_ms();
     } else if (pressed & (1u << B_HOME)) {
         if (gateway_screen == GATEWAY_MAIN) {
-            gateway_mode = gateway_aac_active ? GATEWAY_MODE_METERS : (gateway_mode + 1u) % GATEWAY_MODES;
-            gateway_settings_changed();
-        } else { gateway_screen = GATEWAY_MAIN; gateway_save_notice = 0; }
-        gateway_view_changed();
+            uint8_t previous=gateway_mode;
+            /* A graph that yielded scratch is visibly the meter page. Cycle
+             * from that page, and admit only views that really allocate. */
+            if(!gateway_display_kind)gateway_mode=GATEWAY_MODE_METERS;
+            do {
+                gateway_mode=(gateway_mode+1u)%GATEWAY_MODES;
+                gateway_view_changed();
+            }while(gateway_mode!=GATEWAY_MODE_METERS && !gateway_display_kind);
+            if(gateway_mode!=previous)gateway_settings_changed();
+        } else {
+            gateway_screen = GATEWAY_MAIN; gateway_save_notice = 0;
+            gateway_view_changed();
+        }
     }
     if(gateway_fx_tracking){
         if((buttons&(1u<<B_FX)) && !gateway_fx_held && plat_ms()-gateway_fx_press_ms>=1000u){
@@ -805,10 +860,10 @@ static void gateway_draw_cpu(void)
     gateway_bar_key=key;cv_begin(240,16,C_BLACK);
     unsigned x=gateway_status_badge(3,"USB IN",usb?RGB(20,150,50):RGB(190,25,25),0);
     gateway_codec_seen=connected?codec:0;
-    const char *bt=connected?(codec==PLAT_BT_CODEC_AAC?"BT IN AAC":codec==PLAT_BT_CODEC_SBC?"BT IN SBC":codec==PLAT_BT_CODEC_APTX?"BT IN aptX":codec==PLAT_BT_CODEC_APTX_HD?"BT apXHD":"BT IN"):"BT IN";
+    const char *bt=connected?(codec==PLAT_BT_CODEC_LDAC?"BT LDAC":codec==PLAT_BT_CODEC_AAC?"BT AAC":codec==PLAT_BT_CODEC_SBC?"BT SBC":codec==PLAT_BT_CODEC_APTX?"BT aptX":codec==PLAT_BT_CODEC_APTX_HD?"BT aptXHD":"BT"):"BT";
     x=gateway_status_badge(x,bt,!gateway_bt_mode?C_GRAY:pairing?RGB(190,150,15):connected?RGB(20,150,50):RGB(190,25,25),!gateway_bt_mode);
     x=gateway_status_badge(x,"FX",gateway_fx_params.chain?(fx_active?RGB(20,150,50):RGB(190,150,15)):C_GRAY,!gateway_fx_params.chain);
-    gateway_status_badge(x,"USB OUT",gateway_usb_out_mode?RGB(20,150,50):C_GRAY,!gateway_usb_out_mode);
+    gateway_status_badge(x,"USB OUT",gateway_usb_out_mode?(usb?RGB(20,150,50):RGB(190,25,25)):C_GRAY,!gateway_usb_out_mode);
     cv_text(237-text_w(&FONT_T,label),2,&FONT_T,label,C_WHITE);cv_blit(0,0);
 }
 static void gateway_draw_zoom(void)
@@ -822,7 +877,7 @@ static void gateway_draw(void)
     if (gateway_screen != GATEWAY_MAIN) return;
     gateway_draw_cpu();
     if(gateway_has_wave())gateway_draw_zoom();
-    if (!gateway_aac_active && gateway_mode != GATEWAY_MODE_METERS && !gateway_display_kind) {
+    if (gateway_graph_mask && gateway_mode != GATEWAY_MODE_METERS && !gateway_display_kind) {
         cv_text(8, 100, &FONT_XS, "DISPLAY MEMORY FULL", RGB(255, 48, 48));
         cv_blit(0, 240);
     }
@@ -839,15 +894,17 @@ static uint16_t gateway_meter_color(uint32_t level)
 }
 
 /* One stereo peak readout: the higher held L/R peak, with the bars' own
- * 750-ms hold and subsequent decay. Values are dBFS; -- is below the floor. */
+ * 750-ms hold and subsequent decay. Numeric peaks extend below the bars;
+ * -- denotes silence after the held peak has decayed. */
 static void gateway_peak_label(char label[8], uint32_t held)
 {
     uint32_t db, n = 0;
     if (!held) { label[0] = '-'; label[1] = '-'; label[2] = 0; return; }
-    if (held > 600u) held = 600u;
-    db = 600u - held;
+    if (held > GATEWAY_PEAK_RANGE) held = GATEWAY_PEAK_RANGE;
+    db = GATEWAY_PEAK_RANGE - held;
     if (db) label[n++] = '-';
-    if (db >= 100u) label[n++] = '0' + db / 100u;
+    if (db >= 1000u) label[n++] = '0' + db / 1000u;
+    if (db >= 100u) label[n++] = '0' + db / 100u % 10u;
     label[n++] = '0' + db / 10u % 10u;
     label[n++] = '.';
     label[n++] = '0' + db % 10u;
@@ -859,12 +916,20 @@ static void gateway_peak_label(char label[8], uint32_t held)
 static void gateway_draw_meter(int force)
 {
     if(!gateway_wide_meters()){
-        const uint32_t peak=gateway_meter[0].held>gateway_meter[1].held?gateway_meter[0].held:gateway_meter[1].held;
+        const uint32_t peak=gateway_meter[0].peak>gateway_meter[1].peak?gateway_meter[0].peak:gateway_meter[1].peak;
         int muted=0; /* Mute/solo gray styling belongs only to Mixer. */
         uint32_t keys[2];
         for(unsigned ch=0;ch<2;ch++)keys[ch]=gateway_meter[ch].level/20u|gateway_meter[ch].held<<6|
             (gateway_meter[ch].clip_ms!=0)<<16|(uint32_t)muted<<17;
-        if(!force && keys[0]==gateway_meter_drawn[0] && keys[1]==gateway_meter_drawn[1])return;
+        uint32_t peak_key=peak|(uint32_t)muted<<16;
+        if(!force && keys[0]==gateway_meter_drawn[0] && keys[1]==gateway_meter_drawn[1]){
+            if(peak_key==gateway_peak_drawn[0])return;
+            /* Below the bar floor only the number changes. Keep this a tiny
+             * transfer rather than redrawing both bars and all metadata. */
+            char label[8];gateway_peak_label(label,peak);cv_begin(48,12,C_BLACK);
+            cv_text(42-text_w(&FONT_T,label),0,&FONT_T,label,muted?RGB(160,160,160):C_WHITE);
+            cv_blit(192,196);gateway_peak_drawn[0]=peak_key;return;
+        }
         char label[8];gateway_peak_label(label,peak);
         /* Metadata follows the selected view even while its scratch is busy. */
         unsigned footer_offset=gateway_mode==GATEWAY_MODE_SPECTRUM?14:0;
@@ -903,7 +968,7 @@ static void gateway_draw_meter(int force)
             cv_rect(226,26+footer_offset+ch*10,3,7,muted?RGB(45,45,45):m->clip_ms?RGB(255,48,48):RGB(45,18,18));
             gateway_meter_drawn[ch]=keys[ch];
         }
-        gateway_peak_drawn[0]=peak|(uint32_t)muted<<10;
+        gateway_peak_drawn[0]=peak_key;
         cv_oy=0;cv_blit(0,196-footer_offset+band);
         }
         return;
@@ -946,8 +1011,8 @@ static void gateway_draw_meter(int force)
             if(m->held)cv_rect(0,peak_base-m->held*peak_span/600u,16,1,muted?RGB(120,120,120):C_WHITE);
             cv_blit(x+18*ch,y);gateway_meter_drawn[index]=key;
         }
-        uint32_t peak=gateway_meter[pair].held>gateway_meter[pair+1].held?gateway_meter[pair].held:gateway_meter[pair+1].held;
-        uint32_t key=peak|(uint32_t)muted<<10;
+        uint32_t peak=gateway_meter[pair].peak>gateway_meter[pair+1].peak?gateway_meter[pair].peak:gateway_meter[pair+1].peak;
+        uint32_t key=peak|(uint32_t)muted<<16;
         if(force || key!=gateway_peak_drawn[g]){
             char label[8];gateway_peak_label(label,peak);cv_begin(34,16,C_BLACK);
             cv_text((34-text_w(&FONT_T,label))/2,4,&FONT_T,label,muted?RGB(90,90,90):C_WHITE);
@@ -986,23 +1051,34 @@ void app_loop(void)
     uint8_t connected = (uint8_t)plat_bt_receiver_connected();
     if (pairing != gateway_pair_seen) { gateway_pair_seen = pairing; gateway_lights(); }
     if (connected != gateway_bt_seen) { gateway_bt_seen = connected; gateway_bt_badge_redraw = 1; }
-    uint8_t aac = plat_bt_receiver_codec() == PLAT_BT_CODEC_AAC;
-    if (aac != gateway_aac_active) {
+    int codec=plat_bt_receiver_codec();
+    uint8_t aac=codec==PLAT_BT_CODEC_AAC,ldac=codec==PLAT_BT_CODEC_LDAC;
+    uint8_t graphs=(uint8_t)plat_bt_receiver_graphs();
+    if (aac != gateway_aac_active || ldac!=gateway_ldac_active || graphs!=gateway_graph_mask) {
         gateway_aac_active = aac;
-        /* Keep the saved mode intact; the AAC session temporarily uses meters. */
-        gateway_view_changed();
+        gateway_ldac_active=ldac;
+        gateway_graph_mask=graphs;
+        /* Keep the saved mode; decoder workspaces may temporarily need meters. */
+        gateway_update_view(1);
     }
-    if(!gateway_aac_active && gateway_screen==GATEWAY_MAIN && !gateway_display_block &&
+    if(gateway_graph_mask && gateway_screen==GATEWAY_MAIN && !gateway_display_block &&
        (gateway_mode==GATEWAY_MODE_FULL || gateway_mode==GATEWAY_MODE_SPECTRUM) &&
        now-gateway_display_retry_ms>=500u) {
         gateway_acquire_display();
-        if(gateway_display_block)gateway_view_changed();
+        if(gateway_display_block)gateway_update_view(1);
     }
     gateway_save_settings(now);
     gateway_fx_save(now,0);
     if(gateway_shot_frozen)return;
     if (gateway_page_redraw) {
         plat_cpu_work_begin();
+        /* A decoder can detach and restore scratch before this loop paints.
+         * Compare the final layout with what was actually on the panel, not
+         * the temporary allocation gap, to avoid an unnecessary clear. */
+        if(gateway_screen==GATEWAY_MAIN){
+            if(gateway_visible_wide!=gateway_wide_meters())gateway_page_clear=1;
+            gateway_visible_wide=(uint8_t)gateway_wide_meters();
+        }
         if(gateway_page_clear){lcd_fill(0,18,240,222,C_BLACK);gateway_page_clear=0;}
         if (gateway_screen == GATEWAY_MAIN) {gateway_draw_cpu();if(gateway_has_wave())gateway_draw_zoom();}
         else if(gateway_screen==GATEWAY_FX)gateway_fx_draw();
@@ -1115,9 +1191,9 @@ static void gateway_settings_draw(void)
             cv_rect(0,0,216,1,C_GRAY);cv_rect(0,195,216,1,C_GRAY);
             cv_rect(0,0,1,196,C_GRAY);cv_rect(215,0,1,196,C_GRAY);
             cv_text(12,10,&FONT_XS,"Bluetooth codecs",C_WHITE);
-            for(unsigned row=0;row<4;row++){
-                unsigned y=34+row*24;
-                if(row==gateway_codec_row)cv_rect(7,y-2,198,23,RGB(25,45,65));
+            for(unsigned row=0;row<5;row++){
+                unsigned y=32+row*21;
+                if(row==gateway_codec_row)cv_rect(7,y-2,198,21,RGB(25,45,65));
                 uint16_t c=gateway_codec_checks&(1u<<row)?RGB(40,220,90):C_GRAY;
                 cv_rect(15,y+5,13,13,c);cv_rect(16,y+6,11,11,RGB(15,22,30));
                 if(gateway_codec_checks&(1u<<row)){cv_line(17,y+11,20,y+14,C_WHITE);cv_line(20,y+14,25,y+8,C_WHITE);}
@@ -1165,8 +1241,9 @@ static void gateway_settings_draw(void)
     cv_begin(3,track,RGB(35,35,35));
     cv_rect(0,first*(track-thumb)/(GATEWAY_SETTING_ROWS-6u),3,thumb,RGB(160,160,160));cv_blit(237,42);
     const char *status=gateway_settings_status();
+    uint16_t status_color=gateway_save_notice==1 && !gateway_settings_unsaved()?RGB(40,220,60):RGB(255,40,40);
     for(unsigned band=210;band<240;band+=APP_CANVAS_PX/240u){
         unsigned h=240-band;if(h>APP_CANVAS_PX/240u)h=APP_CANVAS_PX/240u;
-        cv_begin(240,h,C_BLACK);cv_text((240-text_w(&FONT_XS,status))/2,218-(int)band,&FONT_XS,status,RGB(255,40,40));cv_blit(0,band);
+        cv_begin(240,h,C_BLACK);cv_text((240-text_w(&FONT_XS,status))/2,218-(int)band,&FONT_XS,status,status_color);cv_blit(0,band);
     }
 }

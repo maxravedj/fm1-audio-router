@@ -32,7 +32,7 @@ static void settings(void){
  setrow(GATEWAY_SET_BATTERY);turn(EN_ALGO,-1);assert(!gateway_battery_draft && gateway_battery_mode);
  store_fail=1;tap(B_SAVE);assert(gateway_save_notice==2 && gateway_wave_color==2 && gateway_battery_mode);
  store_fail=0;tap(B_SAVE);assert(gateway_wave_color==6 && gateway_spectrum_color==6 && !gateway_battery_mode);
- gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==sizeof s && s.version==16 && s.spectrum_reserved==6 && !s.reserved);
+ gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==sizeof s && s.version==17 && s.spectrum_reserved==6 && !s.reserved);
  app_init();app_ui_init();assert(gateway_wave_color==6 && gateway_spectrum_color==6 && !gateway_battery_mode);
  for(unsigned color=0;color<7;color++){
   tap(B_EDIT);setrow(GATEWAY_SET_SPECTRUM_COLOR);turn(EN_ALGO,-99);turn(EN_ALGO,color);tap(B_SAVE);
@@ -72,9 +72,9 @@ static void fx(void){
 static void badges(void){
  gateway_bt_mode=btr_host_on=1;btr_host_connected=0;gateway_bar_key=~0u;gateway_draw_cpu();
  unsigned bt_x=3+text_w(&FONT_T,"USB IN")+3+2;
- unsigned narrow=text_w(&FONT_T,"BT IN")+3;assert(fb[2*240+bt_x+narrow+2]==swap16(RGB(20,150,50)));
+ unsigned narrow=text_w(&FONT_T,"BT")+3;assert(fb[2*240+bt_x+narrow+2]==swap16(RGB(20,150,50)));
  btr_host_connected=1;btr_host_codec=PLAT_BT_CODEC_SBC;gateway_draw_cpu();
- unsigned wide=text_w(&FONT_T,"BT IN SBC")+3;assert(wide>narrow && fb[2*240+bt_x+wide+2]==swap16(RGB(20,150,50)));
+ unsigned wide=text_w(&FONT_T,"BT SBC")+3;assert(wide>narrow && fb[2*240+bt_x+wide+2]==swap16(RGB(20,150,50)));
  assert(fb[2*240+bt_x+narrow+2]==swap16(RGB(20,150,50))); /* inside wider BT badge */
  cv_begin(60,18,C_BLACK);gateway_badge(0,60,"BT",RGB(20,150,50),0);cv_blit(0,0);
  unsigned black=0;for(unsigned y=4;y<15;y++)for(unsigned x=24;x<36;x++)black+=fb[y*240+x]==0;assert(black>10);

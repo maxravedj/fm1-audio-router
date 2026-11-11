@@ -113,7 +113,7 @@ with tempfile.TemporaryDirectory() as temp:
         release.publish(bundle, 'v0.1.1', 'owner/repo', state.copy(), notes_text=summary)
         assert state['body'].startswith(summary + '\n' + release.MARKER)
         assert state['body'].count(release.MARKER) == 1
-        for notice in ('LGPL-2.1.txt', 'APTX-NOTICE.md'):
+        for notice in ('LGPL-2.1.txt', 'APTX-NOTICE.md', 'LDAC-LICENSE.txt', 'LDAC-NOTICE.txt', 'LDAC-PORT.md'):
             assert notice in state['body']
         commands.clear()
         (bundle / 'audio-router.fwsc').write_bytes(b'corrupt')

@@ -16,15 +16,15 @@ static void settings(void){
   store_fail=1;tap(B_SAVE);assert(gateway_save_notice==2 && gateway_usb_out_mode==applied && plat_work_available()==before);
   store_fail=0;tap(B_SAVE);assert(gateway_save_notice==1 && gateway_usb_out_mode==mode);
   assert(free-plat_work_available()==((gateway_usb_out_bytes(mode)+7u)&~7u));
-  gateway_bar_key=~0u;gateway_draw_cpu();unsigned bx=3+text_w(&FONT_T,"USB IN")+3+2+text_w(&FONT_T,"BT IN")+3+2+text_w(&FONT_T,"FX")+3+2;
+  gateway_bar_key=~0u;gateway_draw_cpu();unsigned bx=3+text_w(&FONT_T,"USB IN")+3+2+text_w(&FONT_T,"BT")+3+2+text_w(&FONT_T,"FX")+3+2;
   assert(fb[2*240+bx]==swap16(mode?RGB(20,150,50):C_GRAY));
-  assert(3+text_w(&FONT_T,"USB IN")+3+2+text_w(&FONT_T,"BT IN AAC")+3+2+text_w(&FONT_T,"FX")+3+2+text_w(&FONT_T,"USB OUT")+3<237-text_w(&FONT_T,"CPU 999% BAT 100%"));
+  assert(3+text_w(&FONT_T,"USB IN")+3+2+text_w(&FONT_T,"BT AAC")+3+2+text_w(&FONT_T,"FX")+3+2+text_w(&FONT_T,"USB OUT")+3<237-text_w(&FONT_T,"CPU 999% BAT 100%"));
   for(unsigned view=0;view<3;view++){
    gateway_mode=view;tap(B_HOME);assert(view!=2 || gateway_has_spectrum());assert(view!=1 || gateway_has_wave());
    tap(B_EDIT);assert(!gateway_display_block);
   }
   int32_t *p=gateway_usb_pcm;gateway_usb_session=mode;tap(B_SAVE);assert(gateway_usb_pcm==p && gateway_usb_session==mode); /* no unrelated-save reset */
-  gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==24 && s.version==16 && s.reserved>>2==mode);
+  gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==24 && s.version==17 && s.reserved>>2==mode);
   app_init();app_ui_init();assert(gateway_usb_out_mode==mode && gateway_usb_out_draft==mode);
   tap(B_EDIT);turn(EN_SELECT,INT_MIN);turn(EN_SELECT,GATEWAY_SET_USB_OUT);turn(EN_ALGO,INT_MAX);tap(B_HOME);tap(B_EDIT);assert(gateway_usb_out_draft==mode);
  }
@@ -132,7 +132,7 @@ static void output_monitor(void){
  /* K3 saves/restores with the old input trims; v11 defaults OUT to unity. */
  gateway_screen=GATEWAY_MIXER;gateway_view_changed();now_ms+=200;turn(EN_K3,-1);
  int trim=gateway_mix_db[2];assert(trim==-61);now_ms+=750;app_loop();
- gateway_settings_t saved=gateway_settings();assert(saved.version==16 && sizeof saved==24 && saved.input_db[2]==trim);
+ gateway_settings_t saved=gateway_settings();assert(saved.version==17 && sizeof saved==24 && saved.input_db[2]==trim);
  app_init();app_ui_init();assert(gateway_mix_db[2]==trim);
  saved.version=11;saved.bt_reserved[0]=0;saved.spectrum_range=3;saved.input_db[0]=-60;saved.input_db[1]=-120;saved.bt_reserved[1]=PLAT_MONITOR_MASTER;
  plat_store_save(OBJ_SETTINGS,&saved,20);app_init();app_ui_init();

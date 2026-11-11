@@ -78,6 +78,9 @@ def main():
             ('bt/br/aac_dec/pvaac/NOTICE', 'AAC-NOTICE.txt'),
             ('bt/br/aptx_dec/COPYING', 'LGPL-2.1.txt'),
             ('bt/br/aptx_dec/README.md', 'APTX-NOTICE.md'),
+            ('bt/br/ldac_dec/upstream/LICENSE', 'LDAC-LICENSE.txt'),
+            ('bt/br/ldac_dec/upstream/NOTICE', 'LDAC-NOTICE.txt'),
+            ('bt/br/ldac_dec/README.md', 'LDAC-PORT.md'),
             ('boot/m-bootloader/LICENSE', 'MBOOT-LICENSE.txt'),
             ('boot/m-bootloader/NOTICE.md', 'MBOOT-NOTICE.md'),
         ):

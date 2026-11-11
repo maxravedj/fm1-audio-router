@@ -22,7 +22,7 @@ static void scale(void){
 int main(void){
  palette_set(APP_PALETTE);now_ms=1000;app_init();app_ui_init();gateway_screen=GATEWAY_MIXER;gateway_view_changed();app_loop();
  const unsigned pairs[]={0,4,6,2};
- for(unsigned g=0;g<4;g++)for(unsigned ch=0;ch<2;ch++)gateway_meter[pairs[g]+ch]=(gateway_meter_t){540-60*g,540-60*g,750,0,0,0};
+ for(unsigned g=0;g<4;g++)for(unsigned ch=0;ch<2;ch++)gateway_meter[pairs[g]+ch]=(gateway_meter_t){.level=540-60*g,.held=540-60*g,.hold_ms=750,.peak=1440-60*g};
  gateway_mix_db[0]=-120;gateway_mix_db[1]=GATEWAY_GAIN_OFF;master=2048;gateway_mixer_draw(1);
  header(0,"-6.0","-12.0");header(1,"-12.0","-INF");header(2,"-18.0","0.0");header(3,"-24.0","-30.0");
  for(unsigned g=0;g<4;g++){
@@ -37,7 +37,7 @@ int main(void){
  }
  scale();
  /* Updating either value must retain its neighbour; their clearing regions overlap. */
- gateway_meter[0].held=gateway_meter[1].held=400;gateway_mixer_draw(0);header(0,"-20.0","-12.0");
+ gateway_meter[0].held=gateway_meter[1].held=400;gateway_meter[0].peak=gateway_meter[1].peak=1300;gateway_mixer_draw(0);header(0,"-20.0","-12.0");
  gateway_mix_db[0]=-599;gateway_mixer_draw(0);header(0,"-20.0","-59.9");
  gateway_mix_db[0]=-600;gateway_mix_db[1]=-999;gateway_mix_db[2]=-1000;master=1;gateway_mixer_draw(1);
  header(0,"-20.0","-60.0");header(1,"-12.0","-99.9");header(2,"-18.0","-100");header(3,"-24.0","-161");

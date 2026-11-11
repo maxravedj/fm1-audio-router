@@ -10,6 +10,7 @@
 #define APP_BT_RESAMPLE_CPU2
 #define APP_BT_AAC
 #define APP_BT_APTX
+#define APP_BT_LDAC
 #define BTI_RING 32u
 #define BTI_RING_HAVE 1
 #define BTI_K_ACL 7u
@@ -21,16 +22,16 @@ static struct bti_rx ring[BTI_RING];
 static uint32_t bti_rr,bti_rw;
 static struct {unsigned on,closing,phase,setup,encrypted;} brl;
 static int memory;
-static int *btr_sbc,*btr_aptx;
+static int *btr_sbc,*btr_aptx,*btr_ldac;
 static struct {void *workspace;} aac_mem,*btr_aac;
-static unsigned btr_worker_enabled,media_calls[5],dispatches;
+static unsigned btr_worker_enabled,media_calls[6],dispatches;
 static uint8_t ba_live;
 static struct btr_counters btr_stats;
 static uint32_t us,credit,underruns,drops,expected_seq;
 static int simulation,service_enabled=1;
 static void media(unsigned codec,const uint8_t *p,unsigned n)
 {
-    assert(codec>=1 && codec<=4 && n==100);
+    assert(codec>=1 && codec<=5 && n==100);
     assert((p[0]|(unsigned)p[1]<<8)==(expected_seq++&65535));
     for(unsigned i=2;i<n;i++)assert(p[i]==(uint8_t)i);
     media_calls[codec]++;if(simulation)credit+=3000;
@@ -38,6 +39,8 @@ static void media(unsigned codec,const uint8_t *p,unsigned n)
 void btr_media(const uint8_t *p,uint32_t n,const uint8_t *c){(void)c;media(BTR_CODEC_SBC,p,n);}
 static void btr_aac_media(const uint8_t *p,uint32_t n,const uint8_t *c){(void)c;media(BTR_CODEC_AAC,p,n);}
 static void btr_aptx_media(const uint8_t *p,uint32_t n,int hd){media(hd?BTR_CODEC_APTX_HD:BTR_CODEC_APTX,p,n);}
+static void btr_ldac_media(const uint8_t *p,uint32_t n){media(BTR_CODEC_LDAC,p,n);}
+static int btr_ldac_allocate(void){assert(!"UI must never allocate");return 0;}
 static void btr_decode_poll_irq(void){dispatches++;}
 static uint32_t plat_ms(void){return us/1000;}
 static void send_forbidden(const uint8_t *p,unsigned n){(void)p;(void)n;assert(!"UI must never send signalling");}
@@ -94,18 +97,18 @@ static void reset(unsigned codec)
 {
     simulation=0;us+=1000;memset(&brc,0,sizeof brc);memset(media_calls,0,sizeof media_calls);
     brl.on=brl.setup=brl.encrypted=1;brl.closing=0;brl.phase=BR_LINKED;btr_worker_enabled=1;
-    btr_sbc=btr_aptx=&memory;btr_aac=&aac_mem;aac_mem.workspace=&memory;
+    btr_sbc=btr_aptx=btr_ldac=&memory;btr_aac=&aac_mem;aac_mem.workspace=&memory;
     brc.profile.state=BTR_STREAMING;brc.profile.codec=codec;
     brc.ch[2].remote=96;brc.ch[2].cfg_in=brc.ch[2].cfg_out=1;
     bti_rr=bti_rw=UINT32_MAX-3;packet_seq=expected_seq=drops=underruns=0;service_enabled=1;
 }
 static void ownership(void)
 {
-    for(unsigned codec=1;codec<=4;codec++){
+    for(unsigned codec=1;codec<=5;codec++){
         reset(codec);packet();
         /* No lazy allocation, pre-encryption media, teardown or idle decode. */
-        btr_sbc=btr_aptx=0;btr_aac=0;production_service();assert(bti_rr!=bti_rw);
-        btr_sbc=btr_aptx=&memory;btr_aac=&aac_mem;aac_mem.workspace=0;
+        btr_sbc=btr_aptx=btr_ldac=0;btr_aac=0;production_service();assert(bti_rr!=bti_rw);
+        btr_sbc=btr_aptx=btr_ldac=&memory;btr_aac=&aac_mem;aac_mem.workspace=0;
         if(codec==BTR_CODEC_AAC){production_service();assert(bti_rr!=bti_rw);}aac_mem.workspace=&memory;
         brl.encrypted=0;production_service();assert(bti_rr!=bti_rw);brl.encrypted=1;
         brl.on=0;production_service();assert(bti_rr!=bti_rw);brl.on=1;
@@ -135,7 +138,7 @@ static void ownership(void)
         }
         assert(!drops);
     }
-    puts("PASS: active SBC/AAC/aptX/HD media only, eight-fragment/ms budget, encryption/workspace gates, fragmented L2CAP, FIFO control deferral and ring wrap");
+    puts("PASS: active SBC/AAC/aptX/HD/LDAC media only, eight-fragment/ms budget, encryption/workspace gates, fragmented L2CAP, FIFO control deferral and ring wrap");
 }
 static void repaint(void)
 {
@@ -151,7 +154,7 @@ static void repaint(void)
 }
 static void screen_changes(void)
 {
-    for(unsigned codec=1;codec<=4;codec++){
+    for(unsigned codec=1;codec<=5;codec++){
         uint32_t hash[2];
         for(unsigned enabled=0;enabled<=1;enabled++){
             reset(codec);us=(us/3000+1)*3000;credit=30000;simulation=1;

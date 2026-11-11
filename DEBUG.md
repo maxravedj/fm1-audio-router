@@ -58,6 +58,51 @@ block and block count. Times are CPU1 wall microseconds. `BT queue` lists
 underruns, PCM overruns and compressed packet gaps/drops. Capture these rows
 while the problem is happening; disconnecting releases codec timing data.
 
+For LDAC, `BT codec 5 44100 2` (or `48000`) identifies the negotiated codec,
+rate and stereo channels. `BT LDAC us` reports average/max per-frame decode time
+and frame count; each frame produces 128 stereo samples. `BT FIR us` uses the
+same resampler timing format as aptX. These are CPU1 wall times, not utilization.
+The status badge reads `BT LDAC`. Spectrum may fall back to meters for SRAM;
+waveforms remain when space allows. Capture `log` during playback, including
+`BT audio`, `BT queue` and `BT malformed`, together with the source's selected
+LDAC quality/rate and both CPU percentages. The debug client cannot force a
+source's codec or prove listening/RF quality.
+
+Additional LDAC rows distinguish transport loss from timestamp metadata:
+
+| Row | Values, left to right |
+| --- | --- |
+| `LDAC loss` | RTP sequence-gap events; compressed FIFO drops; timestamp mismatches. |
+| `LDAC jump` | Last expected timestamp; received timestamp; codec frames in that packet (one for a fragmented frame). |
+| `LDAC buf` | Maximum queued compressed bytes (including wrap padding); maximum queued packets; allocation failures. |
+| `LDAC hist` | Actual decoder-history resets; ignored duplicate/reordered packets; sender-identity changes. |
+| `LDAC check` | Known-input decoder check mask (3 = both channels pass); actual left checksum; actual right checksum. |
+
+These rows are per stream and clear on teardown; older `BT audio`/`BT queue`
+counters can include earlier connections. Timestamp-only mismatches do not add
+to `BT queue` gaps or reset decoder history: consecutive, complete codec frames
+retain their overlap even when the source's RTP clock steps. Actual packet/FIFO
+loss, sender changes and errors still reset history. Within a fragmented codec
+frame, every fragment must retain the same timestamp.
+
+`LDAC check` runs once on CPU1 before live decoding, using two embedded known
+frames and the normal decoder/output scratch. Its PCM never enters playback;
+history resets before live audio. Mask 1 means only left passes, 2 only right,
+0 neither, and 3 both. A failed check suppresses live audio for that allocation.
+For 48 kHz the expected decimal checksums are `475250861 1465795799`; for
+44.1 kHz they are `3428817905 230037338`. Passing checks establish correct output
+for those known frames, not correct live transport, resampling or listening quality.
+Probe resets are excluded from `LDAC hist`.
+
+Use two captures with
+playback running to distinguish new failures from earlier totals:
+
+```sh
+python src/tools/fm1_remote.py log wait 10000 log
+```
+
+No compressed payload, PCM or Bluetooth security material is logged.
+
 ## Screenshots
 
 ```sh

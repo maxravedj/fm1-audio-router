@@ -44,7 +44,7 @@ int main(void)
     turn(EN_ALGO,3);assert(!gateway_codec_row);
     tap(B_SEL);assert(gateway_codec_checks==2 && gateway_codec_draft==3 && btr_codec_mask==3);
     turn(EN_SELECT,1);tap(B_SEL);assert(gateway_codec_checks==2 && gateway_codec_empty);
-    turn(EN_SELECT,INT_MAX);assert(gateway_codec_row==3);
+    turn(EN_SELECT,2);assert(gateway_codec_row==3);
     tap(B_SEL);assert(gateway_codec_checks==10 && !gateway_codec_empty);
     gateway_cpu_draft=0;gateway_bt_draft=0;
     gateway_settings_t saved=gateway_saved;unsigned stored=plat_store_size(OBJ_SETTINGS);

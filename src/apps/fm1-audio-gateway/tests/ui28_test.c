@@ -18,8 +18,8 @@ static void settings(void){
  turn(EN_ALGO,-1);assert(!gateway_cpu_draft && gateway_cpu_mode);
  store_fail=1;tap(B_SAVE);assert(gateway_cpu_mode && gateway_save_notice==2);
  store_fail=0;tap(B_SAVE);assert(!gateway_cpu_mode && gateway_save_notice==1);app_loop();
- gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==sizeof s && s.version==16 && s.reserved==3);
- assert(pixels(0,218,240,20,RGB(255,40,40))>10);
+ gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==sizeof s && s.version==17 && s.reserved==3);
+ assert(pixels(0,218,240,20,RGB(40,220,60))>10);
  gateway_draw_cpu();for(unsigned y=0;y<18;y++)for(unsigned x=130;x<195;x++)assert(!fb[y*240+x]);
  assert(pixels(195,0,45,18,C_WHITE)>10); /* battery remains */
  app_init();app_ui_init();assert(!gateway_cpu_mode && gateway_battery_mode);
@@ -35,7 +35,7 @@ static void settings(void){
 static void fx(void){
  tap(B_FX);turn(EN_SELECT,-1);assert(gateway_fx_row==1);app_loop();
  assert(!fb[155*240] && !fb[155*240+100]);
- char text[40];gateway_fx_format(text,"post EQ gain: ",gateway_fx_params.post,1,"dB");int x=237-text_w(&FONT_T,text)-3;
+ char text[40];gateway_fx_format(text,"post EQ gain: ",gateway_fx_params.post,1," dB");int x=237-text_w(&FONT_T,text)-3;
  assert(fb[155*240+x]==swap16(RGB(75,210,150)) && !fb[155*240+x-1]);
  for(unsigned lim=0;lim<2;lim++){
   if(lim)tap(B_FX);gateway_fx_notice=0;gateway_page_redraw=1;app_loop();memcpy(screen,fb,sizeof screen);
@@ -47,7 +47,7 @@ static void fx(void){
 static void footer(void){
  tap(B_HOME);gateway_monitor=PLAT_MONITOR_USB;
  for(unsigned mode=GATEWAY_MODE_FULL;mode<=GATEWAY_MODE_SPECTRUM;mode++){
-  gateway_mode=mode;gateway_view_changed();app_loop();gateway_meter[0].held=540;gateway_draw_meter(1);
+  gateway_mode=mode;gateway_view_changed();app_loop();gateway_meter[0].held=540;gateway_meter[0].peak=1440;gateway_draw_meter(1);
   unsigned caption_y=mode==GATEWAY_MODE_SPECTRUM?182:196;
   assert(pixels(6,196,70,12,RGB(96,96,96))>10 && pixels(80,caption_y,100,12,RGB(96,96,96))>5);
   assert(!pixels(6,196,180,12,C_WHITE) && pixels(210,196,30,12,C_WHITE)>0);

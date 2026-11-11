@@ -12,6 +12,8 @@
 | Offline M-Flasher parser | `jvitkauskas/m-flasher`, `55da95cc978e45d60d833a10edc3292c2a5918c2` | Unmodified `formats.rs` plus MIT license in `src/tests/vendor/m-flasher/`. |
 | AAC-LC decoder | `charlesvestal/fm1-radio`, `c9113b5eceb9d6c295e32c86e5d769ed8efa67d6` | PacketVideo/AOSP fixed-point subset; local fixes/pins/notices in `src/bt/br/aac_dec/`. |
 | SBC decoder | AOSP/Open Interface | Apache-2.0; provenance and marked adaptations in `src/bt/br/sbc_dec/README.md`. |
+| aptX / aptX HD decoder | [regularhunter/libfreeaptx](https://github.com/regularhunter/libfreeaptx), `476e2d56b0374c643c50bc37ab5cfee3012e2144` | LGPL-2.1-or-later; vendored in `src/bt/br/aptx_dec/` with original-file hashes in `UPSTREAM-SHA256SUMS` and the full license in `COPYING`. Caller-owned storage, pi32v2 multiply fixes, CPU1 decoding and 24-bit PCM integration are documented in the [decoder README](../src/bt/br/aptx_dec/README.md). |
+| LDAC decoder | [open-vela/external_libldac](https://github.com/open-vela/external_libldac), `6e0474c954103ff7aefb7908b97e65522c9208fa` | Apache-2.0; fixed-point caller-owned decoder in `src/bt/br/ldac_dec/`. LICENSE, certification NOTICE, original hashes and marked adaptations are retained. [Port/API](../src/bt/br/ldac_dec/README.md), [runtime, memory and validation](LDAC.md). |
 
 The toolchain's version is a dependency pin, not the firmware release version.
 Firmware versions are chosen manually through Git tags. Setup verifies compiler
@@ -19,5 +21,5 @@ and SDK hashes and refuses mismatches. Do not replace them with unpinned latest
 URLs to fix a download failure.
 
 Font licenses are beside their assets in `src/assets/fonts/`. Platform, BSP,
-Bluetooth, micro-ecc, PacketVideo and test-fixture licenses/notices remain in
+Bluetooth, micro-ecc, PacketVideo, libfreeaptx, LDAC and test-fixture licenses/notices remain in
 the matching source archive. See [LICENSING.md](../LICENSING.md).

@@ -4,10 +4,10 @@
 
 | Control | Action |
 | --- | --- |
-| HOME | Return to Home; press again to cycle meters → waveforms → spectrum. |
+| HOME | Return to Home; press again to cycle meters → waveforms → spectrum, skipping unavailable graphs. |
 | GLO | Open the mixer. |
 | EDIT | Open Settings. SELECT chooses a row; ALGORITHM edits its draft value. |
-| SAVE in Settings | Fully lit with unsaved changes; saves and applies the draft. Red UNSAVED becomes SAVED until leaving or editing. |
+| SAVE in Settings | Fully lit with unsaved changes; saves and applies the draft. Red UNSAVED becomes green SAVED until leaving or editing. |
 | FX | Open the last FX page; subsequent presses alternate EQ and limiter. |
 | Hold FX for 1 s | Toggle the complete master FX chain. |
 | SEL on an FX page | Toggle that individual effect; its LED is bright when enabled. |
@@ -15,7 +15,9 @@
 
 The shared status bar shows USB IN, Bluetooth/codec, FX and USB OUT state, with
 optional CPU and estimated battery percentage. Bluetooth is red disconnected,
-yellow pairing, green connected. FX is gray off, yellow with both effects
+yellow pairing, green connected. USB OUT is gray when OFF, green when enabled
+with USB connected, and red when enabled with USB disconnected.
+FX is gray off, yellow with both effects
 bypassed, green with an effect active. CPU shows first/second core workload;
 it includes UI/LCD waits, rather than instruction utilization alone.
 
@@ -25,6 +27,10 @@ The meter page shows USB IN, BT IN, USB OUT and MASTER; SELECT does nothing.
 On waveform/spectrum pages, SELECT cycles those sources in that order.
 Both visualizers have a horizontal selected-source stereo meter, held peak
 and source footer.
+Meter graphics cover -60 to 0 dBFS. Numeric held peaks keep their one-decimal
+readout below that floor, down to the smallest nonzero 24-bit sample (about
+-138.5 dBFS). Silence shows `--` once the held peak has decayed. The same numeric
+range is used on Home meters, Mixer and the limiter.
 
 - Waveforms: K1 adjusts the visible window from 8 seconds to 4 ms. MASTER
   auto scale is optional and display-only; it changes neither audio nor meters.
@@ -32,6 +38,10 @@ and source footer.
   The footer shows MIN/MAX/rate. Forty logarithmic bands have held peak lines.
 - During an accepted AAC session, graph views yield their memory to decoding
   and the display uses meters. The selected visualizer returns after disconnect.
+- LDAC gives decoding priority over graphs. Spectrum (and waveforms if needed)
+  falls back to meters when SRAM is insufficient. HOME skips unavailable graphs
+  instead of visiting a duplicate meter page. Available waveforms remain usable
+  while paused; disconnect restores normal graph availability.
 - USB OUT monitoring shows silence until the host records and routing is enabled.
 
 ## Mixer
@@ -88,8 +98,8 @@ preferences take priority over these defaults.
 
 Enable Bluetooth ON and SAVE. Hold OCT+ for one second to pair with
 **FM1 BT Receiver**; press OCT+ again to stop discovery. Discovery is off at
-boot. The Bluetooth codecs value reads SELECT; open it with SEL. All four
-codecs (SBC, AAC, aptX and aptX HD) are visible together. Turn SELECT to move
+boot. The Bluetooth codecs value reads SELECT; open it with SEL. All five
+codecs (SBC, AAC, aptX, aptX HD and LDAC) are visible together. Turn SELECT to move
 between them; press SEL to toggle each checkbox. SEL lights fully on the codec row
 and while the dialog is open. OCT- cancels the checklist; OCT+ OK copies it into
 the Settings draft and closes it. Both OCT buttons light fully in the dialog.
@@ -99,9 +109,11 @@ remain checked; use Bluetooth OFF to disable the receiver. Older AUTO/AAC/SBC
 settings migrate to the corresponding selection. Changing the advertised list
 disconnects an existing stream so the source can negotiate again. aptX/aptX HD
 keep waveform and spectrum views available; AAC retains its meter fallback.
+LDAC supports stereo 44.1/48 kHz with memory-dependent visualizer availability.
 The checkboxes advertise capabilities; the source chooses a mutually supported
-codec. Keep AAC or SBC checked for sources that cannot use aptX/aptX HD.
-The connected aptX HD badge abbreviates the codec as `apXHD`.
+codec. Keep AAC or SBC checked for sources that cannot use aptX/aptX HD/LDAC.
+The Bluetooth badge shows `BT` without a codec, or `BT SBC`, `BT AAC`,
+`BT aptX`, `BT aptXHD` or `BT LDAC` for the negotiated codec when connected.
 Saved devices can reconnect after boot/out-of-range loss. An intentional
 source disconnect suppresses FM-1's outgoing paging; incoming connections
 remain allowed. Logs help distinguish the two directions.

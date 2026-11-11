@@ -99,6 +99,7 @@ int main(void)
         for (i = 0; i < GATEWAY_WAVE_W; i++)
             assert(!gateway_wave[i][0] && !gateway_wave[i][1] && !gateway_wave[i][2] && !gateway_wave[i][3]);
         /* Each channel's blue full-scale trace reaches the expected lane only. */
+        gateway_wave_color=GATEWAY_WAVE_BLUE;
         for (i = 0; i < GATEWAY_WAVE_W; i++) {
             gateway_wave[i][0] = gateway_wave[i][1] = 32767;
             gateway_wave[i][2] = gateway_wave[i][3] = -32768;

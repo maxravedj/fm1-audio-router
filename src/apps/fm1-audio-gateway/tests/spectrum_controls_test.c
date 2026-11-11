@@ -33,7 +33,7 @@ int main(void)
     gateway_spectrum_min=90;gateway_spectrum_max=24;gateway_spectrum_rate=2;
     unsigned writes=store_writes;now_ms=849;app_loop();assert(store_writes==writes);
     now_ms=850;app_loop();assert(store_writes==writes+1);
-    gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==24 && s.version==16 && s.spectrum_range==90);
+    gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==24 && s.version==17 && s.spectrum_range==90);
     start();assert(gateway_spectrum_min==90 && gateway_spectrum_max==24 && gateway_spectrum_rate==2);
     /* Full legacy range -> identical absolute dB window, all old combinations. */
     for(unsigned range=0;range<4;range++)for(unsigned max=0;max<=60;max++) {
@@ -73,7 +73,7 @@ int main(void)
         gateway_draw_meter(1);
         static uint16_t actual[240*240];memcpy(actual,fb,sizeof actual);
         const char *caption=narrow?"MIN -150 MAX -149 SLOW":"MIN -90 MAX 0 SLOW";
-        char peak[8];gateway_peak_label(peak,gateway_meter[0].held>gateway_meter[1].held?gateway_meter[0].held:gateway_meter[1].held);
+        char peak[8];gateway_peak_label(peak,gateway_meter[0].peak>gateway_meter[1].peak?gateway_meter[0].peak:gateway_meter[1].peak);
         for(unsigned band=0;band<26;band+=16){
             unsigned h=26-band;if(h>16)h=16;cv_begin(240,h,C_BLACK);cv_oy=-(int)band;
             cv_text(6,14,&FONT_T,"Source: MASTER",RGB(96,96,96));

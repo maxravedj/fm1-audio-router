@@ -18,7 +18,7 @@
 
 # Features
 - 2in/2out 16/44100 USB audio interface
-- Bluetooth audio receiver with SBC, AAC, aptX and aptX HD support
+- Bluetooth audio receiver with SBC, AAC, aptX, aptX HD and LDAC support
 - FX chain of 5 bands parametric EQ and peak limiter with 8 presets
 - Mixer
 - 3 Visualizers: meters, waveforms and 40-band spectrum
@@ -26,7 +26,7 @@
 # Installation
 1. Flash m-bootloader with [M-Flasher](https://github.com/jvitkauskas/m-flasher)
 2. Turn off FM-1 and turn on while holding **REC** button
-3. Flash [latest firmware](https://github.com/maxravedj/fm1-audio-router/releases/latest/download/fm1-audio-router-v0.2.0.fwsc) with M-Flasher
+3. Flash [latest firmware](https://github.com/maxravedj/fm1-audio-router/releases/latest/download/fm1-audio-router-v0.3.0.fwsc) with M-Flasher
 
 See additional [installation instructions](docs/INSTALL.md)
 
@@ -35,7 +35,7 @@ See additional [installation instructions](docs/INSTALL.md)
 Plug your FM-1 to computer and it should be deteceted as class compliant 2in/2out audio interface. Incoming audio will be played through speaker or headphones output. You can send audio back to computer using USB OUT feature to have loopback or pass incoming bluetooth audio feed, raw or post-FX.
 
 ### Bluetooth
-Enable bluetooth in settings and hold **OCT+** to enter or exit pairing mode. BT IN badge in status bar is yellow during pairing mode.
+Enable bluetooth in settings and hold **OCT+** to enter or exit pairing mode. BT badge in status bar is yellow during pairing mode.
 
 ### FX chain
 Hold **FX** button to enable or disable FX chain. Press **SEL** on specific FX screen to bypass that FX
@@ -61,7 +61,7 @@ Press **HOME** to open visualizers screen and cycle through different visualizer
  - Waveforms: **SELECT** knob scrolls through audio sources to visualize, use **K1** to choose window size
  - Spectrum: **SELECT** for source, **K1** and **K2** for minimum and maximum displayed dB, **K3** controls decay rate
 
-Please note that Waveforms and Spectrum are sacrificed during bluetooth AAC playback due to low memory constraints
+AAC uses meters during playback to free decoder memory. LDAC supports stereo 44.1/48 kHz; spectrum yields memory first, and waveforms remain available when SRAM allows.
 
 ## Other usefull stuff
 

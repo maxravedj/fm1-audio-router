@@ -37,7 +37,7 @@ OUT graphs show silence then, rather than starting that extra FX instance.
 - CPU0: radio/signalling/RTP assembly, UI, USB, allocation, mixing, FX, panel
   and audio IRQs. Foreground computes EQ coefficients; audio publishes the
   pending bank under a short lock and alone mutates its DSP histories.
-- CPU1: bounded compressed SBC/AAC/aptX/aptX HD decoding and the exact 96-tap resampler.
+- CPU1: bounded compressed SBC/AAC/aptX/aptX HD/LDAC decoding and the exact 96-tap resampler.
   CPU0 consumes prepared int32 stereo output. A 2-kHz hook and audio IRQ can
   reap completed work/kick the mailbox without decoding, FIR work, waits or
   allocation on CPU0 IRQs. There is no single-core fallback.
@@ -64,11 +64,34 @@ SBC or aptX/aptX HD + spectrum + maximum USB recording must fit together. Exact 
 are in `build/gateway/cpu2-budget.json` and release manifests; they change with
 the chosen tag/toolchain, so they are not hardcoded in this guide.
 
+Spectrum reuses its int16 PCM staging buffer for the complex float FFT,
+expanding backwards after reading the DC mean. Quarter-wave twiddles are
+reflected for the remaining phases. Capture plus FFT scratch is 73,736 bytes,
+24,568 fewer than before; stereo power analysis and Hann normalization are
+unchanged.
+
 AAC workspace takes priority over waveform/spectrum buffers. Accepted AAC
 configuration synchronously releases graphs before allocation. They return
 fresh after disconnect; failed visible graph allocation retries without
 clearing the continuing meter/footer. Persistent SBC/aptX/USB route allocations
-use the high end of scratch to preserve a contiguous graph gap.
+use the high end of scratch to preserve a contiguous graph gap. LDAC releases
+graphs synchronously on configuration/state changes, allocates its complete
+compressed FIFO/decoder/24-bit PCM storage first, including while configured or
+paused, and only then admits graphs that fit alongside maximum USB recording.
+AVDTP transitions join/reset and reserve the new workspace before accepting more
+media, so paused graph access does not depend on the next audio packet.
+Decoder workspace refreshes preserve the meter hold/decay state and its clock,
+including numeric peaks below the graphical floor. If a graph temporarily falls
+back to the four-meter layout, its selected-source stereo pair is remapped
+without borrowing another source's peak. Reallocation on the same visible layout
+does not clear the panel. Nongraph screens and a continuing full-meter fallback
+keep their existing render caches and telemetry without a body repaint; codec
+or connection changes update only the status bar. Screen/source navigation still
+starts fresh meters.
+Unavailable graphs use full meters; HOME skips them when cycling pages;
+allocation retries and disconnect restore the requested view without stale
+capture. The current linked budget admits LDAC plus waveform and recording;
+spectrum yields memory. See [LDAC](LDAC.md) for measured sizes and validation.
 
 ## FX and timing
 
@@ -88,7 +111,7 @@ operation. A changing time alignment/level dip is not universally inaudible.
 ## Persistence and recovery
 
 CRC-checked A/B objects retain panel calibration, application settings, saved
-FX presets and bond metadata. Settings payload schema is 16 (24 bytes); FX
+FX presets and bond metadata. Settings payload schema is 17 (24 bytes); FX
 preset schema is 4 (456 bytes). These are storage format numbers, independent
 of manually chosen firmware tags. Keep their migrations, not DSP history.
 
@@ -124,4 +147,14 @@ mix; SBC/AAC keep their original 16-bit arithmetic. See
 [src/bt/br/aptx_dec/README.md](../src/bt/br/aptx_dec/README.md) for transport,
 source/relinking instructions and validation limits. Settings v16 stores the
 codec checkbox mask in the existing codec byte, retaining the 24-byte record
-and all v1-v15 migrations. The advertised list applies only on successful SAVE.
+and all v1-v15 migrations. Settings v17 adds LDAC in bit 4 without changing
+the record size or previous bits. The advertised list applies only on successful SAVE.
+
+LDAC uses the pinned Apache-2.0 Open Vela/Sony fixed-point decoder on CPU1,
+producing signed 24-bit stereo at 44.1/48 kHz. CPU0 validates RTP/frame headers,
+bounded fragmentation, fragment timestamps and sequence order before publishing
+immutable complete frames. Timestamp-only steps between ordered complete
+packets remain diagnostic; decoded frame counts drive PCM time. Actual loss
+resets overlap history at the next accepted packet; decode errors publish timed
+silence. The common 24-bit FIR runs on the same
+worker, with no CPU0 fallback or callback allocation.

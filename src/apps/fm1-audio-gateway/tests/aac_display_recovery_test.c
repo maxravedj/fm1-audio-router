@@ -7,8 +7,8 @@ static void tick(void){now_ms+=500;app_loop();app_frame();}
 static uint16_t footer[240*58];
 static void footer_matches(void)
 {
-    gateway_meter[0]=(gateway_meter_t){.level=400,.held=520};
-    gateway_meter[1]=(gateway_meter_t){.level=300,.held=500};
+    gateway_meter[0]=(gateway_meter_t){.level=400,.held=520,.peak=1420};
+    gateway_meter[1]=(gateway_meter_t){.level=300,.held=500,.peak=1400};
     gateway_draw_meter(1);memcpy(footer,fb+182*240,sizeof footer);
     gateway_release_display();gateway_draw_meter(1);
     assert(!memcmp(footer,fb+182*240,sizeof footer));

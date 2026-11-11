@@ -1,2 +1,2 @@
-- aptX and aptX HD support
-- ui improvements
+- LDAC support
+- UI changes

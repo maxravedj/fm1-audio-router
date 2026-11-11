@@ -1048,7 +1048,10 @@ int plat_bt_receiver_pairing(void);
 int plat_bt_receiver_connected(void);
 /* Negotiated codec, only while the receiver is connected and configured.
  * NONE also covers pairing and a link with no accepted stream configuration. */
-enum { PLAT_BT_CODEC_NONE, PLAT_BT_CODEC_SBC, PLAT_BT_CODEC_AAC, PLAT_BT_CODEC_APTX, PLAT_BT_CODEC_APTX_HD };
+enum { PLAT_BT_CODEC_NONE, PLAT_BT_CODEC_SBC, PLAT_BT_CODEC_AAC, PLAT_BT_CODEC_APTX, PLAT_BT_CODEC_APTX_HD, PLAT_BT_CODEC_LDAC };
+/* Main-thread graph availability: bit 0 waveform, bit 1 spectrum. Decoder
+ * allocation takes priority; callers still check available scratch. */
+unsigned plat_bt_receiver_graphs(void);
 int plat_bt_receiver_codec(void);
 void plat_bt_receiver_mix(int32_t *lr, uint32_t n, uint32_t gain_q12);
 /* Foreground UI checkpoint: at most once per millisecond, drain up to eight
@@ -1081,7 +1084,7 @@ void plat_audio_monitor_bt_sample(int32_t l,int32_t r);
 void plat_audio_monitor_reset(int source);
 /* Legacy adapter: 0 SBC+AAC, 1 AAC, 2 SBC. Main thread; changes drop the old stream. */
 void plat_bt_receiver_preference(int preference);
-/* Advertised codec bitmask: SBC=1, AAC=2, aptX=4, aptX HD=8. Main thread. */
+/* Advertised codec bitmask: SBC=1, AAC=2, aptX=4, aptX HD=8, LDAC=16. Main thread. */
 void plat_bt_receiver_codecs(unsigned mask);
 
 /* APP_USB_STATUS: configured, non-suspended USB device connection; foreground read only. */

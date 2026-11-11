@@ -146,6 +146,9 @@ static void btr_sbc_submit(const uint8_t *p,uint32_t n,uint32_t frames)
 #if defined(APP_BT_APTX) && !defined(PLAT_HOST)
 #include "bt_receiver_aptx.c"
 #endif
+#if defined(APP_BT_LDAC) && !defined(PLAT_HOST)
+#include "bt_receiver_ldac.c"
+#endif
 void btr_media_reset(void)
 {
 #ifdef APP_BT_RESAMPLE_CPU2
@@ -162,6 +165,9 @@ void btr_media_reset(void)
 #endif
 #if defined(APP_BT_APTX) && !defined(PLAT_HOST)
     btr_aptx_reset();
+#endif
+#if defined(APP_BT_LDAC) && !defined(PLAT_HOST)
+    btr_ldac_reset();
 #endif
     btr_have_sequence=btr_fragmenting=0;btr_fragment_n=0;
     OI_CODEC_SBC_DecoderReset(&btr_decoder,btr_decoder_data,sizeof btr_decoder_data,2,2,FALSE);
@@ -215,6 +221,9 @@ static void btr_decode_poll_irq(void)
         btr_sbc_poll_inner();
 #ifdef APP_BT_APTX
         btr_aptx_poll_inner();
+#endif
+#ifdef APP_BT_LDAC
+        btr_ldac_poll_inner();
 #endif
 #ifdef APP_BT_AAC
         btr_aac_poll_inner();

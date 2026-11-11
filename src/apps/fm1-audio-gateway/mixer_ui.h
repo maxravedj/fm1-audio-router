@@ -44,7 +44,7 @@ static void gateway_mixer_draw(int force)
             gateway_mixer_switch(base+37,197,"S",switches&2u,RGB(255,212,40));
             gateway_mixer_switch_key[g]=switches;
         }
-        unsigned held=gateway_meter[pair].held>gateway_meter[pair+1].held?gateway_meter[pair].held:gateway_meter[pair+1].held;
+        unsigned held=gateway_meter[pair].peak>gateway_meter[pair+1].peak?gateway_meter[pair].peak:gateway_meter[pair+1].peak;
         uint32_t peak_key=held|((unsigned)muted<<16);
         int db=g<3?gateway_mix_db[g]:gateway_master_db(master);
         uint32_t fader_key=g<3?(unsigned)(db-GATEWAY_GAIN_OFF):master;

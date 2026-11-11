@@ -89,7 +89,7 @@ static void controls(void){
 static void settings(void){
     setup(3,5,10);gateway_screen=GATEWAY_MIXER;gateway_view_changed();
     gateway_settings_changed();now_ms+=750;app_loop();
-    gateway_settings_t s;assert(sizeof s==24 && plat_store_load(OBJ_SETTINGS,&s,sizeof s)==24 && s.version==16);
+    gateway_settings_t s;assert(sizeof s==24 && plat_store_load(OBJ_SETTINGS,&s,sizeof s)==24 && s.version==17);
     assert(s.mixer_controls==(5|10<<3) && s.fade_time==3);
     app_init();app_ui_init();assert(gateway_mix_mutes==5 && gateway_mix_solos==10 && gateway_fade_time==3);
     assert(!gateway_gate[0].gain && !gateway_gate[2].gain && master_fade_gain==65536);

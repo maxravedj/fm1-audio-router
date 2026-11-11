@@ -24,7 +24,7 @@ static void settings(void)
     for(unsigned scale=0;scale<2;scale++)for(unsigned color=0;color<7;color++){
         tap(B_EDIT);row(2);turn(EN_ALGO,scale?INT_MAX:INT_MIN);
         row(3);turn(EN_ALGO,INT_MIN);turn(EN_ALGO,color);tap(B_SAVE);
-        gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==sizeof s && s.version==16);
+        gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==sizeof s && s.version==17);
         assert(s.bt_reserved[2]==(scale | color<<1));app_init();app_ui_init();
         assert(gateway_master_wave_auto_scale==scale && gateway_wave_color==color);
     }
