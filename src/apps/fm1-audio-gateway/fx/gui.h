@@ -184,7 +184,7 @@ static void gateway_fx_limiter_region(unsigned left,unsigned top,unsigned width,
         char text[40];
         if(!left){gateway_fx_format(text,"GR ",gateway_fx_reduction,1," dB");
         cv_text((FX_LIMITER_SCALE_RIGHT-text_w(&FONT_T,"-60")-text_w(&FONT_XS,text))/2,204,&FONT_XS,text,active?RGB(255,80,80):C_GRAY);}
-        if(full || left){gateway_fx_format(text,"",(int)(gateway_fx_meter[0].held>gateway_fx_meter[1].held?gateway_fx_meter[0].held:gateway_fx_meter[1].held)-600,1,"");
+        if(full || left){gateway_peak_label(text,gateway_fx_meter[0].peak>gateway_fx_meter[1].peak?gateway_fx_meter[0].peak:gateway_fx_meter[1].peak);
         cv_text(158-(int)left+(58-text_w(&FONT_XS,text))/2,35,&FONT_XS,text,active?C_WHITE:C_GRAY);}
         if(full){gateway_fx_limiter_value(48,"K1 INPUT",gateway_fx_params.input,1,"dB");
         gateway_fx_limiter_value(99,"K2 RELEASE",gateway_fx_params.release,0,"ms");
@@ -205,7 +205,7 @@ static void gateway_fx_status(void)
     if(reduction<65536u){float g=(float)reduction/65536.0f;gr=g>0?(unsigned)(-60.2059991f*fm_log2f(g)+0.5f):1200;}
     unsigned fall=dt*240u/1000u;gateway_fx_reduction=gateway_fx_reduction>fall?gateway_fx_reduction-fall:0;
     if(gr>gateway_fx_reduction)gateway_fx_reduction=gr;
-    uint32_t max_held=gateway_fx_meter[0].held>gateway_fx_meter[1].held?gateway_fx_meter[0].held:gateway_fx_meter[1].held;
+    uint32_t max_held=gateway_fx_meter[0].peak>gateway_fx_meter[1].peak?gateway_fx_meter[0].peak:gateway_fx_meter[1].peak;
     uint32_t key[3]={0,max_held,gateway_fx_reduction};
     for(unsigned i=0;i<2;i++) {
         const gateway_meter_t *m=&gateway_fx_meter[i];

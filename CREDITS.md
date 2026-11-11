@@ -39,3 +39,8 @@
   independently checked against the W3C Audio EQ Cookbook formulas.
 
 aptX and aptX HD decoding uses [libfreeaptx](https://github.com/regularhunter/libfreeaptx), by Aurelien Jacobs, Pali Rohár and Hunter Wardlaw (LGPL-2.1-or-later). See `src/bt/br/aptx_dec/README.md`.
+
+LDAC decoding uses Sony's fixed-point implementation from
+[open-vela/external_libldac](https://github.com/open-vela/external_libldac)
+(Apache-2.0, upstream notices retained).
+See `src/bt/br/ldac_dec/README.md`.

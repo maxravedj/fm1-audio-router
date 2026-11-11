@@ -33,7 +33,7 @@ cpu2_timeout_us = 2000000
 ram_runtime = true
 usb_host = false
 usb_console = false
-o2 = ["../../bt/br/aptx_dec/aptx_dec.c", "../../bt/br/aptx_dec/aptx_fir.c", "../../bt/br/sbc_dec/*.c", "../../bt/br/aac_dec/aac_dec.c",
+o2 = ["../../bt/br/ldac_dec/ldac_dec.c", "../../bt/br/aptx_dec/aptx_dec.c", "../../bt/br/aptx_dec/aptx_fir.c", "../../bt/br/sbc_dec/*.c", "../../bt/br/aac_dec/aac_dec.c",
  "../../bt/br/aac_dec/pvaac/apply_ms_synt.c",
  "../../bt/br/aac_dec/pvaac/apply_tns.c",
  "../../bt/br/aac_dec/pvaac/byte_align.c",
@@ -107,7 +107,7 @@ credits = "Built on fm1-base and felucca-bsp; platform and template by Charles V
 # micro-ecc: P-192/P-256 arithmetic tables and br_rng.
 # AAC: compiler switch jump tables (frame/hufffac), and huffspec's closed
 # decode_huff_cw_tab1..11 and unpack_idx families. Every target is in SRAM.
-# cpu2_job dispatches only AAC, SBC, aptX or resampler jobs linked into SRAM.
+# cpu2_job dispatches only AAC, SBC, aptX, LDAC or resampler jobs linked into SRAM.
 ram_code_allow = ["cpu2_job", "PVMP4AudioDecodeFrame", "huffspec_fxp", "hufffac","OI_SBC_SynthFrame", "DecodeBody", "OI_SBC_ComputeBitAllocation",
  "btp_en_start", "btp_put", "fm1_rfc_txlo_search", "fm1_ble_rf_exec",
  "ble_app_midi_pop", "ble_app_midi_peek", "ble_poll",

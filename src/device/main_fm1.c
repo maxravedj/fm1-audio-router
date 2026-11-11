@@ -939,7 +939,7 @@ static int log_frame(const uint8_t *p, uint32_t n)
     app_log(log_line_send);                          /* (the app's own lines) */
 #endif
 #ifdef APP_BT_RECEIVER
-    for (uint32_t row=0;row<36;row++) {
+    for (uint32_t row=0;row<41;row++) {
         const char *line=br_debug_line(row);
         if (!line) break;
         log_line_send(line);

@@ -38,14 +38,16 @@ controls, build/release instructions and recovery guidance are in `docs/`.
   premute MASTER telemetry, output mute. USB OUT routing is pre-MASTER and has
   its own trim/gate; source-only post-FX routes have independent DSP history.
 - CPU0 owns UI, radio/signalling, allocation, USB and audio/mixing/FX. CPU1
-  exclusively decodes SBC/AAC/aptX/aptX HD and performs the exact 96-tap resampler. No
+  exclusively decodes SBC/AAC/aptX/aptX HD/LDAC and performs the exact 96-tap resampler. No
   single-core fallback. Stop dispatch and join before freeing/resetting workers.
 - Keep all runtime code/constants in SRAM. Audio/USB/panel IRQs must continue
   during settings writes; never allocate, wait, draw or save in audio callbacks.
 - Preserve the 8192-byte scratch guard and linked stack checks. SBC and aptX/HD plus
   spectrum plus maximum recording must fit. Release hidden graph producers
   before buffers; AAC suppresses both graph views before workspace allocation.
-  Settings v16 migrates legacy codec choices to an advertised-codec mask.
+  LDAC allocates its decoder first, then admits waveform/spectrum only when they
+  fit alongside maximum USB recording; unavailable graphs fall back to meters.
+  Settings v17 extends the v16 advertised-codec mask with LDAC.
   Persistent SBC/aptX/USB route allocations use the high end to avoid fragmentation.
 - aptX's 24-bit FIR uses the BSP's register-only stereo lane MAC kernel. Keep
   the high-word ring word-aligned, interpolation exact and each half's absolute
@@ -58,7 +60,7 @@ controls, build/release instructions and recovery guidance are in `docs/`.
   Only the main Settings SAVE persists/applies settings. SEL is bright while
   the codec row is focused or its dialog is open. Both OCT buttons are fully
   lit inside the dialog; they cannot trigger Bluetooth pairing there.
-  All four codecs are visible; SELECT moves the cursor, SEL toggles a checkbox.
+  All five codecs are visible; SELECT moves the cursor, SEL toggles a checkbox.
   Settings shows red UNSAVED and full SAVE for a changed draft; unchanged Settings
   keeps SAVE dim. Unsaved current EQ/limiter presets also light SAVE fully.
 - LCD and EQ/FFT foreground checkpoints feed already-allocated, encrypted media

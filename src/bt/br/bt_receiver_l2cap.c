@@ -105,7 +105,13 @@ static __attribute__((noinline)) void br_sig(const uint8_t *p,uint32_t n)
             local=br_le16(d);remote=br_le16(d+2);
             if(local<64||local>66)continue;c=local-64;if(remote!=brc.ch[c].remote)continue;
             BTR_SEND(out,bl_disc_rsp(out,id,local,remote));memset(&brc.ch[c],0,sizeof brc.ch[c]);
-            if(c){brc.profile.state=c==1?BTR_IDLE:BTR_CONFIGURED;brc.profile.media=0;ba_live=0;BTR_FLUSH(44100);}
+            if(c){
+                brc.profile.state=c==1?BTR_IDLE:BTR_CONFIGURED;brc.profile.media=0;ba_live=0;
+                BTR_FLUSH(btr_config_rate(&brc.profile));
+#if defined(APP_BT_LDAC) && !defined(PLAT_HOST)
+                if(c==2 && brc.profile.codec==BTR_CODEC_LDAC)btr_ldac_allocate();
+#endif
+            }
         } else if(code==BL_INFO_REQ && len==2) {
             uint32_t type=br_le16(d),bytes=type==2?8:4;
             /* Basic mode only: no ERTM, fixed channels or connectionless service. */
@@ -139,14 +145,30 @@ static __attribute__((noinline)) void br_frame(const uint8_t *p,uint32_t n)
 #ifdef APP_BT_AAC_DISPLAY
         if(len && (out[0]&3)==2 && (out[1]==3 || out[1]==5) && brc.profile.codec==BTR_CODEC_AAC)
             app_bt_aac_prepare();
+#ifdef APP_BT_LDAC
+        if(brc.profile.codec==BTR_CODEC_LDAC &&
+           (was!=brc.profile.state || (len && out[1]==5 && (out[0]&3)==2)))
+            app_bt_ldac_prepare();
+#endif
 #endif
         if(was!=brc.profile.state || (len && out[1]==5 && (out[0]&3)==2)) {
             BTR_FLUSH(btr_config_rate(&brc.profile));
+#if defined(APP_BT_LDAC) && !defined(PLAT_HOST)
+            /* Reserve decoder storage even in OPEN/CONFIGURED (paused).
+             * Otherwise graph availability stays blocked until media arrives.
+             * The display callback above detached graphs before this reset;
+             * the worker is joined by FLUSH before any storage is reused. */
+            if(brc.profile.codec==BTR_CODEC_LDAC && brc.profile.state!=BTR_IDLE)
+                btr_ldac_allocate();
+#endif
             ba_live=brc.profile.state==BTR_STREAMING;
         }
     } else if(brc.profile.state==BTR_STREAMING) {
+#if defined(APP_BT_LDAC) && !defined(PLAT_HOST)
+        if(brc.profile.codec==BTR_CODEC_LDAC){btr_ldac_media(p+4,len);return;}
+#endif
 #if defined(APP_BT_APTX) && !defined(PLAT_HOST)
-        if(brc.profile.codec>=BTR_CODEC_APTX){btr_aptx_media(p+4,len,brc.profile.codec==BTR_CODEC_APTX_HD);return;}
+        if(brc.profile.codec==BTR_CODEC_APTX || brc.profile.codec==BTR_CODEC_APTX_HD){btr_aptx_media(p+4,len,brc.profile.codec==BTR_CODEC_APTX_HD);return;}
 #endif
 #ifdef APP_BT_AAC
         if(brc.profile.codec==BTR_CODEC_AAC)btr_aac_media(p+4,len,brc.profile.conf);

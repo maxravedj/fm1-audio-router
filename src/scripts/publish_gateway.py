@@ -14,7 +14,8 @@ from build_version import release_filename
 
 NOTICES = ('LICENSE', 'LICENSING.md', 'CREDITS.md', 'Apache-2.0.txt',
            'BSD-2-Clause-micro-ecc.txt', 'BSP-NOTICE.txt', 'BSP-LICENSING.md',
-           'AAC-NOTICE.txt', 'LGPL-2.1.txt', 'APTX-NOTICE.md', 'MBOOT-LICENSE.txt', 'MBOOT-NOTICE.md')
+           'AAC-NOTICE.txt', 'LGPL-2.1.txt', 'APTX-NOTICE.md',
+           'LDAC-LICENSE.txt', 'LDAC-NOTICE.txt', 'LDAC-PORT.md', 'MBOOT-LICENSE.txt', 'MBOOT-NOTICE.md')
 MARKER = '<!-- audio-router-distribution -->'
 
 

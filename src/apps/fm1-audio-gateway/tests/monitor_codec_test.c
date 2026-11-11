@@ -19,7 +19,7 @@ static void settings(void)
     assert(gateway_codec_draft==2 && gateway_codec_preference==3 && btr_codec_mask==3);
     store_fail=1;tap(B_SAVE);assert(gateway_save_notice==2 && btr_codec_mask==3 && gateway_codec_dialog);
     store_fail=0;tap(B_SAVE);assert(gateway_save_notice==1 && btr_codec_mask==2 && !gateway_codec_dialog);
-    assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==sizeof s && s.version==16 && s.bt_reserved[0]==2);
+    assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==sizeof s && s.version==17 && s.bt_reserved[0]==2);
     app_init();app_ui_init();assert(gateway_codec_preference==2);
     s=gateway_settings();s.version=4;s.bt_reserved[0]=0;s.spectrum_range=3;s.reserved=s.spectrum_reserved=0;memset(s.bt_reserved,0,3);s.zoom=9;
     plat_store_save(OBJ_SETTINGS,&s,16);app_init();app_ui_init();

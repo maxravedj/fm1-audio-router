@@ -704,7 +704,7 @@ void plat_ble_enable(int on)
 #include "../bt/br/bt_receiver_profile.c"
 #include "../bt/br/bt_receiver_pcm.c"
 #include "../bt/br/bt_receiver_media.c"
-static uint8_t btr_host_on, btr_host_pairing, btr_host_connected, btr_host_start_fail, btr_host_codec;
+static uint8_t btr_host_on, btr_host_pairing, btr_host_connected, btr_host_start_fail, btr_host_codec,btr_host_ldac_ready;
 static uint32_t btr_host_codec_queries;
 int plat_bt_receiver_on(int on) {
     if (on && btr_host_start_fail) return -1;
@@ -717,7 +717,7 @@ void plat_bt_receiver_preference(int preference)
 }
 void plat_bt_receiver_codecs(unsigned mask)
 {
-    if(!mask || mask>15 || btr_codec_mask==mask)return;
+    if(!mask || mask>31 || btr_codec_mask==mask)return;
     btr_codec_mask=(uint8_t)mask;
     btr_host_connected=0;btr_host_codec=0;btr_media_reset();
 }
@@ -725,6 +725,7 @@ void plat_bt_receiver_pair(int on) {btr_host_pairing=btr_host_on&&on;}
 int plat_bt_receiver_pairing(void) {return btr_host_pairing;}
 int plat_bt_receiver_connected(void) {return btr_host_on&&btr_host_connected;}
 int plat_bt_receiver_codec(void) {btr_host_codec_queries++;return plat_bt_receiver_connected()?btr_host_codec:PLAT_BT_CODEC_NONE;}
+unsigned plat_bt_receiver_graphs(void){int c=plat_bt_receiver_codec();return c==PLAT_BT_CODEC_AAC || (c==PLAT_BT_CODEC_LDAC && !btr_host_ldac_ready)?0:3;}
 void plat_bt_receiver_mix(int32_t *lr,uint32_t n,uint32_t gain) {if(btr_host_on)btr_pcm_mix(lr,n,gain);}
 void plat_bt_receiver_service(void) {} /* Simulator transport has no radio RX IRQ ring. */
 #endif

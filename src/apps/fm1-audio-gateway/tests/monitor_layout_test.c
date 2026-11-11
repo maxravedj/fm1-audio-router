@@ -18,7 +18,8 @@ static void selected_meter(void)
         start(mode,source);memcpy(saved,fb,sizeof fb);
         gateway_meter[0]=(gateway_meter_t){.level=600};
         gateway_meter[1]=(gateway_meter_t){.level=300};gateway_draw_meter(1);
-        assert(!memcmp(saved,fb,240*196*sizeof(uint16_t))); /* chart/header untouched */
+        unsigned footer_y=mode==GATEWAY_MODE_SPECTRUM?182:196;
+        assert(!memcmp(saved,fb,240*footer_y*sizeof(uint16_t))); /* chart/header untouched */
         for(unsigned ch=0;ch<2;ch++)for(unsigned s=0;s<30;s++)for(unsigned y=222+ch*10;y<229+ch*10;y++){
             uint16_t expected=swap16((s+1)*20<=gateway_meter[ch].level?
                 gateway_meter_color((s+1)*20):RGB(21,26,26));
@@ -27,14 +28,14 @@ static void selected_meter(void)
         }
         for(unsigned x=0;x<240;x++)assert(!fb[229*240+x] && !fb[230*240+x] && !fb[231*240+x]);
         uint32_t before=blits;gateway_draw_meter(0);assert(blits==before);
-        gateway_meter[0].held=540;gateway_draw_meter(0);
+        gateway_meter[0].held=540;gateway_meter[0].peak=1440;gateway_draw_meter(0);
         assert(memcmp(saved+196*240,fb+196*240,26*240*sizeof(uint16_t))); /* values above bars */
         if(source==PLAT_MONITOR_MASTER){
             gateway_muted=1;gateway_draw_meter(0);
-            assert(fb[225*240+30]==swap16(RGB(90,90,90)));
+            assert(fb[225*240+30]==swap16(gateway_meter_color(60))); /* Only Mixer grays muted meters. */
         }
     }
-    puts("PASS: waveform/spectrum selected-source horizontal stereo meter, seven-pixel thickness, exact segments/gaps, values above, mute gray, chart/header preservation and idle skip");
+    puts("PASS: waveform/spectrum selected-source horizontal stereo meter, seven-pixel thickness, exact segments/gaps, values above, mute color preserved outside Mixer, chart/header preservation and idle skip");
 }
 static void fullpage_grid(void)
 {
@@ -91,6 +92,7 @@ static void spectrum_sources(void)
 static void master_wave(void)
 {
     static int32_t lr[512];
+    gateway_master_wave_auto_scale=1;gateway_wave_color=GATEWAY_WAVE_BLUE;
     start(GATEWAY_MODE_FULL,PLAT_MONITOR_MASTER);gateway_zoom=11;
     for(unsigned i=0;i<256;i++){lr[2*i]=768000;lr[2*i+1]=-1024000;}
     master_meter_samples(lr,256);gateway_capture_wave(now_ms);

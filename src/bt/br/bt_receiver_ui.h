@@ -20,6 +20,9 @@ static int br_ui_media_ready(void)
 #ifdef APP_BT_APTX
     case BTR_CODEC_APTX:case BTR_CODEC_APTX_HD:return btr_aptx!=0;
 #endif
+#ifdef APP_BT_LDAC
+    case BTR_CODEC_LDAC:return btr_ldac!=0;
+#endif
     default:return 0;
     }
 }

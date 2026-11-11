@@ -55,7 +55,7 @@ static void btr_worker_stop(void)
 /* aptX's stereo lane kernel loads each signed high-word pair as one word. */
 static int16_t btr_pcm[BTR_RING][2] __attribute__((aligned(4)));
 #if defined(APP_BT_APTX) && defined(APP_BT_RESAMPLE_CPU2)
-/* Optional low byte, allocated with aptX state. Other codecs keep exact 16-bit FIR arithmetic. */
+/* Optional low byte, allocated with aptX/LDAC state. SBC/AAC retain exact 16-bit FIR arithmetic. */
 static uint8_t (*btr_pcm_low)[2];
 #include "aptx_dec/aptx_fir.h"
 static uint32_t btr_aptx_decode_us,btr_aptx_decode_max,btr_aptx_decode_jobs;

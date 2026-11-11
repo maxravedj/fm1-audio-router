@@ -5,6 +5,7 @@
 - [Dependencies, tests, builds and tagged releases](BUILD.md)
 - [Audio routing, cores, memory and persistence](ARCHITECTURE.md)
 - [Upstream revisions and third-party components](UPSTREAM.md)
+- [LDAC receiver, memory budget and validation](LDAC.md)
 - [Remote diagnostics and screenshots](../DEBUG.md)
 
 The `upstream/` folder preserves platform reference material; the documents

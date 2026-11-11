@@ -13,10 +13,10 @@ static int btr_aac_conf_valid(const uint8_t c[6])
         ((c[1]==1 && !(c[2]&0xf0)) || (!c[1] && (c[2]&0xf0)==0x80)) &&
         ((c[2]&15)==4 || (c[2]&15)==8);
 }
-/* Bit 0 SBC, 1 AAC, 2 aptX, 3 aptX HD; empty masks are rejected by the UI/API. */
+/* Stable bits: SBC, AAC, aptX, aptX HD, LDAC. Empty masks are rejected. */
 static uint8_t btr_codec_mask=3;
-static unsigned btr_codec_for_seid(unsigned seid) { return seid==4?BTR_CODEC_SBC:seid==8?BTR_CODEC_AAC:seid==12?BTR_CODEC_APTX:seid==16?BTR_CODEC_APTX_HD:0; }
-static unsigned btr_codec_len(unsigned codec) { return codec==BTR_CODEC_AAC?6:codec==BTR_CODEC_APTX?7:codec==BTR_CODEC_APTX_HD?11:4; }
+static unsigned btr_codec_for_seid(unsigned seid) { return seid==4?BTR_CODEC_SBC:seid==8?BTR_CODEC_AAC:seid==12?BTR_CODEC_APTX:seid==16?BTR_CODEC_APTX_HD:seid==20?BTR_CODEC_LDAC:0; }
+static unsigned btr_codec_len(unsigned codec) { return codec==BTR_CODEC_AAC?6:codec==BTR_CODEC_APTX?7:codec==BTR_CODEC_APTX_HD?11:codec==BTR_CODEC_LDAC?8:4; }
 static unsigned btr_codec_type(unsigned codec) { return codec==BTR_CODEC_AAC?2:codec>=BTR_CODEC_APTX?255:0; }
 static int btr_seid(uint32_t seid)
 {
@@ -25,7 +25,10 @@ static int btr_seid(uint32_t seid)
     if(codec==BTR_CODEC_AAC)return 0;
 #endif
 #ifndef APP_BT_APTX
-    if(codec>=BTR_CODEC_APTX)return 0;
+    if(codec==BTR_CODEC_APTX || codec==BTR_CODEC_APTX_HD)return 0;
+#endif
+#ifndef APP_BT_LDAC
+    if(codec==BTR_CODEC_LDAC)return 0;
 #endif
     return codec && (btr_codec_mask & (1u<<(codec-1)));
 }
@@ -39,8 +42,14 @@ static int btr_aptx_conf_valid(const uint8_t *c,unsigned hd)
 }
 static unsigned btr_config_rate(const struct btr_profile *s)
 {
-    if(s->codec>=BTR_CODEC_APTX)return s->conf[6]&0x10?48000:44100;
+    if(s->codec==BTR_CODEC_LDAC || s->codec==BTR_CODEC_APTX || s->codec==BTR_CODEC_APTX_HD)return s->conf[6]&0x10?48000:44100;
     return s->codec==BTR_CODEC_AAC?(s->conf[2]&0x80?48000:44100):(s->conf[0]&0x10?48000:44100);
+}
+static int btr_ldac_conf_valid(const uint8_t *c)
+{
+    static const uint8_t id[]={0x2d,1,0,0,0xaa,0};
+    for(unsigned i=0;i<6;i++)if(c[i]!=id[i])return 0;
+    return (c[6]==0x20 || c[6]==0x10) && c[7]==1;
 }
 uint32_t btr_signal(struct btr_profile *s, const uint8_t *p, uint32_t n, uint8_t out[64])
 {
@@ -50,7 +59,7 @@ uint32_t btr_signal(struct btr_profile *s, const uint8_t *p, uint32_t n, uint8_t
     if(n<2 || (p[0]&3)) return 0; /* commands only */
     out[0]=(p[0]&0xf0)|2;out[1]=sig=p[1]&63;
     if((p[0]&12) || (p[1]&0xc0)) { out[0]=(p[0]&0xf0)|1;return 2; } /* general reject: fragmented signalling unsupported */
-    if(sig==1) { if(n!=2) error=0x11;else for(unsigned ep=4;ep<=16;ep+=4)if(btr_seid(ep)){out[k++]=(uint8_t)(ep|(s->state!=BTR_IDLE?2:0));out[k++]=8;} }
+    if(sig==1) { if(n!=2) error=0x11;else for(unsigned ep=4;ep<=20;ep+=4)if(btr_seid(ep)){out[k++]=(uint8_t)(ep|(s->state!=BTR_IDLE?2:0));out[k++]=8;} }
     else if(sig==2 || sig==12) {
         if(n!=3 || !btr_seid(seid)) error=0x12;
         else {
@@ -58,7 +67,8 @@ uint32_t btr_signal(struct btr_profile *s, const uint8_t *p, uint32_t n, uint8_t
             const uint8_t aac_caps[]={1,0,7,8,0,2,0xc0,1,0x8c,0x80,0,0};
             const uint8_t aptx_caps[]={1,0,7,9,0,255,0x4f,0,0,0,1,0,0x32};
             const uint8_t hd_caps[]={1,0,7,13,0,255,0xd7,0,0,0,0x24,0,0x32,0,0,0,0};
-            const uint8_t *c=codec==BTR_CODEC_AAC?aac_caps:codec==BTR_CODEC_APTX?aptx_caps:codec==BTR_CODEC_APTX_HD?hd_caps:caps;
+            const uint8_t ldac_caps[]={1,0,7,10,0,255,0x2d,1,0,0,0xaa,0,0x30,1};
+            const uint8_t *c=codec==BTR_CODEC_LDAC?ldac_caps:codec==BTR_CODEC_AAC?aac_caps:codec==BTR_CODEC_APTX?aptx_caps:codec==BTR_CODEC_APTX_HD?hd_caps:caps;
             for(i=0;i<clen+6;i++)out[k++]=c[i];}
     } else if(sig==3 || sig==5) { /* SET_CONFIGURATION / RECONFIGURE */
         if(n<(sig==3?4u:3u) || !btr_seid(seid)) error=0x12;
@@ -72,7 +82,7 @@ uint32_t btr_signal(struct btr_profile *s, const uint8_t *p, uint32_t n, uint8_t
                 if(cat==1 && sig==3 && !i && !(seen&1))seen|=1;
                 else if(cat==7 && i==clen+2 && !(seen&2) && !p[at] && p[at+1]==btr_codec_type(codec)) {
                     for(k=0;k<clen;k++)conf[k]=p[at+2+k];
-                    if(!(codec==BTR_CODEC_AAC?btr_aac_conf_valid(conf):codec>=BTR_CODEC_APTX?btr_aptx_conf_valid(conf,codec==BTR_CODEC_APTX_HD):btr_conf_valid(conf)))error=0x29;else seen|=2;
+                    if(!(codec==BTR_CODEC_LDAC?btr_ldac_conf_valid(conf):codec==BTR_CODEC_AAC?btr_aac_conf_valid(conf):(codec==BTR_CODEC_APTX || codec==BTR_CODEC_APTX_HD)?btr_aptx_conf_valid(conf,codec==BTR_CODEC_APTX_HD):btr_conf_valid(conf)))error=0x29;else seen|=2;
                 } else error=cat==7?0x29:0x17;
                 at+=i;
             }

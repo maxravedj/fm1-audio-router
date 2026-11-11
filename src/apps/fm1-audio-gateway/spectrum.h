@@ -36,15 +36,27 @@ static uint32_t gateway_spectrum_x(uint32_t band)
     return GATEWAY_SPECTRUM_X + band * GATEWAY_SPECTRUM_WIDTH / GATEWAY_SPECTRUM_BANDS;
 }
 typedef struct {
-    int16_t pcm[PLAT_SPECTRUM_FRAMES][2];
-    float fft[PLAT_SPECTRUM_FRAMES][2];
-    float twiddle[PLAT_SPECTRUM_FRAMES / 2u][2];
+    /* PCM is consumed before FFT butterflies. Expand backwards in-place so
+     * unread int16 samples remain intact; this saves 16 KiB of display SRAM. */
+    union {
+        int16_t pcm[PLAT_SPECTRUM_FRAMES][2];
+        float fft[PLAT_SPECTRUM_FRAMES][2];
+    } work;
+    /* Other half of the semicircle follows by reflection. */
+    float twiddle[PLAT_SPECTRUM_FRAMES / 4u + 1u][2];
 } gateway_spectrum_buffers_t;
 static gateway_spectrum_buffers_t *gateway_spectrum_buffers;
-#define gateway_spectrum_pcm (gateway_spectrum_buffers->pcm)
-#define gateway_fft (gateway_spectrum_buffers->fft)
+#define gateway_spectrum_pcm (gateway_spectrum_buffers->work.pcm)
+#define gateway_fft (gateway_spectrum_buffers->work.fft)
 #define gateway_twiddle (gateway_spectrum_buffers->twiddle)
 static uint8_t gateway_twiddle_ready, gateway_spectrum_have_position;
+static float gateway_twiddle_part(unsigned phase,unsigned part)
+{
+    unsigned quarter=PLAT_SPECTRUM_FRAMES/4u;
+    if(phase<=quarter)return gateway_twiddle[phase][part];
+    float v=gateway_twiddle[PLAT_SPECTRUM_FRAMES/2u-phase][part];
+    return part?v:-v;
+}
 static uint32_t gateway_spectrum_ms, gateway_spectrum_position;
 #define GATEWAY_SPECTRUM_BAR_COLOR gateway_spectrum_color_value()
 #define GATEWAY_SPECTRUM_PEAK_COLOR C_WHITE
@@ -89,7 +101,7 @@ static void gateway_spectrum_analyze(void)
     int32_t sum_l = 0, sum_r = 0;
     float mean_l, mean_r;
     if (!gateway_twiddle_ready) {
-        for (i = 0; i < PLAT_SPECTRUM_FRAMES / 2u; i++) {
+        for (i = 0; i <= PLAT_SPECTRUM_FRAMES / 4u; i++) {
             if(!(i&31u))plat_bt_receiver_service();
             float angle = FM_TWO_PI * (float)i / (float)PLAT_SPECTRUM_FRAMES;
             gateway_twiddle[i][0] = fm_cosf(angle);
@@ -104,12 +116,13 @@ static void gateway_spectrum_analyze(void)
     }
     mean_l = (float)sum_l / (float)PLAT_SPECTRUM_FRAMES;
     mean_r = (float)sum_r / (float)PLAT_SPECTRUM_FRAMES;
-    for (i = 0; i < PLAT_SPECTRUM_FRAMES; i++) {
+    for (i = PLAT_SPECTRUM_FRAMES; i-- > 0;) {
         if(!(i&127u))plat_bt_receiver_service();
-        float c = gateway_twiddle[i & (PLAT_SPECTRUM_FRAMES/2u - 1u)][0];
+        float c = gateway_twiddle_part(i & (PLAT_SPECTRUM_FRAMES/2u - 1u),0);
         float window = 0.5f - 0.5f * (i < PLAT_SPECTRUM_FRAMES/2u ? c : -c);
-        gateway_fft[i][0] = ((float)gateway_spectrum_pcm[i][0] - mean_l) * window / 32768.0f;
-        gateway_fft[i][1] = ((float)gateway_spectrum_pcm[i][1] - mean_r) * window / 32768.0f;
+        float left=((float)gateway_spectrum_pcm[i][0]-mean_l)*window/32768.0f;
+        float right=((float)gateway_spectrum_pcm[i][1]-mean_r)*window/32768.0f;
+        gateway_fft[i][0]=left;gateway_fft[i][1]=right;
     }
     for (i = 1, j = 0; i < PLAT_SPECTRUM_FRAMES; i++) {
         if(!(i&127u))plat_bt_receiver_service();
@@ -128,7 +141,7 @@ static void gateway_spectrum_analyze(void)
             for (j = 0; j < half; j++) {
                 if(!((start+j)&127u))plat_bt_receiver_service();
                 uint32_t a = start + j, z = a + half;
-                float wr = gateway_twiddle[j * stride][0], wi = gateway_twiddle[j * stride][1];
+                float wr = gateway_twiddle_part(j * stride,0), wi = gateway_twiddle_part(j * stride,1);
                 float re = wr * gateway_fft[z][0] - wi * gateway_fft[z][1];
                 float im = wr * gateway_fft[z][1] + wi * gateway_fft[z][0];
                 gateway_fft[z][0] = gateway_fft[a][0] - re;

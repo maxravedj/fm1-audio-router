@@ -92,14 +92,14 @@ int main(void)
     gateway_meter[0]=(gateway_meter_t){0};gateway_meter[1]=(gateway_meter_t){0};
     gateway_meter_step(&gateway_meter[0],4194304,50); /* -6 */
     gateway_meter_step(&gateway_meter[1],2097152,50); /* -12 */
-    gateway_draw_meter(1);assert(gateway_peak_drawn[0]==gateway_meter[0].held);
+    gateway_draw_meter(1);assert(gateway_peak_drawn[0]==gateway_meter[0].peak);
     gateway_meter_step(&gateway_meter[1],8388608,50);
-    gateway_draw_meter(0);assert(gateway_peak_drawn[0]==600);
-    gateway_meter_step(&gateway_meter[1],0,500);gateway_draw_meter(0);assert(gateway_peak_drawn[0]==600);
+    gateway_draw_meter(0);assert(gateway_peak_drawn[0]==1500);
+    gateway_meter_step(&gateway_meter[1],0,500);gateway_draw_meter(0);assert(gateway_peak_drawn[0]==1500);
     gateway_meter_step(&gateway_meter[1],0,500);gateway_draw_meter(0);assert(gateway_meter[1].held==540);
-    assert(gateway_peak_drawn[0]==(gateway_meter[0].held>540?gateway_meter[0].held:540));
-    gateway_peak_label(label,600);assert(!strcmp(label,"0.0"));
-    gateway_peak_label(label,477);assert(!strcmp(label,"-12.3"));
+    assert(gateway_peak_drawn[0]==(gateway_meter[0].peak>1440?gateway_meter[0].peak:1440));
+    gateway_peak_label(label,1500);assert(!strcmp(label,"0.0"));
+    gateway_peak_label(label,1377);assert(!strcmp(label,"-12.3"));
     gateway_peak_label(label,0);assert(!strcmp(label,"--"));
     assert(text_w(&FONT_T,"-59.9")<=34 && !cv_cuts);
     puts("PASS: settings debounce/reboot/mute-at-boot/validation/retry/wrap, PLAY colors/navigation lights, stereo peak labels/hold");

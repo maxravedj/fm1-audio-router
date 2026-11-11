@@ -10,7 +10,7 @@ int main(void)
     btr_host_codec=PLAT_BT_CODEC_AAC;gateway_fx_params.chain=1;gateway_usb_out_mode=1;
     cpu_work_window=cpu2_work_window=plat_ticks24();cpu_work_pct=cpu2_work_percent=100;
     gateway_bar_key=UINT32_MAX;gateway_draw_cpu();
-    unsigned badges_end=3+text_w(&FONT_T,"USB IN")+3+2+text_w(&FONT_T,"BT IN AAC")+3+2+text_w(&FONT_T,"FX")+3+2+text_w(&FONT_T,"USB OUT")+3;
+    unsigned badges_end=3+text_w(&FONT_T,"USB IN")+3+2+text_w(&FONT_T,"BT AAC")+3+2+text_w(&FONT_T,"FX")+3+2+text_w(&FONT_T,"USB OUT")+3;
     unsigned text_start=237-text_w(&FONT_T,"CPU 100/100% BAT 100%");
     printf("top bar: badges end %u, CPU/battery start %u\n",badges_end,text_start);
     fflush(stdout);
@@ -23,7 +23,7 @@ int main(void)
     for(unsigned y=0;y<16;y++)for(unsigned x=text_start;x<240;x++)assert(fb[y*240+x]==cv_px[y*240+x]);
     gateway_cpu_mode=0;gateway_draw_cpu();key=gateway_bar_key;
     cpu2_work_percent=30;gateway_draw_cpu();assert(key==gateway_bar_key);
-    unsigned fx_x=3+text_w(&FONT_T,"USB IN")+3+2+text_w(&FONT_T,"BT IN AAC")+3+2;
+    unsigned fx_x=3+text_w(&FONT_T,"USB IN")+3+2+text_w(&FONT_T,"BT AAC")+3+2;
     for(unsigned chain=0;chain<2;chain++)for(unsigned eq=0;eq<2;eq++)for(unsigned lim=0;lim<2;lim++){
         gateway_fx_params.chain=chain;gateway_fx_params.eq=eq;gateway_fx_params.lim=lim;
         gateway_draw_cpu();

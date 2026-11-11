@@ -30,6 +30,9 @@ static void own_bta_poll(void) {
 #ifdef APP_BT_APTX
     btr_aptx_poll();
 #endif
+#ifdef APP_BT_LDAC
+    btr_ldac_poll();
+#endif
 #ifdef APP_BT_AAC
     btr_aac_poll();
 #endif
@@ -57,7 +60,16 @@ int plat_bt_receiver_codec(void)
     if(!plat_bt_receiver_connected() || brc.profile.state==BTR_IDLE)return PLAT_BT_CODEC_NONE;
     return brc.profile.codec==BTR_CODEC_SBC?PLAT_BT_CODEC_SBC:
         brc.profile.codec==BTR_CODEC_AAC?PLAT_BT_CODEC_AAC:
-        brc.profile.codec==BTR_CODEC_APTX?PLAT_BT_CODEC_APTX:brc.profile.codec==BTR_CODEC_APTX_HD?PLAT_BT_CODEC_APTX_HD:PLAT_BT_CODEC_NONE;
+        brc.profile.codec==BTR_CODEC_APTX?PLAT_BT_CODEC_APTX:brc.profile.codec==BTR_CODEC_APTX_HD?PLAT_BT_CODEC_APTX_HD:brc.profile.codec==BTR_CODEC_LDAC?PLAT_BT_CODEC_LDAC:PLAT_BT_CODEC_NONE;
+}
+unsigned plat_bt_receiver_graphs(void)
+{
+    int codec=plat_bt_receiver_codec();
+    if(codec==PLAT_BT_CODEC_AAC)return 0;
+#ifdef APP_BT_LDAC
+    if(codec==PLAT_BT_CODEC_LDAC && !btr_ldac)return 0;
+#endif
+    return 3;
 }
 void plat_bt_receiver_mix(int32_t *lr,uint32_t n,uint32_t gain) {if(brl.on)btr_pcm_mix(lr,n,gain);}
 static int own_bta_feed(const int32_t *o,uint32_t n) {(void)o;(void)n;return 0;}
@@ -73,7 +85,7 @@ void plat_bt_receiver_preference(int preference)
 }
 void plat_bt_receiver_codecs(unsigned mask)
 {
-    if(!mask || mask>15 || btr_codec_mask==mask)return;
+    if(!mask || mask>31 || btr_codec_mask==mask)return;
     btr_codec_mask=(uint8_t)mask;
     if(brl.on && brl.phase>=BR_CONNECTING)br_drop(1,BR_FAIL_USER,0);
 }

@@ -19,7 +19,7 @@ static void ui(void){
  now_ms+=48;app_loop();assert(gateway_meter[0].level==gateway_meter_level(raw[0]) && gateway_meter[4].level>470 && gateway_meter[2].level>530);
  assert(gateway_mixer_peak_key[0] && gateway_mixer_peak_key[1]);
  master=0;now_ms+=48;app_loop();uint32_t bottom=gateway_mixer_fader_key[3];master=4096;now_ms+=48;app_loop();assert(gateway_mixer_fader_key[3]!=bottom);
- now_ms+=750;app_loop();gateway_settings_t s;assert(sizeof s==24 && plat_store_load(OBJ_SETTINGS,&s,sizeof s)==24 && s.version==16 && s.input_db[0]==gateway_mix_db[0]);
+ now_ms+=750;app_loop();gateway_settings_t s;assert(sizeof s==24 && plat_store_load(OBJ_SETTINGS,&s,sizeof s)==24 && s.version==17 && s.input_db[0]==gateway_mix_db[0]);
  int saved=gateway_mix_db[0];app_init();app_ui_init();assert(gateway_mix_db[0]==saved && gateway_fader[0].gain==gateway_mix_target[0]);
  for(unsigned bad=0;bad<3;bad++){s=gateway_settings();s.input_db[bad]=bad?1:GATEWAY_GAIN_OFF-1;plat_store_save(OBJ_SETTINGS,&s,sizeof s);app_init();assert(!gateway_mix_db[0] && !gateway_mix_db[1]);}
  for(unsigned v=8;v<=9;v++){s=gateway_settings();s.version=v;s.bt_reserved[0]=0;s.spectrum_range=3;s.input_db[0]=-300;s.reserved=v==9?3:1;

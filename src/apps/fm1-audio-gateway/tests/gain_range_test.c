@@ -86,7 +86,7 @@ static void persistence(void){
   gateway_mix_db[e-EN_K1]=-600;gateway_mixer_init();turn(e,-1);
   assert(gateway_mix_db[e-EN_K1]==-601 && gateway_mix_target[e-EN_K1]>0);
  }
- now_ms+=750;app_loop();gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==24 && s.version==16);
+ now_ms+=750;app_loop();gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==24 && s.version==17);
  app_init();app_ui_init();for(unsigned i=0;i<3;i++)assert(gateway_mix_db[i]==-601);
  for(unsigned v=10;v<=13;v++){
   s=gateway_settings();s.version=v;s.bt_reserved[0]=0;s.spectrum_range=v>=13?90:3;

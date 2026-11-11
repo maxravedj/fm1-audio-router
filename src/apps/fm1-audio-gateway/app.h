@@ -58,6 +58,7 @@ void app_say(const char *a, const char *b);
 
 #define APP_BT_AAC
 #define APP_BT_APTX
+#define APP_BT_LDAC
 #ifndef PLAT_HOST
 #define APP_BT_SBC_CPU2
 #define APP_BT_RESAMPLE_CPU2
@@ -70,6 +71,7 @@ int app_sysex(const uint8_t *p,uint32_t n);
 /* Main-thread acceptance callback: release display scratch before media is
  * drained from the same radio RX queue. Does not paint or change saved mode. */
 void app_bt_aac_prepare(void);
+void app_bt_ldac_prepare(void);
 
 #define APP_AUDIO_MONITOR
 
