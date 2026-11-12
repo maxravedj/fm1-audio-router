@@ -57,7 +57,8 @@ Press **EDIT** to open settings, use **SELECT** to scroll, **ALGORITHM** to chan
 - USB OUT: send audio back to USB, select source here.
 
 ### MIDI controller
-Set **MIDI** to **CONTROLLER**, choose a channel (1–16), and press **SAVE**. With USB connected, press **REC** to enter or leave MIDI mode. Encoders send absolute CCs (0–127) with gentle acceleration; keys send notes. **MASTER** keeps controlling audio. **OCT−/OCT+** shift up to three octaves; press both to reset. **MIDI highlight C** keeps **C** keys bright. Leaving with **REC** saves encoder positions for the next entry and reboot.
+Enable MIDI in settings.
+With USB connected, press **REC** to enter or leave MIDI mode. Encoders send absolute CCs (0–127) with gentle acceleration; keys send notes. **OCT−/OCT+** shift up to three octaves; press both to reset. **MASTER** keeps controlling audio.
 
 ### Visualizers
 Press **HOME** to open visualizers screen and cycle through different visualizers.
