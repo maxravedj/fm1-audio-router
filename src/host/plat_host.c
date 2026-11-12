@@ -379,6 +379,16 @@ uint32_t plat_midi_out_room(uint32_t to)
 }
 static uint32_t usb_links;                      /* plat_midi_out_link: one USB connection, all run long */
 uint32_t plat_midi_out_link(void) { return usb_links; }
+/* A bounded-send oracle for controller tests; normally the simulator never fills. */
+static uint32_t midi_try_slots=64u;
+static int midi_try_connected=1,midi_try_limited;
+int plat_midi_try_out(uint32_t pkt)
+{
+    if(!midi_try_connected || (midi_try_limited && !midi_try_slots) || !usbh_to_usb())return 0;
+    if(midi_try_limited)midi_try_slots--;
+    plat_midi_send(pkt,TO_USB);
+    return 1;
+}
 /* the USB MIDI host (plat_usb_host): a device on the port, as the script plugs it ("usbh plug NAME [in|out|nomidi]",
  * "usbh unplug"), its MIDI in ("usbh midi B0 B1 B2"), what the FM-1 sends it (expect_out USBH; expect usbh_out,
  * usbh_clocks). As felucca-bsp's host: boot is a device; the mode changes at the platform's next look; a device

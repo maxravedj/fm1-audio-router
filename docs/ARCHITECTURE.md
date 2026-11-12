@@ -150,6 +150,51 @@ codec checkbox mask in the existing codec byte, retaining the 24-byte record
 and all v1-v15 migrations. Settings v17 adds LDAC in bit 4 without changing
 the record size or previous bits. The advertised list applies only on successful SAVE.
 
+Settings v18 keeps the 24-byte record: reserved bits 5/6 store MIDI controller
+enable/C highlighting, and the high nibble of `bt_reserved[2]` stores channel
+0–15 (displayed as 1–16). Older versions default MIDI OFF, highlight OFF and
+channel 1. Codec masks, colors, USB routing, FX storage and flash sectors are
+unchanged. Settings v19 appends seven last-exit encoder positions and a zero
+reserved byte, extending the record to 32 bytes while retaining the v18 prefix
+and all earlier migrations in the same A/B sectors. Old records initialize
+positions to 64. REC activation, held notes and octave shift remain volatile.
+
+The controller runs only in the CPU0 foreground, ahead of screen/modal input.
+It uses the existing USB MIDI queue, two 27-bit wanted/sent masks, seven
+absolute encoder positions and a pending-CC mask. At most eight USB packets
+are attempted per service, with old-channel/old-pitch releases before note-ons
+and CCs. Each encoder tracks direction and elapsed time independently. Slow
+detents change its 0–127 position by one; continued turns below 80/35 ms per
+detent use steps of two/three. First turns and reversals use one. Delta clamping
+before multiplication/addition handles extreme deltas safely. Entry restores
+the last-exit position bank without emitting an unsolicited CC burst. Under backpressure,
+pending CCs coalesce to the latest position; exiting REC or reconnecting drops
+pending sends while retaining positions. Normal REC exit snapshots the seven
+positions and requests an immediate foreground settings commit, bypassing the
+750-ms debounce. Unchanged positions skip the write. Failed writes retain the
+snapshot and retry with the existing five-second backoff, even if live positions
+change after re-entry. Settings SAVE keeps the last-exit bank unless it disables
+MIDI or changes its channel while active; that successful commit includes the
+current positions. Turning encoders performs no flash writes.
+The octave shift is bounded to -3..+3; pressing both OCT buttons resets it.
+The sent-note bank retains its original
+channel and octave until all releases are accepted, including rapid shifts with
+a full USB queue. Octave LED timing runs in the foreground without invalidating
+the display: solid at one octave, 500 ms blink phases at two, 200 ms at three.
+The active REC indicator composites FONT_L red text centered at (120,160), with
+10 px padding and a 90% opaque black background (10% scene). Seven smaller padded value cells use
+the physical encoder layout in a three-row/four-column grid above it. Composition
+uses the existing canvas, without an image buffer or refresh timer. Mode changes
+and value changes replay the current view through a clipped canvas transfer;
+only the affected area reaches the LCD. Ordinary dirty strips and screenshot
+replay composite the same overlays from fresh underlying pixels. Entry requires
+`plat_usb_connected()`: rejection produces two foreground REC pulses and a
+one-second two-line USB/DISCONNECTED overlay, without starting MIDI or saving.
+`plat_midi_try_out` returns acceptance under the platform lock, so a full queue
+cannot make the app forget an unsent release. There is no allocation, display
+work or MIDI processing in audio/decoder callbacks. The updater's foreground
+hook releases notes with a bounded drain before switching firmware.
+
 LDAC uses the pinned Apache-2.0 Open Vela/Sony fixed-point decoder on CPU1,
 producing signed 24-bit stereo at 44.1/48 kHz. CPU0 validates RTP/frame headers,
 bounded fragmentation, fragment timestamps and sequence order before publishing

@@ -221,17 +221,17 @@ static void gateway_spectrum_paint(int force)
         uint32_t level = gateway_spectrum_height(gateway_spectrum_level[b]);
         uint32_t peak = gateway_spectrum_height(gateway_spectrum_peak[b]);
         if (force) {
-            lcd_fill(x, GATEWAY_SPECTRUM_TOP, width, GATEWAY_SPECTRUM_HEIGHT, C_BLACK);
+            gateway_display_fill(x, GATEWAY_SPECTRUM_TOP, width, GATEWAY_SPECTRUM_HEIGHT, C_BLACK);
             old = old_peak = 0;
         }
-        if (level > old) lcd_fill(x, GATEWAY_SPECTRUM_BOTTOM - level, width, level - old, GATEWAY_SPECTRUM_BAR_COLOR);
-        else if (level < old) lcd_fill(x, GATEWAY_SPECTRUM_BOTTOM - old, width, old - level, C_BLACK);
+        if (level > old) gateway_display_fill(x, GATEWAY_SPECTRUM_BOTTOM - level, width, level - old, GATEWAY_SPECTRUM_BAR_COLOR);
+        else if (level < old) gateway_display_fill(x, GATEWAY_SPECTRUM_BOTTOM - old, width, old - level, C_BLACK);
         if (old_peak != peak || old != level || force) {
             /* Erase a moved peak, restoring the bar underneath when it grew
              * through that pixel. Then paint its new line above the bars. */
-            if (old_peak) lcd_fill(x, GATEWAY_SPECTRUM_BOTTOM - old_peak, width, 1,
+            if (old_peak) gateway_display_fill(x, GATEWAY_SPECTRUM_BOTTOM - old_peak, width, 1,
                 old_peak <= level ? GATEWAY_SPECTRUM_BAR_COLOR : C_BLACK);
-            if (peak) lcd_fill(x, GATEWAY_SPECTRUM_BOTTOM - peak, width, 1, GATEWAY_SPECTRUM_PEAK_COLOR);
+            if (peak) gateway_display_fill(x, GATEWAY_SPECTRUM_BOTTOM - peak, width, 1, GATEWAY_SPECTRUM_PEAK_COLOR);
         }
         gateway_spectrum_drawn[b] = (uint16_t)level;
         gateway_spectrum_peak_drawn[b] = (uint16_t)peak;

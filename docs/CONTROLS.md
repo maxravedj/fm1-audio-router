@@ -85,7 +85,7 @@ written only by confirmation, and presets do not contain bypass state.
 
 Settings include Bluetooth OFF/ON, a Bluetooth codecs checklist, MASTER waveform
 auto scale, separate waveform/spectrum colors, battery percentage display,
-CPU display, USB OUT routing and mute/solo fade time. Fade choices are OFF,
+CPU display, USB OUT routing, mute/solo fade time and MIDI controller options. Fade choices are OFF,
 10/50/100/500 ms and 1 s. Colors include red, green, blue, yellow, light gray,
 white and orange. Battery percentage is an uncalibrated estimate; no voltage
 mode is provided.
@@ -95,6 +95,68 @@ MASTER waveform auto scale OFF, green waveforms, yellow spectrum, battery and
 CPU displays ON, USB OUT OFF and a 50-ms mute/solo fade. The global FX chain
 starts bypassed, with EQ and limiter individually enabled. Existing saved
 preferences take priority over these defaults.
+
+## MIDI controller
+
+Set **MIDI: CONTROLLER** in Settings and SAVE. **MIDI controller channel**
+selects channel 1–16 (default 1); **MIDI highlight C** defaults OFF. MIDI itself
+defaults OFF. REC is dim on every screen when the controller is available.
+Press REC to activate it (bright REC); press again to return to normal controls.
+The active toggle starts OFF at every boot, independently of the saved settings.
+Entry requires USB to be connected. Otherwise REC flashes twice and a two-line
+**USB / DISCONNECTED** message appears for one second.
+
+While active, all seven encoders send USB MIDI absolute CC messages instead of
+editing the displayed screen. MASTER still controls audio volume. Buttons keep
+their screen/navigation functions, and note keys take priority over Mixer mute/solo.
+Turn controller mode off with REC to edit Settings using the encoders.
+Active controller mode shows a red **MIDI** overlay on every screen, centered
+one-third from the bottom, with a 10% transparent black background. Smaller, padded values
+above it follow the physical encoder layout: SELECT in row 1, column 3;
+PRESET and ALGORITHM in row 2, columns 2 and 3; K1–K4 across row 3.
+
+| Encoder | CC |
+| --- | ---: |
+| SELECT | 20 |
+| ALGORITHM | 21 |
+| K1 / K2 / K3 / K4 | 22 / 23 / 24 / 25 |
+| PRESET | 26 |
+
+Choose **Absolute** interpretation in the receiving software. Each encoder has
+an independent 0–127 value, initially 64. Each clockwise detent
+increases it, each anticlockwise detent decreases it; values
+clamp at 0 and 127 without wrapping. Leaving MIDI with REC saves the positions
+for the next entry and reboot. Turning knobs does not write flash; power loss
+before leaving MIDI restores the previous saved positions. Slow turns step
+by one per detent. Continued turns in the same direction step by two below
+80 ms per detent, or three below 35 ms. The first turn, direction changes and
+pauses return to fine control; each encoder tracks its speed independently.
+Turning an encoder sends its latest position.
+The 27 keys send F3–G5 (MIDI notes 53–79) at the default octave, velocity 127, on the selected
+channel. They are dim when idle and bright when held. Highlight C keeps the
+C4/C5 keys bright whether idle or held, without generating extra
+notes. **OCT−/OCT+** transpose by one octave per press, up to three octaves in
+either direction. Press both OCT buttons together to reset to zero. Both buttons
+are dim at zero. The shifted direction is bright
+at one octave, blinks with a one-second cycle at two, and a 400 ms cycle at three;
+the other direction stays dim. Held notes are released at their old pitch before
+restarting at the new pitch. The shift survives REC toggles and resets on boot.
+In confirmation dialogs, OCT−/OCT+ keep their cancel/confirm functions. Bluetooth
+pairing with OCT+ is available after leaving MIDI mode.
+
+The USB MIDI port/interface and jacks are named **MIDI**; hosts that combine
+product and port names display **FM1 Audio MIDI**. The USB audio
+product remains **FM1 Audio**. Note-offs take priority over CCs and remain
+pending if USB's output queue fills. Changing channel releases old-channel
+notes first; USB reconnection discards stale CCs. Audio processing is unchanged.
+
+If macOS still shows **Felucca**, quit MIDI applications, disconnect the FM-1,
+and open Audio MIDI Setup → Window → Show MIDI Studio. Remove the offline
+Felucca device, reconnect the FM-1 and use Rescan MIDI, then reopen the apps.
+This refreshes the saved host configuration; it does not erase FM-1 settings.
+See Apple's [MIDI Studio controls](https://support.apple.com/guide/audio-midi-setup/midi-studio-window-ams1001/mac).
+
+## Bluetooth
 
 Enable Bluetooth ON and SAVE. Hold OCT+ for one second to pair with
 **FM1 BT Receiver**; press OCT+ again to stop discovery. Discovery is off at

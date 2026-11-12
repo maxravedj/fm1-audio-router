@@ -6,6 +6,7 @@ bootloader = "../../boot/m-bootloader/fm1-uboot.boot"
 bootloader_sha256 = "cedc9c17648bdeecda5c8d0ffffe2211849f8a36ab615fe49d6cc46d249baf44"
 usb_manufacturer = "FM-1 Audio Gateway"
 usb_product = "FM1 Audio"
+usb_midi_name = "MIDI"
 # FX units use mixed case; trim empty glyph margins to save SRAM.
 font_full = ["T", "L"]
 font_trim = true

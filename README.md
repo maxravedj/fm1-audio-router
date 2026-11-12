@@ -21,12 +21,13 @@
 - Bluetooth audio receiver with SBC, AAC, aptX, aptX HD and LDAC support
 - FX chain of 5 bands parametric EQ and peak limiter with 8 presets
 - Mixer
+- MIDI controller functionality
 - 3 Visualizers: meters, waveforms and 40-band spectrum
 
 # Installation
 1. Flash m-bootloader with [M-Flasher](https://github.com/jvitkauskas/m-flasher)
 2. Turn off FM-1 and turn on while holding **REC** button
-3. Flash [latest firmware](https://github.com/maxravedj/fm1-audio-router/releases/latest/download/fm1-audio-router-v0.3.0.fwsc) with M-Flasher
+3. Flash [latest firmware](https://github.com/maxravedj/fm1-audio-router/releases/latest/download/fm1-audio-router-v0.4.0.fwsc) with M-Flasher
 
 See additional [installation instructions](docs/INSTALL.md)
 
@@ -46,14 +47,17 @@ Use **PRESETS** knob to scroll presets. EQ and limiter have 8 preset slots each.
 
 ### Mixer
 Press **GLO** to open mixer. Use **K1**-**K3** to trim volumes on inputs and USB output. Use **MASTER** knob to control Master volume. Press **PLAY/STOP** to mute Master (works on any screen).
-Use first octave F-B keys to mute, second octave to solo.
+Use **F3**/**G3**/**A3**/**B3** to mute and **F4**/**G4**/**A4**/**B4** to solo.
 
 ### Settings
 Press **EDIT** to open settings, use **SELECT** to scroll, **ALGORITHM** to change parameters and **SAVE** to save and apply settings.
 - Bluetooth: enable/disable bluetooth
-- Bluetooth codecs: SEL opens a checklist; SELECT scrolls, SEL toggles, OCT− cancels and OCT+ confirms the draft. Save Settings to apply it.
+- Bluetooth codecs: **SEL** opens a checklist; **SELECT** scrolls, **SEL** toggles, **OCT−** cancels and **OCT+** confirms the draft. Press **SAVE** in Settings to apply it.
 - Master waveform auto scale: automatically scale master waveform to achieve  always fat waveform
 - USB OUT: send audio back to USB, select source here.
+
+### MIDI controller
+Set **MIDI** to **CONTROLLER**, choose a channel (1–16), and press **SAVE**. With USB connected, press **REC** to enter or leave MIDI mode. Encoders send absolute CCs (0–127) with gentle acceleration; keys send notes. **MASTER** keeps controlling audio. **OCT−/OCT+** shift up to three octaves; press both to reset. **MIDI highlight C** keeps **C** keys bright. Leaving with **REC** saves encoder positions for the next entry and reboot.
 
 ### Visualizers
 Press **HOME** to open visualizers screen and cycle through different visualizers.

@@ -4,6 +4,7 @@
  * Included by the device/host unity build, after gfx.c and announce.c. */
 
 #include "meter.h"
+static void gateway_display_fill(uint32_t x,uint32_t y,uint32_t w,uint32_t h,uint16_t c);
 #include "spectrum.h"
 static uint8_t gateway_screenshot_painting,gateway_shot_frozen;
 static struct {uint32_t cpu,cpu2,master;int raw;uint8_t usb,connected,pairing,codec;} gateway_shot_panel;
@@ -25,13 +26,13 @@ static const char *const gateway_sources[]={"USB IN","BT IN","MASTER","USB OUT"}
 static const uint8_t gateway_source_order[]={PLAT_MONITOR_USB,PLAT_MONITOR_BT,PLAT_MONITOR_OUT,PLAT_MONITOR_MASTER};
 static const char *const gateway_codecs[]={"SBC","AAC","aptX","aptX HD","LDAC"};
 static uint8_t gateway_codec_dialog,gateway_codec_row,gateway_codec_empty,gateway_codec_checks;
-enum { GATEWAY_SET_BT, GATEWAY_SET_CODEC, GATEWAY_SET_AUTO_SCALE, GATEWAY_SET_COLOR, GATEWAY_SET_SPECTRUM_COLOR, GATEWAY_SET_BATTERY, GATEWAY_SET_CPU, GATEWAY_SET_USB_OUT, GATEWAY_SET_FADE, GATEWAY_SETTING_ROWS };
+enum { GATEWAY_SET_BT, GATEWAY_SET_CODEC, GATEWAY_SET_AUTO_SCALE, GATEWAY_SET_COLOR, GATEWAY_SET_SPECTRUM_COLOR, GATEWAY_SET_BATTERY, GATEWAY_SET_CPU, GATEWAY_SET_USB_OUT, GATEWAY_SET_FADE, GATEWAY_SET_MIDI, GATEWAY_SET_MIDI_CHANNEL, GATEWAY_SET_MIDI_C, GATEWAY_SETTING_ROWS };
 enum { GATEWAY_WAVE_RED, GATEWAY_WAVE_GREEN, GATEWAY_WAVE_BLUE, GATEWAY_WAVE_YELLOW,
        GATEWAY_WAVE_GRAY, GATEWAY_WAVE_WHITE, GATEWAY_WAVE_ORANGE, GATEWAY_WAVE_COLORS };
 static const char *const gateway_color_names[]={"RED","GREEN","BLUE","YELLOW","LIGHT GRAY","WHITE","ORANGE"};
 static const uint16_t gateway_wave_colors[]={RGB(255,48,48),RGB(40,220,90),RGB(45,130,255),
     RGB(255,212,40),RGB(190,190,190),RGB(255,255,255),RGB(255,140,25)};
-static const char *const gateway_setting_names[]={"Bluetooth:","Bluetooth codecs:","Master waveform auto scale","Waveform color:","Spectrum color:","Battery display:","CPU load display:","USB OUT:","Mute/solo fade time:"};
+static const char *const gateway_setting_names[]={"Bluetooth:","Bluetooth codecs:","Master waveform auto scale","Waveform color:","Spectrum color:","Battery display:","CPU load display:","USB OUT:","Mute/solo fade time:","MIDI:","MIDI controller channel:","MIDI highlight C:"};
 static uint8_t gateway_master_wave_auto_scale=1, gateway_auto_scale_draft=1;
 static uint8_t gateway_wave_color=GATEWAY_WAVE_BLUE, gateway_color_draft=GATEWAY_WAVE_BLUE;
 static uint8_t gateway_spectrum_color=GATEWAY_WAVE_YELLOW,gateway_spectrum_color_draft=GATEWAY_WAVE_YELLOW;
@@ -105,17 +106,22 @@ typedef struct {
     uint8_t bluetooth, bt_reserved[3];
     int16_t input_db[3];
     uint8_t mixer_controls,fade_time; /* v15: input/OUT mute bits 0..2, solo bits 3..6 */
+    uint8_t midi_position[NE],midi_reserved; /* v19: last normal MIDI exit, never live turns */
 } gateway_settings_t;
 static gateway_settings_t gateway_saved;
 static uint8_t gateway_settings_dirty;
 static uint32_t gateway_settings_ms, gateway_settings_retry_ms;
+#define GATEWAY_SETTINGS_VERSION 19u
+#include "midi.h"
+#include "midi_overlay.h"
 
 static gateway_settings_t gateway_settings(void)
 {
-    gateway_settings_t s = {{'A', 'R', 'T'}, 17, (uint8_t)gateway_zoom, gateway_muted, gateway_mode, gateway_battery_mode | (!gateway_cpu_mode<<1) | (gateway_usb_out_mode<<2),
+    gateway_settings_t s = {{'A', 'R', 'T'}, GATEWAY_SETTINGS_VERSION, (uint8_t)gateway_zoom, gateway_muted, gateway_mode, gateway_battery_mode | (!gateway_cpu_mode<<1) | (gateway_usb_out_mode<<2) | gateway_midi_mode<<5 | gateway_midi_c<<6,
         gateway_spectrum_rate, gateway_spectrum_max, gateway_spectrum_min, gateway_spectrum_color, gateway_bt_mode,
-        {gateway_codec_preference,gateway_monitor,gateway_master_wave_auto_scale | gateway_wave_color<<1},
-        {gateway_mix_db[0],gateway_mix_db[1],gateway_mix_db[2]},gateway_mix_mutes | gateway_mix_solos<<3,gateway_fade_time};
+        {gateway_codec_preference,gateway_monitor,gateway_master_wave_auto_scale | gateway_wave_color<<1 | gateway_midi_channel<<4},
+        {gateway_mix_db[0],gateway_mix_db[1],gateway_mix_db[2]},gateway_mix_mutes | gateway_mix_solos<<3,gateway_fade_time,{0},0};
+    memcpy(s.midi_position,gateway_midi_resume,NE);
     return s;
 }
 
@@ -130,11 +136,12 @@ static void gateway_settings_changed(void)
 static void gateway_save_settings(uint32_t now)
 {
     gateway_settings_t s;
-    if (!gateway_settings_dirty || now - gateway_settings_ms < 750u ||
+    if (!gateway_settings_dirty || (!gateway_midi_save_pending && now - gateway_settings_ms < 750u) ||
             now - gateway_settings_retry_ms < 5000u) return;
     s = gateway_settings();
     if (!memcmp(&s,&gateway_saved,sizeof s)) {
         gateway_settings_dirty = 0;
+        gateway_midi_save_pending=0;
         return;
     }
     plat_cpu_work_begin();
@@ -142,6 +149,7 @@ static void gateway_save_settings(uint32_t now)
     if (plat_store_save(OBJ_SETTINGS, &s, sizeof s) == 0) {
         gateway_saved = s;
         gateway_settings_dirty = 0;
+        gateway_midi_save_pending=0;
         gateway_settings_retry_ms = plat_ms() - 5000u;
     } else gateway_settings_retry_ms = plat_ms();
     plat_cpu_work_end();
@@ -153,7 +161,8 @@ static int gateway_settings_unsaved(void)
         gateway_auto_scale_draft!=gateway_master_wave_auto_scale || gateway_color_draft!=gateway_wave_color ||
         gateway_spectrum_color_draft!=gateway_spectrum_color || gateway_battery_draft!=gateway_battery_mode ||
         gateway_cpu_draft!=gateway_cpu_mode || gateway_usb_out_draft!=gateway_usb_out_mode ||
-        gateway_fade_draft!=gateway_fade_time;
+        gateway_fade_draft!=gateway_fade_time || gateway_midi_draft!=gateway_midi_mode ||
+        gateway_midi_c_draft!=gateway_midi_c || gateway_midi_channel_draft!=gateway_midi_channel;
 }
 static void gateway_lights(void)
 {
@@ -162,6 +171,8 @@ static void gateway_lights(void)
     plat_glow(0);
     plat_play_red(gateway_muted);
     uint32_t dim = (home | edit | fx) & ~active;
+    gateway_midi_rec_on=(uint8_t)gateway_midi_rec_light(plat_ms());
+    if(gateway_midi_mode){if(gateway_midi_rec_on)active|=1u<<B_REC;else dim|=1u<<B_REC;}
     if (gateway_screen == GATEWAY_SETTINGS) {
         if(!gateway_codec_dialog){
             if(gateway_settings_unsaved())active|=1u<<B_SAVE;
@@ -176,12 +187,20 @@ static void gateway_lights(void)
         else dim|=1u<<B_SEL;
         if(gateway_fx_dialog)active|=(1u<<B_OCTDN)|(1u<<B_OCTUP);
     }
-    if (gateway_bt_mode && !gateway_fx_dialog && !gateway_codec_dialog) {
+    if(gateway_midi_active && !gateway_fx_dialog && !gateway_codec_dialog){
+        uint32_t oct=(1u<<B_OCTDN)|(1u<<B_OCTUP);
+        gateway_midi_octave_on=(uint8_t)gateway_midi_octave_light(plat_ms());
+        uint32_t bright=gateway_midi_octave_on?1u<<(gateway_midi_octave>0?B_OCTUP:B_OCTDN):0u;
+        active=(active&~oct)|bright;dim=(dim&~oct)|(oct&~bright);
+    }else if (gateway_bt_mode && !gateway_fx_dialog && !gateway_codec_dialog) {
         if (plat_bt_receiver_pairing()) active |= 1u << B_OCTUP;
         else dim |= 1u << B_OCTUP;
     }
     uint32_t keys=0,dim_keys=0;
-    if(gateway_screen==GATEWAY_MIXER)for(unsigned g=0;g<4;g++){
+    if(gateway_midi_active){
+        keys=(gateway_keys | (gateway_midi_c?GATEWAY_MIDI_CS:0u)) & GATEWAY_MIDI_KEYS;
+        dim_keys=GATEWAY_MIDI_KEYS & ~keys;
+    }else if(gateway_screen==GATEWAY_MIXER)for(unsigned g=0;g<4;g++){
         uint32_t m=1u<<gateway_mute_keys[g],s=1u<<gateway_solo_keys[g];
         if(gateway_mixer_muted(g))keys|=m;else dim_keys|=m;
         if(gateway_mix_solos&(1u<<g))keys|=s;else dim_keys|=s;
@@ -327,6 +346,7 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
 
 void app_panic(void)
 {
+    gateway_midi_stop();gateway_midi_service();
 #ifdef APP_UI_PROFILE
     plat_profile_stop();
 #endif
@@ -341,8 +361,19 @@ void app_panic(void)
     plat_bt_receiver_on(0);
 }
 
+void app_update_begin(void)
+{
+    gateway_midi_stop();
+    uint32_t start=plat_ms();
+    /* Foreground updater only. Bound a stalled host; USB IRQs remain running. */
+    for(unsigned tries=0;gateway_midi_sent && tries<1024 && plat_ms()-start<50u;tries++){
+        gateway_midi_service();plat_yield();
+    }
+}
+
 void app_splash(void)
 {
+    gateway_ui_ready=0;
     lcd_fill(0, 0, 240, 240, C_BLACK);
     draw_text_box(0, 75, 240, &FONT_L, "AUDIO", RGB(45, 130, 255), 1);
     draw_text_box(0, 111, 240, &FONT_L, "ROUTER", RGB(45, 130, 255), 1);
@@ -354,6 +385,7 @@ void app_init(void)
     gateway_settings_t s = {0};
     uint32_t size = plat_store_size(OBJ_SETTINGS);
     gateway_release_display();gateway_usb_out_apply(0,0);
+    gateway_midi_overlay_init();
     plat_cpu_work_reset();
     plat_cpu2_set(1);
     plat_usb_play_gain(4096u);
@@ -361,6 +393,7 @@ void app_init(void)
     gateway_mix_db[0]=gateway_mix_db[1]=gateway_mix_db[2]=0;
     gateway_mix_mutes=gateway_mix_solos=0;gateway_fade_time=gateway_fade_draft=2;
     gateway_monitor = gateway_aac_active = gateway_ldac_active = 0;
+    gateway_midi_init();
     gateway_graph_mask=3;
     gateway_codec_preference = gateway_codec_draft = 3; /* preserve SBC+AAC default */
     gateway_codec_dialog=gateway_codec_row=gateway_codec_empty=gateway_codec_checks=0;
@@ -378,18 +411,20 @@ void app_init(void)
     gateway_save_notice = gateway_bt_running = 0;
     gateway_settings_row = gateway_settings_first = gateway_oct_tracking = gateway_oct_fired = 0;
     gateway_pair_seen = gateway_bt_seen = gateway_codec_seen = 0;
-    if ((size == 8u || size == 12u || size==16u || size==20u || size==22u || size == sizeof s) &&
+    if ((size == 8u || size == 12u || size==16u || size==20u || size==22u || size==24u || size == sizeof s) &&
             plat_store_load(OBJ_SETTINGS, &s, sizeof s) == (int)size &&
             (s.version<10 || (s.input_db[0]>=(s.version>=14?GATEWAY_GAIN_OFF:-600) && s.input_db[0]<=0 && s.input_db[1]>=(s.version>=14?GATEWAY_GAIN_OFF:-600) && s.input_db[1]<=0)) &&
             (s.version<12 || (s.input_db[2]>=(s.version>=14?GATEWAY_GAIN_OFF:-600) && s.input_db[2]<=0)) &&
             (s.version<15 || (s.mixer_controls<128u && s.fade_time<6u)) &&
+            (s.version<19 || (!s.midi_reserved && gateway_midi_positions_valid(s.midi_position))) &&
             s.magic[0] == 'A' && s.magic[1] == 'R' && s.magic[2] == 'T' &&
-            s.zoom < GATEWAY_ZOOMS && s.muted <= 1u && (s.version>=8?s.reserved<=(s.version>=11?27u:s.version>=9?3u:1u):!s.reserved) &&
+            s.zoom < GATEWAY_ZOOMS && s.muted <= 1u &&
+            (s.version>=18?(!(s.reserved&128u) && (s.reserved&31u)<=27u):s.version>=8?s.reserved<=(s.version>=11?27u:s.version>=9?3u:1u):!s.reserved) &&
             (s.version == 1 ? s.mode == 0 : s.mode < GATEWAY_MODES) &&
             (((s.version == 1 || s.version == 2) && size == 8u) ||
-             ((s.version == 3 ? size == 12u : (s.version >= 4 && s.version <= 17) && size == (s.version>=15?sizeof s:s.version>=12?22u:s.version>=10?20u:16u) &&
+             ((s.version == 3 ? size == 12u : (s.version >= 4 && s.version <= GATEWAY_SETTINGS_VERSION) && size == (s.version>=19?sizeof s:s.version>=15?24u:s.version>=12?22u:s.version>=10?20u:16u) &&
                s.bluetooth <= 1u && (s.version==4 ? !s.bt_reserved[0] && !s.bt_reserved[1] : (s.version>=16?(s.bt_reserved[0]>0 && s.bt_reserved[0]<=(s.version>=17?31:15)):s.bt_reserved[0]<=2) && s.bt_reserved[1]<=(s.version>=12?3:2)) &&
-               (s.version>=6 ? s.bt_reserved[2] < (s.version>=8?2u*GATEWAY_WAVE_COLORS:12u) : !s.bt_reserved[2])) && s.spectrum_rate < 3u &&
+               (s.version>=6 ? (s.version>=18?s.bt_reserved[2]&15u:s.bt_reserved[2]) < (s.version>=8?2u*GATEWAY_WAVE_COLORS:12u) : !s.bt_reserved[2])) && s.spectrum_rate < 3u &&
               (s.version>=13 ? s.spectrum_max<150u && s.spectrum_range>s.spectrum_max && s.spectrum_range<=150u : s.spectrum_max<=60u && s.spectrum_range<4u) && (s.version>=8?s.spectrum_reserved<GATEWAY_WAVE_COLORS:!s.spectrum_reserved)))) {
         gateway_zoom = s.zoom;
         gateway_muted = s.muted;
@@ -400,16 +435,19 @@ void app_init(void)
             gateway_spectrum_min = s.version>=13?s.spectrum_range:s.spectrum_max+gateway_spectrum_legacy_ranges[s.spectrum_range];
             if (s.version >= 4) gateway_bt_mode = s.bluetooth;
             if(s.version>=5){gateway_codec_preference=s.version>=16?s.bt_reserved[0]:s.bt_reserved[0]==1?2:s.bt_reserved[0]==2?1:3;gateway_monitor=s.bt_reserved[1];}
-            if(s.version>=6){gateway_master_wave_auto_scale=s.bt_reserved[2]&1u;gateway_wave_color=s.bt_reserved[2]>>1;}
+            if(s.version>=6){gateway_master_wave_auto_scale=s.bt_reserved[2]&1u;gateway_wave_color=(s.bt_reserved[2]>>1)&7u;}
             if(s.version>=8){gateway_battery_mode=s.reserved&1u;gateway_spectrum_color=s.spectrum_reserved;}
             if(s.version>=9)gateway_cpu_mode=!(s.reserved&2u);
-            if(s.version>=11)gateway_usb_out_mode=s.reserved>>2;
+            if(s.version>=11)gateway_usb_out_mode=(s.reserved>>2)&7u;
+            if(s.version>=18){gateway_midi_mode=(s.reserved>>5)&1u;gateway_midi_c=(s.reserved>>6)&1u;gateway_midi_channel=s.bt_reserved[2]>>4;}
+            if(s.version>=19){memcpy(gateway_midi_resume,s.midi_position,NE);memcpy(gateway_midi_values,s.midi_position,NE);}
             if(s.version>=10)for(unsigned i=0;i<(s.version>=12?3u:2u);i++)
                 gateway_mix_db[i]=s.version<14 && s.input_db[i]==-600?GATEWAY_GAIN_OFF:s.input_db[i];
             if(s.version>=15){gateway_mix_mutes=s.mixer_controls&7u;gateway_mix_solos=s.mixer_controls>>3;gateway_fade_time=s.fade_time;}
         }
     }
     gateway_fade_draft=gateway_fade_time;
+    gateway_midi_draft=gateway_midi_mode;gateway_midi_c_draft=gateway_midi_c;gateway_midi_channel_draft=gateway_midi_channel;
     gateway_codec_draft = gateway_codec_preference;
     gateway_auto_scale_draft = gateway_master_wave_auto_scale;
     gateway_color_draft = gateway_wave_color;
@@ -441,9 +479,11 @@ static void gateway_settings_commit(void)
     gateway_settings_t s = gateway_settings();
     s.bluetooth = gateway_bt_draft;
     s.bt_reserved[0] = gateway_codec_draft;
-    s.bt_reserved[2] = gateway_auto_scale_draft | gateway_color_draft<<1;
-    s.spectrum_reserved=gateway_spectrum_color_draft;s.reserved=gateway_battery_draft | (!gateway_cpu_draft<<1) | (gateway_usb_out_draft<<2);
+    s.bt_reserved[2] = gateway_auto_scale_draft | gateway_color_draft<<1 | gateway_midi_channel_draft<<4;
+    s.spectrum_reserved=gateway_spectrum_color_draft;s.reserved=gateway_battery_draft | (!gateway_cpu_draft<<1) | (gateway_usb_out_draft<<2) | gateway_midi_draft<<5 | gateway_midi_c_draft<<6;
     s.fade_time=gateway_fade_draft;
+    int midi_exit=gateway_midi_active && (!gateway_midi_draft || gateway_midi_channel!=gateway_midi_channel_draft);
+    if(midi_exit)memcpy(s.midi_position,gateway_midi_values,NE);
     int32_t *record=gateway_usb_out_draft==gateway_usb_out_mode?gateway_usb_pcm:gateway_usb_out_alloc(gateway_usb_out_draft);
     if(gateway_usb_out_draft && !record){gateway_save_notice=2;gateway_page_redraw=1;return;}
     plat_cpu_work_begin();
@@ -457,9 +497,14 @@ static void gateway_settings_commit(void)
         gateway_spectrum_color=gateway_spectrum_color_draft;gateway_battery_mode=gateway_battery_draft;gateway_cpu_mode=gateway_cpu_draft;
         gateway_usb_out_apply(record,gateway_usb_out_draft);
         gateway_fade_time=gateway_fade_draft;gateway_mixer_publish();
+        if(midi_exit){memcpy(gateway_midi_resume,s.midi_position,NE);gateway_midi_stop();}
+        gateway_midi_mode=gateway_midi_draft;gateway_midi_c=gateway_midi_c_draft;gateway_midi_channel=gateway_midi_channel_draft;
+        if(!gateway_midi_mode)gateway_midi_usb_error=0;
+        gateway_midi_service();
         gateway_bar_key=~0u;gateway_bt_badge_redraw=1;
         gateway_saved = s;
         gateway_settings_dirty = 0;
+        gateway_midi_save_pending=0;
         gateway_settings_retry_ms = plat_ms() - 5000u;
         int failed = 0;
         if (changed || (gateway_bt_mode && !gateway_bt_running)) {
@@ -478,8 +523,31 @@ void app_input_only(void)
     uint32_t pkt, i;
     int port;
     uint32_t buttons = plat_buttons();
-    uint32_t keys=plat_keys(),key_pressed=gateway_ui_ready?keys&~gateway_keys:0;gateway_keys=keys;
+    uint32_t keys=plat_keys(),old_keys=gateway_keys,key_pressed=gateway_ui_ready?keys&~gateway_keys:0;gateway_keys=keys;
     uint32_t pressed = gateway_ui_ready ? buttons & ~gateway_buttons : 0;
+    if(gateway_midi_mode && (pressed&(1u<<B_REC))){
+        if(gateway_midi_active)gateway_midi_exit();
+        else if(plat_usb_connected()){
+            gateway_midi_usb_error=0;gateway_midi_service();memcpy(gateway_midi_values,gateway_midi_resume,NE);gateway_midi_active=1;
+        }else{gateway_midi_usb_error=1;gateway_midi_usb_error_ms=plat_ms();}
+        gateway_lights();
+    }
+    if(gateway_midi_active){
+        gateway_oct_tracking=0;
+        if(!gateway_fx_dialog && !gateway_codec_dialog){
+            uint32_t both=(1u<<B_OCTUP)|(1u<<B_OCTDN);
+            int octave=(buttons&both)==both && (pressed&both)?0:
+                gateway_midi_octave+!!(pressed&(1u<<B_OCTUP))-!!(pressed&(1u<<B_OCTDN));
+            if(octave>3)octave=3;if(octave< -3)octave= -3;
+            if(octave!=gateway_midi_octave){
+                gateway_midi_octave=(int8_t)octave;gateway_midi_octave_ms=plat_ms();gateway_lights();
+            }
+        }
+        gateway_midi_wanted=keys&GATEWAY_MIDI_KEYS;
+        for(unsigned e=0;e<NE;e++)gateway_midi_turn(e,plat_enc((int)e));
+        if(keys!=old_keys)gateway_lights();
+    }
+    gateway_midi_service();
     if(gateway_shot_frozen && (buttons!=gateway_buttons || key_pressed || gateway_fx_tracking ||
             gateway_fx_save_tracking || gateway_oct_tracking))gateway_screenshot_cancel();
     if (pressed & (1u << B_PLAY)) {
@@ -491,7 +559,7 @@ void app_input_only(void)
         gateway_oct_tracking=gateway_fx_save_tracking=0;
         if(pressed&(1u<<B_OCTDN)){gateway_fx_dialog=0;gateway_fx_notice=0;gateway_page_redraw=1;gateway_lights();}
         else if(pressed&(1u<<B_OCTUP))gateway_fx_preset_confirm();
-        for(i=0;i<NE;i++)(void)plat_enc((int)i);
+        for(i=0;i<NE && !gateway_midi_active;i++)(void)plat_enc((int)i);
         gateway_buttons=buttons;return;
     }
     /* Navigation cancels only the open checklist, leaving the Settings draft
@@ -512,7 +580,7 @@ void app_input_only(void)
             gateway_codec_dialog=gateway_codec_empty=gateway_save_notice=0;
             gateway_page_redraw=1;gateway_lights();
         }
-        for(i=0;i<NE;i++){
+        for(i=0;i<NE && !gateway_midi_active;i++){
             int delta=plat_enc((int)i);
             if(i==EN_SELECT && delta){
                 int row=(int)gateway_codec_row+(delta>5?5:delta< -5?-5:delta);
@@ -528,7 +596,7 @@ void app_input_only(void)
         gateway_codec_checks=gateway_codec_draft;
         gateway_save_notice=0;gateway_oct_tracking=0;gateway_page_redraw=1;
         gateway_lights();
-        for(i=0;i<NE;i++)(void)plat_enc((int)i);gateway_buttons=buttons;return;
+        for(i=0;i<NE && !gateway_midi_active;i++)(void)plat_enc((int)i);gateway_buttons=buttons;return;
     }
     if (pressed & (1u << B_EDIT)) {
         if (gateway_screen != GATEWAY_SETTINGS) {
@@ -538,6 +606,7 @@ void app_input_only(void)
             gateway_auto_scale_draft = gateway_master_wave_auto_scale;
             gateway_color_draft = gateway_wave_color;
             gateway_fade_draft=gateway_fade_time;
+            gateway_midi_draft=gateway_midi_mode;gateway_midi_c_draft=gateway_midi_c;gateway_midi_channel_draft=gateway_midi_channel;
     gateway_spectrum_color_draft=gateway_spectrum_color;gateway_battery_draft=gateway_battery_mode;gateway_cpu_draft=gateway_cpu_mode;gateway_usb_out_draft=gateway_usb_out_mode;
             gateway_save_notice = 0;
             gateway_view_changed();
@@ -585,10 +654,10 @@ void app_input_only(void)
                 if(!gateway_fx_save_held)gateway_fx_dialog=1;gateway_fx_save_tracking=0;
             }
             if(gateway_fx_dialog){gateway_fx_notice=0;gateway_oct_tracking=0;gateway_page_redraw=1;gateway_lights();
-                for(i=0;i<NE;i++)(void)plat_enc((int)i);gateway_buttons=buttons;return;}
+                for(i=0;i<NE && !gateway_midi_active;i++)(void)plat_enc((int)i);gateway_buttons=buttons;return;}
         }
     }
-    if (gateway_bt_mode && gateway_ui_ready) {
+    if (gateway_bt_mode && gateway_ui_ready && !gateway_midi_active) {
         if (pressed & (1u << B_OCTUP)) {
             gateway_oct_ms = plat_ms(); gateway_oct_tracking = 1; gateway_oct_fired = 0;
             if (plat_bt_receiver_pairing()) {
@@ -602,7 +671,7 @@ void app_input_only(void)
     }
     if (!(buttons & (1u << B_OCTUP)) || !gateway_bt_mode) gateway_oct_tracking = 0;
     gateway_buttons = buttons;
-    if(gateway_screen==GATEWAY_MIXER)for(unsigned g=0;g<4;g++){
+    if(!gateway_midi_active && gateway_screen==GATEWAY_MIXER)for(unsigned g=0;g<4;g++){
         if(key_pressed&(1u<<gateway_mute_keys[g]))gateway_mixer_toggle(g,0);
         if(key_pressed&(1u<<gateway_solo_keys[g]))gateway_mixer_toggle(g,1);
     }
@@ -610,7 +679,8 @@ void app_input_only(void)
      * The platform handles USB-MIDI update/reader commands independently. Bound a pass. */
     for (i = 0; i < 32u && plat_midi_in(&pkt, &port); i++)
         ;
-    for (i = 0; i < NE; i++) {
+    /* Leave encoder steps arriving after the MIDI snapshot for the next pass. */
+    for (i = 0; i < NE && !gateway_midi_active; i++) {
         int delta = plat_enc((int)i);
         if(delta && gateway_shot_frozen)gateway_screenshot_cancel();
         if(gateway_screen==GATEWAY_MIXER && delta){gateway_mixer_turn(i,delta);}
@@ -634,9 +704,12 @@ void app_input_only(void)
                     gateway_settings_row==GATEWAY_SET_COLOR?&gateway_color_draft:
                     gateway_settings_row==GATEWAY_SET_SPECTRUM_COLOR?&gateway_spectrum_color_draft:
                     gateway_settings_row==GATEWAY_SET_BATTERY?&gateway_battery_draft:
+                    gateway_settings_row==GATEWAY_SET_MIDI?&gateway_midi_draft:
+                    gateway_settings_row==GATEWAY_SET_MIDI_CHANNEL?&gateway_midi_channel_draft:
+                    gateway_settings_row==GATEWAY_SET_MIDI_C?&gateway_midi_c_draft:
                     gateway_settings_row==GATEWAY_SET_FADE?&gateway_fade_draft:
                     gateway_settings_row==GATEWAY_SET_USB_OUT?&gateway_usb_out_draft:&gateway_cpu_draft;
-                int limit=gateway_settings_row==GATEWAY_SET_FADE?5:gateway_settings_row==GATEWAY_SET_USB_OUT?6:
+                int limit=gateway_settings_row==GATEWAY_SET_MIDI_CHANNEL?15:gateway_settings_row==GATEWAY_SET_FADE?5:gateway_settings_row==GATEWAY_SET_USB_OUT?6:
                     (gateway_settings_row==GATEWAY_SET_COLOR || gateway_settings_row==GATEWAY_SET_SPECTRUM_COLOR)?GATEWAY_WAVE_COLORS-1:1;
                 if(delta>limit)delta=limit;
                 if(delta< -limit)delta= -limit;
@@ -1042,7 +1115,12 @@ void app_ui_init(void)
 void app_loop(void)
 {
     uint32_t now = plat_ms();
+    gateway_midi_service();
     if (!gateway_ui_ready) return;
+    if(gateway_midi_usb_error && !gateway_shot_frozen && now-gateway_midi_usb_error_ms>=1000u){gateway_midi_usb_error=0;gateway_lights();}
+    if(gateway_midi_mode && gateway_midi_rec_light(now)!=gateway_midi_rec_on)gateway_lights();
+    if(gateway_midi_active && !gateway_fx_dialog && !gateway_codec_dialog &&
+       gateway_midi_octave_light(now)!=gateway_midi_octave_on)gateway_lights();
     gateway_screenshot_step();
 #ifdef APP_UI_PROFILE
     if(plat_profile_poll())gateway_profile_restore();
@@ -1070,6 +1148,18 @@ void app_loop(void)
     gateway_save_settings(now);
     gateway_fx_save(now,0);
     if(gateway_shot_frozen)return;
+    unsigned overlay=gateway_midi_overlay_state();
+    if(gateway_midi_overlay.seen!=overlay){
+        plat_cpu_work_begin();
+        gateway_midi_clip.x=MIDI_GRID_X;gateway_midi_clip.y=MIDI_GRID_Y;
+        gateway_midi_clip.w=4*MIDI_COL_STEP-4;
+        unsigned bottom=gateway_midi_overlay.y+gateway_midi_overlay.h;
+        if(bottom<MIDI_ERROR_Y+MIDI_ERROR_H)bottom=MIDI_ERROR_Y+MIDI_ERROR_H;
+        gateway_midi_clip.h=bottom-MIDI_GRID_Y;gateway_midi_clip.active=1;
+        gateway_midi_overlay_blank();gateway_shot_paint();gateway_midi_clip.active=0;gateway_midi_overlay.seen=overlay;
+        memcpy(gateway_midi_overlay.values,gateway_midi_values,NE);
+        plat_cpu_work_end();
+    }
     if (gateway_page_redraw) {
         plat_cpu_work_begin();
         /* A decoder can detach and restore scratch before this loop paints.
@@ -1079,7 +1169,11 @@ void app_loop(void)
             if(gateway_visible_wide!=gateway_wide_meters())gateway_page_clear=1;
             gateway_visible_wide=(uint8_t)gateway_wide_meters();
         }
-        if(gateway_page_clear){lcd_fill(0,18,240,222,C_BLACK);gateway_page_clear=0;}
+        if(gateway_page_clear){
+            lcd_fill(0,18,240,222,C_BLACK);
+            if(gateway_midi_overlay_state())gateway_midi_overlay_blank();
+            gateway_page_clear=0;
+        }
         if (gateway_screen == GATEWAY_MAIN) {gateway_draw_cpu();if(gateway_has_wave())gateway_draw_zoom();}
         else if(gateway_screen==GATEWAY_FX)gateway_fx_draw();
         else if(gateway_screen==GATEWAY_MIXER)gateway_mixer_draw(1);
@@ -1096,6 +1190,19 @@ void app_loop(void)
     /* Shared status bar on every screen; small bounded transfer at 4 Hz. */
     if(gateway_bt_badge_redraw || now-gateway_cpu_ms>=250u){
         plat_cpu_work_begin();gateway_draw_cpu();gateway_cpu_ms=now;gateway_bt_badge_redraw=0;plat_cpu_work_end();
+    }
+    if(gateway_midi_active){
+        unsigned left=240,top=240,right=0,bottom=0;
+        for(unsigned e=0;e<NE;e++)if(gateway_midi_overlay.values[e]!=gateway_midi_values[e]){
+            unsigned x,y,w,h;gateway_midi_rect(e,&x,&y,&w,&h);
+            if(x<left)left=x;if(y<top)top=y;if(x+w>right)right=x+w;if(y+h>bottom)bottom=y+h;
+        }
+        if(right){
+            plat_cpu_work_begin();gateway_midi_clip.x=left;gateway_midi_clip.y=top;
+            gateway_midi_clip.w=right-left;gateway_midi_clip.h=bottom-top;gateway_midi_clip.active=1;
+            gateway_shot_paint();gateway_midi_clip.active=0;
+            memcpy(gateway_midi_overlay.values,gateway_midi_values,NE);plat_cpu_work_end();
+        }
     }
     if (gateway_has_spectrum()) {
         if (now - gateway_spectrum_ms >= GATEWAY_SPECTRUM_INTERVAL) {
@@ -1121,6 +1228,13 @@ void app_loop(void)
 
 static const char *gateway_settings_value(unsigned row)
 {
+    if(row==GATEWAY_SET_MIDI)return gateway_midi_draft?"CONTROLLER":"OFF";
+    if(row==GATEWAY_SET_MIDI_C)return gateway_midi_c_draft?"ON":"OFF";
+    if(row==GATEWAY_SET_MIDI_CHANNEL){
+        static char channel[3];unsigned n=gateway_midi_channel_draft+1u;
+        channel[0]=(char)('0'+n/10);channel[1]=(char)('0'+n%10);channel[2]=0;
+        return channel+(n<10);
+    }
     if(row==GATEWAY_SET_FADE)return gateway_fade_names[gateway_fade_draft];
     if(row==GATEWAY_SET_USB_OUT)return gateway_usb_out_names[gateway_usb_out_draft];
     if(row==GATEWAY_SET_BT)return gateway_bt_draft?"ON":"OFF";
@@ -1225,8 +1339,9 @@ static void gateway_settings_draw(void)
         uint16_t color=C_WHITE;
         if(row==GATEWAY_SET_COLOR)color=gateway_wave_colors[gateway_color_draft];
         else if(row==GATEWAY_SET_SPECTRUM_COLOR)color=gateway_wave_colors[gateway_spectrum_color_draft];
-        else if(row==GATEWAY_SET_AUTO_SCALE || row==GATEWAY_SET_CPU || row==GATEWAY_SET_BT){
-            int on=row==GATEWAY_SET_BT?gateway_bt_draft:row==GATEWAY_SET_AUTO_SCALE?gateway_auto_scale_draft:gateway_cpu_draft;
+        else if(row==GATEWAY_SET_AUTO_SCALE || row==GATEWAY_SET_CPU || row==GATEWAY_SET_BT || row==GATEWAY_SET_MIDI || row==GATEWAY_SET_MIDI_C){
+            int on=row==GATEWAY_SET_BT?gateway_bt_draft:row==GATEWAY_SET_AUTO_SCALE?gateway_auto_scale_draft:
+                row==GATEWAY_SET_MIDI?gateway_midi_draft:row==GATEWAY_SET_MIDI_C?gateway_midi_c_draft:gateway_cpu_draft;
             color=on?RGB(40,220,90):RGB(255,48,48);
         }else if((row==GATEWAY_SET_BT && !gateway_bt_draft) ||
                  (row==GATEWAY_SET_BATTERY && !gateway_battery_draft) ||

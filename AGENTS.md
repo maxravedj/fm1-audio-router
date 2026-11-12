@@ -48,6 +48,12 @@ controls, build/release instructions and recovery guidance are in `docs/`.
   LDAC allocates its decoder first, then admits waveform/spectrum only when they
   fit alongside maximum USB recording; unavailable graphs fall back to meters.
   Settings v17 extends the v16 advertised-codec mask with LDAC.
+  Settings v18 packs MIDI enable/highlight/channel into unused bits of the same
+  24-byte payload. Settings v19 appends seven last-exit MIDI encoder positions
+  and a zero reserved byte (32 bytes total), preserving legacy migrations and
+  flash sectors. Save positions on normal MIDI exit, never on encoder turns.
+  REC activation is volatile and requires a connected USB host; retain unsent note-offs until
+  accepted by USB and release old-channel notes before changing channel.
   Persistent SBC/aptX/USB route allocations use the high end to avoid fragmentation.
 - aptX's 24-bit FIR uses the BSP's register-only stereo lane MAC kernel. Keep
   the high-word ring word-aligned, interpolation exact and each half's absolute

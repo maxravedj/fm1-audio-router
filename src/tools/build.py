@@ -17,6 +17,7 @@ APP_DIR holds the app (app.h, app.c, its sources) and its fm1.toml:
   bootloader_sha256 = "..."  required SHA-256 pin when bootloader is set
   usb_manufacturer = "..."   the USB names (felucca-bsp FELUCCA_USB_MANUFACTURER / FELUCCA_USB_PRODUCT)
   usb_product = "..."
+  usb_midi_name = "..."      optional MIDI streaming interface and jack names, independently of audio's product
   usb_name_fn = "fn"         the name of the app's function `const char *fn(void)` the USB product name is asked of each time a
                              host reads it (FELUCCA_USB_NAME_FN; usb_product is the fallback, the audio devices' names follow it
                              unless usb_audio_in_name / usb_audio_out_name are set): a name with something of this FM-1 in it
@@ -930,7 +931,7 @@ def build_app():
         if v in ("0", "1"):
             flags.append(f"-D{flag}={v}")
     flags.append(f'-DFELUCCA_ID="{PRODUCT}"')
-    for key, macro in (("usb_manufacturer", "FELUCCA_USB_MANUFACTURER"), ("usb_product", "FELUCCA_USB_PRODUCT")):
+    for key, macro in (("usb_manufacturer", "FELUCCA_USB_MANUFACTURER"), ("usb_product", "FELUCCA_USB_PRODUCT"), ("usb_midi_name", "FELUCCA_USB_MIDI_NAME")):
         if CONF.get(key):
             flags.append(f'-D{macro}="{CONF[key]}"')
     if CONF.get("usb_name_fn"):                   # the product name asked of the app at run time (felucca-bsp chip/usb.c)

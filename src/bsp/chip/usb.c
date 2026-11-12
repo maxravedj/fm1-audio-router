@@ -768,13 +768,18 @@ static uint32_t midi_out_room(void)                  /* free slots in the out ri
 #define D_AS(s)
 #define D_ASO(o)
 #endif
+#ifdef FELUCCA_USB_MIDI_NAME
+#define MIDI_STR 32u /* Outside audio channel-name indices (USB supports at most 16 here). */
+#else
+#define MIDI_STR 0u
+#endif
 #define D_MIDI(m)                                                                                    \
-    9, 4, (m), 0, 2, 1, 3, 0, 0,                                                                     \
+    9, 4, (m), 0, 2, 1, 3, 0, MIDI_STR,                                                              \
     7, 0x24, 1, 0x00, 0x01, 0x41, 0x00,                                                              \
-    6, 0x24, 2, 1, 1, 0,                                                                             \
-    6, 0x24, 2, 2, 2, 0,                                                                             \
-    9, 0x24, 3, 1, 3, 1, 2, 1, 0,                                                                    \
-    9, 0x24, 3, 2, 4, 1, 1, 1, 0,                                                                    \
+    6, 0x24, 2, 1, 1, MIDI_STR,                                                                       \
+    6, 0x24, 2, 2, 2, MIDI_STR,                                                                       \
+    9, 0x24, 3, 1, 3, 1, 2, 1, MIDI_STR,                                                              \
+    9, 0x24, 3, 2, 4, 1, 1, 1, MIDI_STR,                                                              \
     9, 5, 0x01, 2, 64, 0, 0, 0, 0,                                                                   \
     5, 0x25, 1, 1, 1,                                                                                \
     9, 5, 0x81, 2, 64, 0, 0, 0, 0,                                                                   \
@@ -912,7 +917,7 @@ static const uint8_t STR2[] = {30, 3, 'F', 0, 'e', 0, 'l', 0, 'u', 0, 'c', 0, 'c
 static const uint8_t STR2[] = {16, 3, 'F', 0, 'e', 0, 'l', 0, 'u', 0, 'c', 0, 'c', 0, 'a', 0};
 #endif
 
-#if defined(FELUCCA_USB_MANUFACTURER) || defined(FELUCCA_USB_PRODUCT) || defined(FELUCCA_USB_NAME_FN) || FELUCCA_UAC_SPLIT
+#if defined(FELUCCA_USB_MANUFACTURER) || defined(FELUCCA_USB_PRODUCT) || defined(FELUCCA_USB_NAME_FN) || defined(FELUCCA_USB_MIDI_NAME) || FELUCCA_UAC_SPLIT
 #ifdef FELUCCA_USB_NAME_FN
 extern const char *FELUCCA_USB_NAME_FN(void);
 #endif
@@ -973,6 +978,10 @@ static int get_desc(uint32_t wvalue, const uint8_t **d, uint16_t *l)
         return 1;
     case 3:
         switch (wvalue & 0xFFu) {
+#ifdef FELUCCA_USB_MIDI_NAME
+        case MIDI_STR:
+            return usb_str_desc(FELUCCA_USB_MIDI_NAME,d,l);
+#endif
         case 0:
             *d = STR0;
             *l = sizeof STR0;

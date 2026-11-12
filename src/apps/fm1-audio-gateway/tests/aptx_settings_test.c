@@ -83,8 +83,8 @@ int main(void)
     tap(B_SEL);tap(B_SEL);tap(B_OCTUP);assert(gateway_codec_draft==11 && btr_codec_mask==10);
     app_init();app_ui_init();assert(gateway_codec_preference==10);
     gateway_settings_t s=gateway_settings();s.version=15;s.bt_reserved[0]=0;s.bt_reserved[0]=2;s.zoom=9;
-    plat_store_save(OBJ_SETTINGS,&s,sizeof s);app_init();app_ui_init();assert(gateway_zoom==9 && gateway_codec_preference==1);
-    s.version=16;s.bt_reserved[0]=0;plat_store_save(OBJ_SETTINGS,&s,sizeof s);app_init();app_ui_init();assert(gateway_codec_preference==3 && gateway_zoom==6);
+    plat_store_save(OBJ_SETTINGS,&s,24);app_init();app_ui_init();assert(gateway_zoom==9 && gateway_codec_preference==1);
+    s.version=16;s.bt_reserved[0]=0;plat_store_save(OBJ_SETTINGS,&s,24);app_init();app_ui_init();assert(gateway_codec_preference==3 && gateway_zoom==6);
     btr_host_on=btr_host_connected=1;
     for(unsigned codec=PLAT_BT_CODEC_APTX;codec<=PLAT_BT_CODEC_APTX_HD;codec++){
         btr_host_codec=(uint8_t)codec;gateway_screen=GATEWAY_MAIN;

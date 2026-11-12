@@ -47,10 +47,10 @@ int main(void)
     tap(B_SEL);assert(gateway_codec_checks==19 && gateway_codec_draft==3);
     tap(B_OCTUP);assert(gateway_codec_draft==19 && btr_codec_mask==3);
     tap(B_SAVE);assert(gateway_codec_preference==19 && btr_codec_mask==19);
-    gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==sizeof s && s.version==17 && s.bt_reserved[0]==19);
+    gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==sizeof s && s.version==GATEWAY_SETTINGS_VERSION && s.bt_reserved[0]==19);
     app_init();app_ui_init();assert(gateway_codec_preference==19);
-    s.version=16;s.bt_reserved[0]=15;plat_store_save(OBJ_SETTINGS,&s,sizeof s);app_init();app_ui_init();assert(gateway_codec_preference==15);
-    s.version=17;s.bt_reserved[0]=16;plat_store_save(OBJ_SETTINGS,&s,sizeof s);app_init();app_ui_init();assert(gateway_codec_preference==16);
+    s.version=16;s.bt_reserved[0]=15;plat_store_save(OBJ_SETTINGS,&s,24);app_init();app_ui_init();assert(gateway_codec_preference==15);
+    s.version=17;s.bt_reserved[0]=16;plat_store_save(OBJ_SETTINGS,&s,24);app_init();app_ui_init();assert(gateway_codec_preference==16);
     /* Model the actual guarded target budget with recording already reserved.
      * Decoder priority detaches capture before scratch is reused. */
     gateway_screen=GATEWAY_MAIN;gateway_mode=GATEWAY_MODE_SPECTRUM;gateway_view_changed();

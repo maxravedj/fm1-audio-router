@@ -24,20 +24,21 @@ static void settings(void){
    tap(B_EDIT);assert(!gateway_display_block);
   }
   int32_t *p=gateway_usb_pcm;gateway_usb_session=mode;tap(B_SAVE);assert(gateway_usb_pcm==p && gateway_usb_session==mode); /* no unrelated-save reset */
-  gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==24 && s.version==17 && s.reserved>>2==mode);
+  gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==sizeof s && s.version==GATEWAY_SETTINGS_VERSION && s.reserved>>2==mode);
   app_init();app_ui_init();assert(gateway_usb_out_mode==mode && gateway_usb_out_draft==mode);
   tap(B_EDIT);turn(EN_SELECT,INT_MIN);turn(EN_SELECT,GATEWAY_SET_USB_OUT);turn(EN_ALGO,INT_MAX);tap(B_HOME);tap(B_EDIT);assert(gateway_usb_out_draft==mode);
  }
  gateway_settings_t s=gateway_settings();s.version=10;s.bt_reserved[0]=0;s.spectrum_range=3;s.reserved=3;s.input_db[0]=-60;s.input_db[1]=-120;
  plat_store_save(OBJ_SETTINGS,&s,20);app_init();app_ui_init();assert(!gateway_usb_out_mode && gateway_mix_db[0]==-60 && gateway_mix_db[1]==-120 && !gateway_cpu_mode);
- for(unsigned bad=28;bad<256;bad++){
-  s=gateway_settings();s.reserved=bad;s.zoom=9;plat_store_save(OBJ_SETTINGS,&s,sizeof s);app_init();assert(!gateway_usb_out_mode && gateway_zoom==6);
+ for(unsigned version=17;version<=GATEWAY_SETTINGS_VERSION;version++)for(unsigned bad=28;bad<256;bad++){
+  if(version>=18 && bad<128 && (bad&31u)<28u)continue; /* MIDI flags are valid in v18. */
+  s=gateway_settings();s.version=version;s.reserved=bad;s.zoom=9;plat_store_save(OBJ_SETTINGS,&s,version>=19?sizeof s:24);app_init();assert(!gateway_usb_out_mode && gateway_zoom==6);
  }
  app_ui_init();tap(B_EDIT);turn(EN_SELECT,INT_MIN);turn(EN_SELECT,GATEWAY_SET_USB_OUT);turn(EN_ALGO,2);
  void *blocks[8];unsigned used=0;while(used<8 && (blocks[used]=plat_work_alloc(8)))used++;
  unsigned writes=store_writes;tap(B_SAVE);assert(gateway_save_notice==2 && !gateway_usb_out_mode && store_writes==writes);
  while(used)plat_work_free(blocks[--used]);
- puts("PASS: seven USB-out drafts/SAVE/failure/discard/reboot, 24-byte v15 packed mode and strict reserved validation, v10 trim migration, workspace sizing/release/allocation failure, unrelated saves preserve DSP session");
+ puts("PASS: seven USB-out drafts/SAVE/failure/discard/reboot, packed mode and strict reserved validation, v10 trim migration, workspace sizing/release/allocation failure, unrelated saves preserve DSP session");
 }
 static int32_t usb[512],speaker[512];static int16_t bt[512];
 static int out_db;
@@ -132,7 +133,7 @@ static void output_monitor(void){
  /* K3 saves/restores with the old input trims; v11 defaults OUT to unity. */
  gateway_screen=GATEWAY_MIXER;gateway_view_changed();now_ms+=200;turn(EN_K3,-1);
  int trim=gateway_mix_db[2];assert(trim==-61);now_ms+=750;app_loop();
- gateway_settings_t saved=gateway_settings();assert(saved.version==17 && sizeof saved==24 && saved.input_db[2]==trim);
+ gateway_settings_t saved=gateway_settings();assert(saved.version==GATEWAY_SETTINGS_VERSION && sizeof saved==32 && saved.input_db[2]==trim);
  app_init();app_ui_init();assert(gateway_mix_db[2]==trim);
  saved.version=11;saved.bt_reserved[0]=0;saved.spectrum_range=3;saved.input_db[0]=-60;saved.input_db[1]=-120;saved.bt_reserved[1]=PLAT_MONITOR_MASTER;
  plat_store_save(OBJ_SETTINGS,&saved,20);app_init();app_ui_init();

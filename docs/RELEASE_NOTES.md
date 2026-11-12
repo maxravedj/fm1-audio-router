@@ -1,2 +1,2 @@
-- LDAC support
-- UI changes
+- MIDI controller functionality
+- UI/UX improvements

@@ -33,7 +33,7 @@ int main(void)
     gateway_spectrum_min=90;gateway_spectrum_max=24;gateway_spectrum_rate=2;
     unsigned writes=store_writes;now_ms=849;app_loop();assert(store_writes==writes);
     now_ms=850;app_loop();assert(store_writes==writes+1);
-    gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==24 && s.version==17 && s.spectrum_range==90);
+    gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==sizeof s && s.version==GATEWAY_SETTINGS_VERSION && s.spectrum_range==90);
     start();assert(gateway_spectrum_min==90 && gateway_spectrum_max==24 && gateway_spectrum_rate==2);
     /* Full legacy range -> identical absolute dB window, all old combinations. */
     for(unsigned range=0;range<4;range++)for(unsigned max=0;max<=60;max++) {
