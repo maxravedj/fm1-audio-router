@@ -248,8 +248,8 @@ static void test_descriptors(void)
     assert(d[1] == 2 && (d[2] | d[3] << 8) == l);
     assert(dv[12] == (uint8_t)BCD_LO(USB_CDC_ON) && dv[13] == BCD_HI);
     if (TEST_CH == 2 && !TEST_24)
-        assert(dv[13] == (TEST_HC ? 0x05 : 0x03) + 8 * TEST_O24);   /* the version before these options (+2.00 on the
-                                                         * host's, +8.00 with the output in 24-bit) */
+        assert(dv[13] == (TEST_HC ? 0x05 : 0x03) + 8 * TEST_O24 +
+               0x20 * FELUCCA_UAC_MIDI_LAST + 0x60 * FELUCCA_UAC_IAD);
     for (i = 0; i < l; i += d[i]) {
         const uint8_t *p = d + i;
         assert(p[0] >= 2 && i + p[0] <= l);
@@ -364,6 +364,15 @@ static void test_descriptors(void)
         uint32_t k, eps = 0, gl = sizeof GOLD_CFG;
         memcpy(g, GOLD_CFG, sizeof GOLD_CFG);
         memcpy(gd, GOLD_DEV, 18);
+#ifdef FELUCCA_USB_MIDI_NAME
+        /* A named MIDI port changes only its interface and four jack strings.
+         * Keep the independent golden's audio/endpoint bytes unchanged. */
+        unsigned midi=0;
+        for(k=0;k<gl;k+=g[k]){
+            if(g[k+1]==4){midi=g[k+5]==1 && g[k+6]==3;if(midi)g[k+8]=32;}
+            else if(midi && g[k+1]==0x24 && (g[k+2]==2 || g[k+2]==3))g[k+g[k]-1]=32;
+        }
+#endif
         for (k = 0; TEST_FB && k < gl; k += g[k]) {
             if (g[k + 1] == 4 && g[k + 2] == UAC_ASO_IF && g[k + 3] == 1)
                 g[k + 4] = 2;

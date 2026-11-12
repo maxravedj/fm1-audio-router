@@ -30,7 +30,7 @@ int main(void)
         tap(B_FX);assert(gateway_screen==GATEWAY_FX && !gateway_display_block);app_loop();lights();
         tap(B_PLAY);lights();assert(gateway_muted);tap(B_PLAY);lights();assert(!gateway_muted);
         tap(B_HOME);assert(gateway_mode==mode && gateway_screen==GATEWAY_MAIN);
-        now_ms+=750;app_loop();gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==sizeof s && s.version==17 && s.mode==mode);
+        now_ms+=750;app_loop();gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==sizeof s && s.version==GATEWAY_SETTINGS_VERSION && s.mode==mode);
         app_init();app_ui_init();assert(gateway_mode==mode && gateway_screen==GATEWAY_MAIN);tap(B_HOME);
     }
     /* v1-v6 numeric modes translate to the same actual view, then write the current schema. */

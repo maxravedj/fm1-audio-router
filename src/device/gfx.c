@@ -86,13 +86,25 @@ static void cv_band(int32_t y0, int32_t h)
     cv_y1 = y0 + h;
 }
 
-static void cv_blit(uint32_t x, uint32_t y) { lcd_blit(x, y, cv_w, cv_h, cv_px); }
+/* An opted-in app may composite into this single-use canvas before its DMA.
+ * Return 1 after handling/clipping the blit itself; preserve geometry/clips. */
+static void cv_blit(uint32_t x, uint32_t y)
+{
+#ifdef APP_CANVAS_OVERLAY
+    if(app_canvas_overlay(x,y,0))return;
+#endif
+    lcd_blit(x, y, cv_w, cv_h, cv_px);
+}
 
 /* canvas rows r0 .. cv_h-1 only, to screen row y + r0 */
 static void cv_blit_from(uint32_t x, uint32_t y, uint32_t r0)
 {
-    if (r0 < cv_h)
+    if (r0 < cv_h) {
+#ifdef APP_CANVAS_OVERLAY
+        if(app_canvas_overlay(x,y,r0))return;
+#endif
         lcd_blit(x, y + r0, cv_w, cv_h - r0, cv_px + r0 * cv_w);
+    }
 }
 
 static inline void cv_pset(int32_t x, int32_t y, uint16_t c)

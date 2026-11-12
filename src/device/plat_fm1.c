@@ -485,6 +485,14 @@ void plat_midi_send(uint32_t pkt, uint32_t to)    /* the main loop's and the tic
         plat_unlock(f);
 }
 void plat_midi_out(uint32_t pkt) { plat_midi_send(pkt, TO_USB); }
+int plat_midi_try_out(uint32_t pkt)
+{
+    uint32_t f=plat_lock();
+    int sent=midi_out_try(pkt);
+    if(sent)midi_counted(PORT_USB,1,pkt);
+    plat_unlock(f);
+    return sent;
+}
 
 #if FELUCCA_USB_HOST                              /* (felucca-bsp's UH_MSG_* are USBH_MSG_*, in order) */
 void plat_usb_host(int on) { usb_host_switch((uint32_t)(on != 0)); }

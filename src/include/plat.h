@@ -120,6 +120,7 @@ uint32_t plat_midi_in_from(void);      /* where the last one came from, as an ou
 void plat_midi_send(uint32_t pkt, uint32_t to);   /* to: TO_USB | TO_BLE, or one link; main loop, the render or the
                                                    * tick */
 void plat_midi_out(uint32_t pkt);      /* plat_midi_send(pkt, TO_USB) */
+int plat_midi_try_out(uint32_t pkt);   /* USB only: 1 queued, 0 disconnected/full; retain unsent note-offs. */
 uint32_t plat_midi_out_room(uint32_t to);   /* the free slots in the out queues of to (TO_USB, TO_BLE, a link: each
                                         * has its own): the fewest among the ones someone listens on; 0 when nobody
                                         * does. A sequencer keeps room for the note-offs it owes before it sends a

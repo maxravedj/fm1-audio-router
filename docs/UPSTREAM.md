@@ -4,7 +4,7 @@
 | --- | --- | --- |
 | Project skills | `maxfridbe/mvave-fm1`, `5607a600be7184f566dee46f0e53afb5595d0d48` | Local copies in `.agents/skills/`, MIT license retained. |
 | fm1-base | `w0ts/fm1-base`, `a3b5da168bc66ff41fc02b413c48e84f5f118709` (full history retained in Git) | Platform fork; original docs in `docs/upstream/`. |
-| felucca-bsp | `hugelton/felucca-bsp`, `8dcc0528ba7c561e96e4f593d3bb01b757dadfdf` | Vendored in `src/bsp/`; notices retained. |
+| felucca-bsp | `hugelton/felucca-bsp`, `8dcc0528ba7c561e96e4f593d3bb01b757dadfdf` | Vendored in `src/bsp/`; notices retained. Local USB changes include optional MIDI interface/jack names independent of the audio product, with descriptor and queue checks. |
 | Open pi32v2 compiler | `jvitkauskas/pi32v2-llvm`, release `pi32v2-23.1.5-2` | Archive SHA-256 `cb896562418a2be93edb9bac26af4bc81a106a32974002a78e6b9fc203c93990`. |
 | Compiler drop-in adapter | `jvitkauskas/pi32v2-isa`, `66ac37bb2ae40e5dbbd5588a6a7c2d7baf829d7f` | Downloaded into ignored `tools/`, checked by setup. |
 | AC79 packaging files | `amitv87/fw-AC79_AIoT_SDK`, `ffbb2a8d925682ba6880d643a83a63ee0691ec09` | Only three files and license, pinned individually in setup; no vendor radio library linked. |

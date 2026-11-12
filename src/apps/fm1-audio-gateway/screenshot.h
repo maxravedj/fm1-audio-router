@@ -45,6 +45,7 @@ int app_sysex(const uint8_t *p,uint32_t n){
 #endif
 }
 static void gateway_shot_paint(void){
+    if(gateway_midi_overlay_state())gateway_midi_overlay_blank();
     gateway_screenshot_painting=1;gateway_bar_key=~0u;gateway_draw_cpu();
     if(gateway_screen==GATEWAY_SETTINGS)gateway_settings_draw();
     else if(gateway_screen==GATEWAY_FX){

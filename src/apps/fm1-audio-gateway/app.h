@@ -14,6 +14,9 @@
 #define APP_PALETTE 2u
 #define APP_BLOCK 256u
 #define APP_CANVAS_PX (240u * 16u)
+/* Blend the active controller indicator into each outgoing canvas strip. */
+#define APP_CANVAS_OVERLAY
+int app_canvas_overlay(uint32_t x,uint32_t y,uint32_t first_row);
 #define APP_DYNAMIC_DISPLAY
 #define APP_BATTERY_RAW
 #define APP_USB_STATUS
@@ -50,6 +53,8 @@ void app_init(void);
 void app_splash(void);
 void app_render(int32_t *lr, uint32_t n, uint32_t master_q12);
 void app_panic(void);
+#define APP_UPDATE_BEGIN
+void app_update_begin(void);
 void app_ui_init(void);
 void app_frame(void);
 void app_loop(void);
