@@ -102,8 +102,8 @@ git push origin v1.2.3
 The example does not reserve a version. `build_gateway.py --tag v1.2.3` builds
 that explicit label from a source archive without Git; it creates no tag.
 
-`.github/workflows/firmware.yml` runs three test suites for master pushes, pull
-requests and manual runs, then builds and verifies firmware. Download the
+`.github/workflows/firmware.yml` runs only when a tag is pushed. It runs three
+test suites, then builds and verifies firmware and publishes the release. Download the
 `audio-router-<commit>` Actions artifact for the firmware and matching sources.
 A pushed tag publishes only the versioned firmware as a GitHub Release asset,
 named `fm1-audio-router-vMAJOR.MINOR.PATCH.fwsc` (a missing patch becomes zero).
@@ -112,8 +112,8 @@ release descriptions retain license notices and the firmware checksum.
 GitHub provides its automatic source archive links. Rerunning tag publication
 recreates an existing release after validating the replacement bundle.
 Prerelease tags are marked accordingly. Only that final job has repository
-write permission. No GitHub Pages configuration is used. Normal runs never
-create a version or release.
+write permission. No GitHub Pages configuration is used. Branch pushes and
+pull requests do not trigger Actions; versions are selected manually through tags.
 
 Before distributing a hardware release, check playback, USB recording,
 SBC/AAC pairing and reconnection, fades, CPU headroom and recovery on a real

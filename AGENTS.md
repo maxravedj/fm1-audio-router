@@ -25,8 +25,8 @@ controls, build/release instructions and recovery guidance are in `docs/`.
   (optional prerelease; numeric components 0..99 for the FM-1 identity).
   Untagged builds show DEV plus the commit. Do not increment hardcoded versions
   or create numbered build/docs/release folders. Do not invent or push tags.
-- GitHub Actions tests/builds pull requests and master; pushed tags additionally
-  publish only `fm1-audio-router-vMAJOR.MINOR.PATCH.fwsc` as a release asset.
+- GitHub Actions runs only on pushed tags: it tests/builds firmware, then
+  publishes only `fm1-audio-router-vMAJOR.MINOR.PATCH.fwsc` as a release asset.
   Matching sources/debug symbols/notices stay in Actions artifacts; release
   descriptions retain notices; GitHub provides tagged source archives. No website.
 
