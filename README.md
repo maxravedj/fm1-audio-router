@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/maxravedj/fm1-audio-router/actions/workflows/firmware.yml"><img src="https://github.com/maxravedj/fm1-audio-router/actions/workflows/firmware.yml/badge.svg" alt="Firmware build status"></a>
+  <a href="https://github.com/maxravedj/fm1-audio-router/actions/workflows/firmware.yml"><img src="https://github.com/maxravedj/fm1-audio-router/actions/workflows/firmware.yml/badge.svg" alt="Build status"></a>
   <a href="https://github.com/maxravedj/fm1-audio-router/releases/latest"><img src="https://img.shields.io/github/v/tag/maxravedj/fm1-audio-router?label=Version&amp;color=blue" alt="Version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/maxravedj/fm1-audio-router" alt="License"></a>
 </p>
