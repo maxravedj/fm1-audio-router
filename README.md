@@ -78,3 +78,5 @@ AAC uses meters during playback to free decoder memory. LDAC supports stereo 44.
 Built on fm1-base and felucca-bsp. See [credits](CREDITS.md) and
 [licensing](LICENSING.md). Host tests cover DSP, protocols and UI behavior;
 hardware RF interoperability, sound quality and CPU headroom need device checks.
+
+You can also try FM-1 Audio Router in the browser, no flashing needed, in the free community [FM-1 Emulator](https://fm1-emulator.atst.tools/).
