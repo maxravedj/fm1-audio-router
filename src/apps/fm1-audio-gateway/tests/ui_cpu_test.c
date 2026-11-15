@@ -28,7 +28,7 @@ static uint32_t old_wave_pixels(void)
 }
 static void waveform(void)
 {
-    gateway_mode=GATEWAY_MODE_FULL;gateway_monitor=PLAT_MONITOR_MASTER;gateway_master_wave_auto_scale=0;
+    gateway_mode=GATEWAY_MODE_FULL;gateway_monitor=PLAT_MONITOR_MASTER;gateway_wave_auto_scale=0;
     gateway_view_changed();gateway_capture_wave(now_ms);gateway_draw_wave(1);
     const unsigned scales[]={32,33,71,1024,4000,32768};
     for(unsigned i=0;i<sizeof scales/sizeof *scales;i++) {
@@ -84,7 +84,7 @@ static uint32_t previous_edges(unsigned *transfers)
 static void automatic(void)
 {
     gateway_screen=GATEWAY_MAIN;gateway_mode=GATEWAY_MODE_FULL;gateway_monitor=PLAT_MONITOR_MASTER;
-    gateway_master_wave_auto_scale=1;gateway_zoom=11;gateway_view_changed();gateway_draw_wave(1);
+    gateway_wave_auto_scale=1;gateway_zoom=11;gateway_view_changed();gateway_draw_wave(1);
     gateway_wave_auto_seen=1;gateway_wave_scale=32768; /* simulate turning MASTER down */
     uint64_t old_cost=0,new_cost=0;unsigned old_late=0,new_late=0;
     for(unsigned f=0;f<600;f++) {

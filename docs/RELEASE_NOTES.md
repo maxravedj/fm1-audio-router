@@ -1,2 +1,2 @@
-- MIDI controller functionality
-- UI/UX improvements
+- Vectorscope visualizer
+- Auto scale now applies to all i/o

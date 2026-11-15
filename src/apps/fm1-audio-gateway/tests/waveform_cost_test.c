@@ -7,7 +7,7 @@
 int main(void)
 {
     palette_set(APP_PALETTE);app_init();app_ui_init();gateway_mode=GATEWAY_MODE_FULL;
-    gateway_monitor=PLAT_MONITOR_MASTER;gateway_master_wave_auto_scale=0;
+    gateway_monitor=PLAT_MONITOR_MASTER;gateway_wave_auto_scale=0;
     for(unsigned zoom=0;zoom<12;zoom+=zoom==0?6:5){
         gateway_zoom=zoom;gateway_view_changed();gateway_draw_wave(1);
         uint32_t windows=0,pixels=0,max_windows=0;

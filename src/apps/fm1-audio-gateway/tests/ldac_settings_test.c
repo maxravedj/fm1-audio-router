@@ -64,6 +64,7 @@ int main(void)
      * From a spectrum fallback, one HOME press reaches the real waveform. */
     tap(B_HOME);assert(gateway_has_wave());
     for(unsigned i=0;i<10;i++){
+        tap(B_HOME);assert(gateway_has_vectorscope());
         tap(B_HOME);assert(gateway_mode==GATEWAY_MODE_METERS && !gateway_display_block);
         tap(B_HOME);assert(gateway_has_wave());
     }

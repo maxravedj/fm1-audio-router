@@ -21,7 +21,7 @@ mixing and FX. MASTER is applied exactly once.
 Raw USB/BT monitor taps precede trims. MASTER monitoring follows FX and the
 physical gain, preceding output mute/fade. Mixer meters follow trim but precede
 their mute/solo gates so suppressed sources remain visible. Hidden producers
-stop; waveform/FFT scratch is detached from IRQs before being freed.
+stop; waveform/FFT/vectorscope scratch is detached from IRQs before being freed.
 
 USB OUT routes are OFF, Loopback, Loopback post FX, BT, BT post FX, Master,
 and Master post FX. Loopback means USB alone; Master means USB+BT. Raw routes
@@ -64,16 +64,40 @@ SBC or aptX/aptX HD + spectrum + maximum USB recording must fit together. Exact 
 are in `build/gateway/cpu2-budget.json` and release manifests; they change with
 the chosen tag/toolchain, so they are not hardcoded in this guide.
 
+Waveform auto scale applies to the selected USB IN, BT IN, USB OUT or MASTER
+source. Both channels share the same bounded display gain, with immediate
+expansion for larger peaks, slow recovery and a dead band for small changes.
+It changes neither audio nor meter levels. The existing saved enable bit is
+retained, so earlier MASTER-only preferences now apply to every waveform source.
+
 Spectrum reuses its int16 PCM staging buffer for the complex float FFT,
 expanding backwards after reading the DC mean. Quarter-wave twiddles are
 reflected for the remaining phases. Capture plus FFT scratch is 73,736 bytes,
 24,568 fewer than before; stereo power analysis and Hann normalization are
 unchanged.
 
-AAC workspace takes priority over waveform/spectrum buffers. Accepted AAC
+Vectorscope shares the raw stereo capture producer with spectrum, but does no
+FFT. It plots `x ∝ R−L`, `y ∝ −(L+R)` using integer arithmetic
+from the latest 2048 paired samples (~46 ms), with a 16 ms refresh interval
+(roughly 60 fps when workload permits). Late frames are not caught up in bursts. Two 1-bit
+176×176 maps track current/drawn points; only changed 16-row canvas strips
+reach the LCD. Only those 2048 pairs are copied, scanned for auto gain and plotted;
+the spectrum reader retains its full 4096-frame window. Capture, staging, maps
+and timing occupy 48,728 bytes, all
+allocated on entry and detached/freed on exit. Hidden views do no capture or
+plotting; screenshot and MIDI overlay replay paints the frozen map only.
+Optional stereo-linked auto scale measures the snapshot peak with integer math;
+it expands immediately for louder transients and gently enlarges quiet traces,
+with a ~60 dB gain cap. One reciprocal per snapshot supplies two multiplies per
+point. The gain changes neither audio nor meter levels.
+
+AAC workspace takes priority over waveform/spectrum/vectorscope buffers. Accepted AAC
 configuration synchronously releases graphs before allocation. They return
 fresh after disconnect; failed visible graph allocation retries without
-clearing the continuing meter/footer. Persistent SBC/aptX/USB route allocations
+clearing the continuing meter/footer. SBC decoder context, synthesis history,
+decoded frame and fragment staging are inside its dynamically allocated session workspace (7,768 bytes on target,
+including the packet queue), released after joining CPU1. No SBC decoder scratch
+remains reserved while another codec runs. Persistent SBC/aptX/USB route allocations
 use the high end of scratch to preserve a contiguous graph gap. LDAC releases
 graphs synchronously on configuration/state changes, allocates its complete
 compressed FIFO/decoder/24-bit PCM storage first, including while configured or
@@ -90,7 +114,7 @@ or connection changes update only the status bar. Screen/source navigation still
 starts fresh meters.
 Unavailable graphs use full meters; HOME skips them when cycling pages;
 allocation retries and disconnect restore the requested view without stale
-capture. The current linked budget admits LDAC plus waveform and recording;
+capture. The current linked budget admits LDAC plus waveform or vectorscope and recording;
 spectrum yields memory. See [LDAC](LDAC.md) for measured sizes and validation.
 
 ## FX and timing
@@ -111,7 +135,7 @@ operation. A changing time alignment/level dip is not universally inaudible.
 ## Persistence and recovery
 
 CRC-checked A/B objects retain panel calibration, application settings, saved
-FX presets and bond metadata. Settings payload schema is 17 (24 bytes); FX
+FX presets and bond metadata. Settings payload schema is 20 (32 bytes); FX
 preset schema is 4 (456 bytes). These are storage format numbers, independent
 of manually chosen firmware tags. Keep their migrations, not DSP history.
 
@@ -157,7 +181,16 @@ channel 1. Codec masks, colors, USB routing, FX storage and flash sectors are
 unchanged. Settings v19 appends seven last-exit encoder positions and a zero
 reserved byte, extending the record to 32 bytes while retaining the v18 prefix
 and all earlier migrations in the same A/B sectors. Old records initialize
-positions to 64. REC activation, held notes and octave shift remain volatile.
+positions to 64. Settings v20 reuses the final reserved byte for vectorscope
+color and adds Home mode 4, keeping the 32-byte size and all flash sectors.
+Versions through v19 default vectorscope to green; v19 still validates its
+reserved byte as zero. Settings v21 uses bit 3 of the final byte for vectorscope
+auto gain (default ON for older records), leaving color in bits 0–2 and the
+32-byte record and flash sectors unchanged. Settings v22 stores the last-exit
+MIDI octave shift plus 3 in bits 4–6 of the final byte (codes 0–6 map to −3..+3).
+Bit 7 and octave code 7 remain invalid; older versions default to octave zero
+and retain their existing reserved-bit validation. The record remains 32 bytes.
+REC activation and held notes remain volatile.
 
 The controller runs only in the CPU0 foreground, ahead of screen/modal input.
 It uses the existing USB MIDI queue, two 27-bit wanted/sent masks, seven
@@ -167,15 +200,15 @@ and CCs. Each encoder tracks direction and elapsed time independently. Slow
 detents change its 0–127 position by one; continued turns below 80/35 ms per
 detent use steps of two/three. First turns and reversals use one. Delta clamping
 before multiplication/addition handles extreme deltas safely. Entry restores
-the last-exit position bank without emitting an unsolicited CC burst. Under backpressure,
+the last-exit position bank and octave without emitting an unsolicited CC burst. Under backpressure,
 pending CCs coalesce to the latest position; exiting REC or reconnecting drops
 pending sends while retaining positions. Normal REC exit snapshots the seven
-positions and requests an immediate foreground settings commit, bypassing the
-750-ms debounce. Unchanged positions skip the write. Failed writes retain the
-snapshot and retry with the existing five-second backoff, even if live positions
+positions and octave and requests an immediate foreground settings commit, bypassing the
+750-ms debounce. An unchanged snapshot skips the write. Failed writes retain the
+snapshot and retry with the existing five-second backoff, even if live positions or octave
 change after re-entry. Settings SAVE keeps the last-exit bank unless it disables
 MIDI or changes its channel while active; that successful commit includes the
-current positions. Turning encoders performs no flash writes.
+current positions and octave. Turning encoders and pressing OCT performs no flash writes.
 The octave shift is bounded to -3..+3; pressing both OCT buttons resets it.
 The sent-note bank retains its original
 channel and octave until all releases are accepted, including rapid shifts with

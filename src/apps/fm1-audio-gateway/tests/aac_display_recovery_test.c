@@ -16,7 +16,7 @@ static void footer_matches(void)
 int main(void)
 {
     palette_set(APP_PALETTE);app_init();app_ui_init();
-    /* Restrict the arena below .56's 110272-byte guarded target budget. */
+    /* Restrict the arena below linked guarded target budget. */
     void *reserved=plat_work_alloc_top(plat_work_available()-109824);assert(reserved);
     for(unsigned mode=GATEWAY_MODE_FULL;mode<=GATEWAY_MODE_SPECTRUM;mode++)
         for(unsigned source=0;source<4;source++){
@@ -44,7 +44,7 @@ int main(void)
         assert(!gateway_aac_active && gateway_has_spectrum() && usb_spectrum_enabled);
         assert(!usb_wave_history && usb_spectrum_filled==0);
         /* SBC's high-end queue and the maximum route still fit after AAC. */
-        void *sbc=plat_work_alloc_top(4256);assert(sbc);
+        void *sbc=plat_work_alloc_top(7768);assert(sbc);
         gateway_mode=GATEWAY_MODE_FULL;gateway_view_changed();assert(gateway_has_wave());
         gateway_mode=GATEWAY_MODE_SPECTRUM;gateway_view_changed();assert(gateway_has_spectrum());
         plat_work_free(sbc);

@@ -17,7 +17,7 @@ static void irq_restore(uint32_t f){(void)f;}
 int main(void)
 {
     palette_set(APP_PALETTE);app_init();app_ui_init();
-    gateway_mode=GATEWAY_MODE_FULL;gateway_monitor=PLAT_MONITOR_MASTER;gateway_master_wave_auto_scale=0;
+    gateway_mode=GATEWAY_MODE_FULL;gateway_monitor=PLAT_MONITOR_MASTER;gateway_wave_auto_scale=0;
     gateway_view_changed();app_loop();app_frame();gateway_settings_t settings=gateway_settings();
     uint8_t command[]={0x7d,0x4c,0x50,1,1,PROFILE_NO_WAVE_UI|PROFILE_NO_WAVE_CAPTURE|PROFILE_IDLE_SLOW};
     assert(app_sysex(command,sizeof command) && plat_profile_info(0));

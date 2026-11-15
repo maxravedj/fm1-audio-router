@@ -32,7 +32,7 @@ static void settings(void)
     assert(!(lights_b&(1u<<B_REC)) && !(lights_db&(1u<<B_REC)));
     tap(B_REC);assert(!gateway_midi_active);
     enable(16,1);
-    gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==32 && s.version==19);
+    gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==32 && s.version==GATEWAY_SETTINGS_VERSION);
     assert((s.reserved&96u)==96u && s.bt_reserved[2]>>4==15u);
     unsigned writes=store_writes;
     app_init();app_ui_init();assert(gateway_midi_mode && gateway_midi_c && gateway_midi_channel==15 && !gateway_midi_active);
@@ -60,7 +60,7 @@ static void settings(void)
     s=gateway_settings();s.bt_reserved[2]=15;plat_store_save(OBJ_SETTINGS,&s,sizeof s);app_init();app_ui_init();
     assert(!gateway_midi_mode && gateway_wave_color==GATEWAY_WAVE_GREEN);
     store_len[OBJ_SETTINGS]=-1;app_init();app_ui_init();
-    puts("PASS: MIDI draft/SAVE/failure/discard, all 16 channels, 32-byte v19 payload, v17 migration and strict flags/color bounds; active mode never restored");
+    puts("PASS: MIDI draft/SAVE/failure/discard, all 16 channels, 32-byte current payload, v17 migration and strict flags/color bounds; active mode never restored");
 }
 static void controls(void)
 {
@@ -282,8 +282,8 @@ static void octaves(void)
     tap(B_REC);assert(!gateway_midi_active && gateway_midi_octave==3);
     tap(B_REC);assert(gateway_midi_active && gateway_midi_octave==3);
     key(7,1);n_out=0;tap(B_REC);message(0,8,0x8f,96,0);key(7,0);
-    app_init();app_ui_init();assert(!gateway_midi_octave && !gateway_midi_active);
+    app_init();app_ui_init();assert(gateway_midi_octave==3 && !gateway_midi_active);
     assert(!cv_cuts && !cpu_work_depth);
-    puts("PASS: all 27 keys through +/-3 octaves, clamps, C lighting, directional bright/slow/fast LEDs and clock wrap, simultaneous/staggered OCT reset including held-note pitch, no held-button repeat or Bluetooth pairing, old-pitch releases under rapid transpose/backpressure, modal OCT priority, REC retention and boot reset");
+    puts("PASS: all 27 keys through +/-3 octaves, clamps, C lighting, directional bright/slow/fast LEDs and clock wrap, simultaneous/staggered OCT reset including held-note pitch, no held-button repeat or Bluetooth pairing, old-pitch releases under rapid transpose/backpressure, modal OCT priority, REC and boot octave retention");
 }
 int main(void){palette_set(APP_PALETTE);settings();n_out=0;controls();pressure();acceleration();octaves();}

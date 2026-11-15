@@ -90,11 +90,13 @@ static void composition(void)
 static void pages(void)
 {
     static const unsigned rows[]={60,70,90,100,120,130,150,160,180,194};
-    for(unsigned page=0;page<9;page++){
-        gateway_screen=page<3?GATEWAY_MAIN:page==3 || page==8?GATEWAY_SETTINGS:page==4?GATEWAY_MIXER:GATEWAY_FX;
-        gateway_mode=page<3?page:GATEWAY_MODE_METERS;gateway_fx_limiter=page==6;
+    for(unsigned page=0;page<10;page++){
+        gateway_screen=(page<3 || page==9)?GATEWAY_MAIN:page==3 || page==8?GATEWAY_SETTINGS:page==4?GATEWAY_MIXER:GATEWAY_FX;
+        gateway_mode=page==9?GATEWAY_MODE_VECTORSCOPE:page<3?page:GATEWAY_MODE_METERS;gateway_fx_limiter=page==6;
         gateway_fx_dialog=page==7;gateway_codec_dialog=page==8;
-        gateway_view_changed();app_loop();app_frame();gateway_shot_paint();
+        gateway_view_changed();app_loop();app_frame();
+        if(gateway_has_vectorscope())for(unsigned y=12;y<132;y++)gateway_vectorscope_buffers->plot[y][y/8]|=1u<<(y%8);
+        gateway_shot_paint();
         memcpy(base,fb,sizeof base);reference(1);tap(B_REC);assert(gateway_midi_active);
         equal(expected,page,"active");
         /* One-, two- and three-digit updates clear old ink in only dirty cells. */
@@ -149,5 +151,5 @@ int main(void)
     palette_set(APP_PALETTE);app_init();app_ui_init();app_loop();app_frame();
     composition();pages();disconnected();
     puts("PASS: MIDI overlay uses limiter FONT_L at x=120/y=160, exact 10px padding, red text and 10% transparent black; smaller values in padded 3x4 grid shifted up 50px; fresh/partial strips and solid bars preserve clips and never accumulate opacity");
-    puts("PASS: active REC overlay and clean removal on meters/waveform/spectrum/Settings/Mixer/EQ/limiter/both dialogs, no extra idle redraw or canvas cuts, screenshot rows equal LCD");
+    puts("PASS: active REC overlay and clean removal on meters/waveform/spectrum/vectorscope/Settings/Mixer/EQ/limiter/both dialogs, no extra idle redraw or canvas cuts, screenshot rows equal LCD");
 }

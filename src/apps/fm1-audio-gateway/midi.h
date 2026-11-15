@@ -1,12 +1,12 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 /* CPU0 foreground only. Reuse the USB queue; retain releases under backpressure.
  * F3..G5 plus +/-3 octaves, velocity 127. Absolute CC: mild 1/2/3 acceleration.
- * Encoder positions resume from the last normal exit; fresh installs use 64. */
+ * Encoder positions and octave resume from the last normal exit (64 and 0). */
 static uint8_t gateway_midi_mode,gateway_midi_draft;
 static uint8_t gateway_midi_c,gateway_midi_c_draft;
 static uint8_t gateway_midi_channel,gateway_midi_channel_draft;
 static uint8_t gateway_midi_active,gateway_midi_releasing,gateway_midi_sent_channel;
-static int8_t gateway_midi_octave,gateway_midi_sent_octave;
+static int8_t gateway_midi_octave,gateway_midi_sent_octave,gateway_midi_resume_octave;
 static uint8_t gateway_midi_octave_on;
 static uint32_t gateway_midi_octave_ms;
 static uint8_t gateway_midi_usb_error,gateway_midi_rec_on;
@@ -27,8 +27,10 @@ static void gateway_midi_stop(void)
 }
 static void gateway_midi_exit(void)
 {
-    if(gateway_midi_active && memcmp(gateway_midi_resume,gateway_midi_values,NE)){
+    if(gateway_midi_active && (gateway_midi_resume_octave!=gateway_midi_octave ||
+            memcmp(gateway_midi_resume,gateway_midi_values,NE))){
         memcpy(gateway_midi_resume,gateway_midi_values,NE);
+        gateway_midi_resume_octave=gateway_midi_octave;
         gateway_midi_save_pending=1;gateway_settings_changed();
     }
     if(gateway_midi_active && gateway_midi_save_pending)gateway_settings_retry_ms=plat_ms()-5000u;
@@ -43,7 +45,7 @@ static void gateway_midi_init(void)
 {
     gateway_midi_mode=gateway_midi_draft=gateway_midi_c=gateway_midi_c_draft=0;
     gateway_midi_channel=gateway_midi_channel_draft=0;
-    gateway_midi_octave=gateway_midi_sent_octave=0;gateway_midi_octave_on=0;
+    gateway_midi_octave=gateway_midi_sent_octave=gateway_midi_resume_octave=0;gateway_midi_octave_on=0;
     gateway_midi_rec_on=0;
     gateway_midi_octave_ms=plat_ms();
     gateway_midi_stop();gateway_midi_sent=0;

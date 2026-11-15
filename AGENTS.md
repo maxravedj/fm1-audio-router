@@ -44,16 +44,23 @@ controls, build/release instructions and recovery guidance are in `docs/`.
   during settings writes; never allocate, wait, draw or save in audio callbacks.
 - Preserve the 8192-byte scratch guard and linked stack checks. SBC and aptX/HD plus
   spectrum plus maximum recording must fit. Release hidden graph producers
-  before buffers; AAC suppresses both graph views before workspace allocation.
-  LDAC allocates its decoder first, then admits waveform/spectrum only when they
+  before buffers; AAC suppresses all graph views before workspace allocation.
+  LDAC allocates its decoder first, then admits waveform/spectrum/vectorscope only when they
   fit alongside maximum USB recording; unavailable graphs fall back to meters.
   Settings v17 extends the v16 advertised-codec mask with LDAC.
   Settings v18 packs MIDI enable/highlight/channel into unused bits of the same
   24-byte payload. Settings v19 appends seven last-exit MIDI encoder positions
   and a zero reserved byte (32 bytes total), preserving legacy migrations and
-  flash sectors. Save positions on normal MIDI exit, never on encoder turns.
+  flash sectors. Settings v20 reuses that reserved byte for vectorscope color
+  and admits a fourth Home mode without growing the record. Save MIDI positions
+  and octave shift on normal MIDI exit, never on encoder turns or octave presses.
   REC activation is volatile and requires a connected USB host; retain unsent note-offs until
   accepted by USB and release old-channel notes before changing channel.
+  Settings v21 packs vectorscope auto gain into bit 3 of the final byte; color
+  remains in bits 0..2. Settings v22 stores last-exit MIDI octave + 3 in bits 4..6
+  of that byte; older settings default to octave zero. The record stays 32 bytes.
+  SBC decoder/frame/fragment
+  scratch belongs to its dynamic session workspace and is freed only after join.
   Persistent SBC/aptX/USB route allocations use the high end to avoid fragmentation.
 - aptX's 24-bit FIR uses the BSP's register-only stereo lane MAC kernel. Keep
   the high-word ring word-aligned, interpolation exact and each half's absolute

@@ -20,7 +20,7 @@ static void migration(void){
   if(v>=6)s.bt_reserved[2]=11;
   unsigned size=v<3?8:v==3?12:16;plat_store_save(OBJ_SETTINGS,&s,size);app_init();app_ui_init();
   assert(gateway_zoom==9 && gateway_muted && gateway_spectrum_color==GATEWAY_WAVE_YELLOW && gateway_battery_mode);
-  if(v>=6)assert(gateway_wave_color==5 && gateway_master_wave_auto_scale);
+  if(v>=6)assert(gateway_wave_color==5 && gateway_wave_auto_scale);
  }
  gateway_settings_t s=gateway_settings();s.reserved=28;plat_store_save(OBJ_SETTINGS,&s,sizeof s);app_init();app_ui_init();assert(gateway_zoom==6);
  s=gateway_settings();s.spectrum_reserved=7;plat_store_save(OBJ_SETTINGS,&s,sizeof s);app_init();app_ui_init();assert(gateway_spectrum_color==3);
