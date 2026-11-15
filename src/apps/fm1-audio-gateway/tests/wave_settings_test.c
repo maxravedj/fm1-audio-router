@@ -9,26 +9,26 @@ static void turn(int e,int n){enc_acc[e]=n;app_input_only();}
 static void row(unsigned r){turn(EN_SELECT,INT_MIN);turn(EN_SELECT,r);assert(gateway_settings_row==r);}
 static void settings(void)
 {
-    assert(!gateway_master_wave_auto_scale && gateway_wave_color==1);
-    tap(B_EDIT);row(2);turn(EN_ALGO,1);
-    assert(gateway_auto_scale_draft && !gateway_master_wave_auto_scale);
-    row(3);turn(EN_ALGO,4);assert(gateway_color_draft==5 && gateway_wave_color==1);
+    assert(!gateway_wave_auto_scale && gateway_wave_color==1);
+    tap(B_EDIT);row(GATEWAY_SET_AUTO_SCALE);turn(EN_ALGO,1);
+    assert(gateway_auto_scale_draft && !gateway_wave_auto_scale);
+    row(GATEWAY_SET_COLOR);turn(EN_ALGO,4);assert(gateway_color_draft==5 && gateway_wave_color==1);
     unsigned writes=store_writes;now_ms+=1000;app_loop();assert(store_writes==writes);
-    store_fail=1;tap(B_SAVE);assert(gateway_save_notice==2 && gateway_wave_color==1 && !gateway_master_wave_auto_scale);
-    store_fail=0;tap(B_SAVE);assert(gateway_save_notice==1 && gateway_wave_color==5 && gateway_master_wave_auto_scale);
+    store_fail=1;tap(B_SAVE);assert(gateway_save_notice==2 && gateway_wave_color==1 && !gateway_wave_auto_scale);
+    store_fail=0;tap(B_SAVE);assert(gateway_save_notice==1 && gateway_wave_color==5 && gateway_wave_auto_scale);
     app_loop();unsigned blit=blits;now_ms+=1000;app_loop();assert(blits<=blit+1 && gateway_save_notice==1);
     turn(EN_ALGO,-1);assert(!gateway_save_notice && gateway_wave_color==5 && gateway_color_draft==4);
     tap(B_HOME);tap(B_EDIT);assert(gateway_color_draft==5 && gateway_auto_scale_draft);
-    app_init();app_ui_init();assert(gateway_wave_color==5 && gateway_master_wave_auto_scale);
-    /* All combinations persist atomically with codec/monitor in 16 bytes. */
+    app_init();app_ui_init();assert(gateway_wave_color==5 && gateway_wave_auto_scale);
+    /* All combinations persist atomically with codec/monitor in the current payload. */
     for(unsigned scale=0;scale<2;scale++)for(unsigned color=0;color<7;color++){
-        tap(B_EDIT);row(2);turn(EN_ALGO,scale?INT_MAX:INT_MIN);
-        row(3);turn(EN_ALGO,INT_MIN);turn(EN_ALGO,color);tap(B_SAVE);
-        gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==sizeof s && s.version==17);
+        tap(B_EDIT);row(GATEWAY_SET_AUTO_SCALE);turn(EN_ALGO,scale?INT_MAX:INT_MIN);
+        row(GATEWAY_SET_COLOR);turn(EN_ALGO,INT_MIN);turn(EN_ALGO,color);tap(B_SAVE);
+        gateway_settings_t s;assert(plat_store_load(OBJ_SETTINGS,&s,sizeof s)==sizeof s && s.version==GATEWAY_SETTINGS_VERSION);
         assert(s.bt_reserved[2]==(scale | color<<1));app_init();app_ui_init();
-        assert(gateway_master_wave_auto_scale==scale && gateway_wave_color==color);
+        assert(gateway_wave_auto_scale==scale && gateway_wave_color==color);
     }
-    puts("PASS: four settings rows, draft-only edits, failed SAVE atomicity, discard, red SAVED lifetime, all 14 auto-scale/color combinations persist and restore");
+    puts("PASS: four settings rows, draft-only edits, failed SAVE atomicity, discard, SAVED lifetime, all 14 auto-scale/color combinations persist and restore");
 }
 static void migration(void)
 {
@@ -37,31 +37,46 @@ static void migration(void)
         s.bluetooth=1;s.bt_reserved[0]=version==5?2:0;s.bt_reserved[1]=version==5?2:0;s.bt_reserved[2]=0;
         unsigned size=version<3?8:version==3?12:16;s.mode=0;
         plat_store_save(OBJ_SETTINGS,&s,size);app_init();app_ui_init();
-        assert(gateway_zoom==9 && !gateway_master_wave_auto_scale && gateway_wave_color==1);
+        assert(gateway_zoom==9 && !gateway_wave_auto_scale && gateway_wave_color==1);
         assert(gateway_monitor==(version==5?2:0) && gateway_codec_preference==(version==5?1:3));
     }
-    for(unsigned packed=14;packed<256;packed++){
+    for(unsigned packed=14;packed<256;packed++)if((packed&15u)>=14u){
         gateway_settings_t s=gateway_settings();s.zoom=10;s.bt_reserved[2]=packed;
         plat_store_save(OBJ_SETTINGS,&s,sizeof s);app_init();
-        assert(gateway_zoom==6 && !gateway_master_wave_auto_scale && gateway_wave_color==1);
+        assert(gateway_zoom==6 && !gateway_wave_auto_scale && gateway_wave_color==1);
     }
     app_ui_init();
-    puts("PASS: v1-v5 migrations preserve prior controls with OFF/GREEN defaults; all 244 invalid packed v6 values rejected");
+    puts("PASS: v1-v5 migrations preserve prior controls with OFF/GREEN defaults; invalid low-nibble color values rejected without rejecting MIDI channels");
+}
+static void feed(unsigned source,const int32_t *pcm,unsigned n)
+{
+    if(source==PLAT_MONITOR_USB)usb_input_meter_samples(pcm,n);
+    else if(source==PLAT_MONITOR_BT){
+        plat_audio_monitor_bt_begin();
+        for(unsigned i=0;i<n;i++)plat_audio_monitor_bt_sample(pcm[2*i],pcm[2*i+1]);
+    }else if(source==PLAT_MONITOR_OUT)plat_audio_monitor_out_samples(pcm,n);
+    else master_meter_samples(pcm,n);
 }
 static void waveform(void)
 {
     static int32_t pcm[512],out[512],ref[512];
     for(unsigned i=0;i<256;i++){pcm[2*i]=768000;pcm[2*i+1]=-1024000;}
-    gateway_mode=GATEWAY_MODE_FULL;gateway_monitor=PLAT_MONITOR_MASTER;gateway_zoom=11;gateway_view_changed();
-    for(unsigned scale=0;scale<2;scale++){
-        gateway_master_wave_auto_scale=scale;master_meter_samples(pcm,256);gateway_capture_wave(now_ms);
-        assert(gateway_wave_scale==(scale?4000:32768));
-        assert(gateway_wave_y(3000)==(scale?9:32));
-        for(unsigned color=0;color<7;color++){
-            gateway_wave_color=color;gateway_plot_valid[0]=gateway_plot_valid[1]=0;gateway_draw_wave(0);
-            for(unsigned ch=0;ch<2;ch++)for(unsigned x=6;x<234;x++){
-                int y=34+78*ch+(scale?(ch?69:9):(ch?39:32));
-                assert(fb[y*240+x]==swap16(gateway_wave_colors[color]));
+    gateway_mode=GATEWAY_MODE_FULL;gateway_zoom=11;
+    for(unsigned selected=0;selected<4;selected++){
+        unsigned source=gateway_source_order[selected];gateway_monitor=source;gateway_view_changed();
+        assert(gateway_wave_scale==32768 && !gateway_wave_auto_seen);
+        for(unsigned other=0;other<4;other++)if(other!=source)feed(other,pcm,256);
+        assert(!usb_wave_filled); /* Unselected producers cannot influence display gain. */
+        for(unsigned scale=0;scale<2;scale++){
+            gateway_wave_auto_scale=scale;feed(source,pcm,256);gateway_capture_wave(now_ms);
+            assert(gateway_wave_scale==(scale?4000:32768));
+            assert(gateway_wave_y(3000)==(scale?9:32));
+            for(unsigned color=0;color<7;color++){
+                gateway_wave_color=color;gateway_plot_valid[0]=gateway_plot_valid[1]=0;gateway_draw_wave(0);
+                for(unsigned ch=0;ch<2;ch++)for(unsigned x=6;x<234;x++){
+                    int y=34+78*ch+(scale?(ch?69:9):(ch?39:32));
+                    assert(fb[y*240+x]==swap16(gateway_wave_colors[color]));
+                }
             }
         }
     }
@@ -81,21 +96,21 @@ static void waveform(void)
     for(unsigned i=0;i<256;i++)pcm[2*i]=pcm[2*i+1]=4000*256;
     master_meter_samples(pcm,256);gateway_capture_wave(now_ms);assert(gateway_wave_scale<8000 && gateway_wave_scale>7900);
     puts("PASS: reciprocal quantization within 1 pixel across full int16 range/scales, auto-scale dead band, immediate larger peak and slow quiet release");
-    gateway_monitor=PLAT_MONITOR_USB;gateway_capture_wave(now_ms);assert(gateway_wave_scale==32768);
+    gateway_wave_auto_scale=0;gateway_capture_wave(now_ms);assert(gateway_wave_scale==32768);
     usb_play_buf=pcm;usb_play_n=256;master=2048;plat_master_mute_init(0);
     usb_play_at=0;sim_render(out);
     for(unsigned i=0;i<14;i++){
-        gateway_master_wave_auto_scale=i&1;gateway_wave_color=i/2;usb_play_at=0;sim_render(out);
+        gateway_wave_auto_scale=i&1;gateway_wave_color=i/2;usb_play_at=0;sim_render(out);
         if(!i)memcpy(ref,out,sizeof ref);else assert(!memcmp(ref,out,sizeof ref));
     }
     usb_play_buf=0;
-    puts("PASS: fixed/auto MASTER geometry, all six actual stereo waveform colors, fixed USB scale; audible PCM identical for every setting combination");
+    puts("PASS: USB IN/BT IN/USB OUT/MASTER fixed/auto geometry, isolated/reset source history and all seven stereo waveform colors; audible PCM identical for every setting combination");
 }
 static void cycles(void)
 {
     const int turns[]={1,1,1,-1,-1,-1,8,-8,INT_MAX,INT_MIN,3,-3};
-    for(unsigned aac=0;aac<2;aac++)for(unsigned mode=0;mode<3;mode++){
-        gateway_monitor=0;gateway_settings_changed();gateway_mode=mode;gateway_aac_active=aac;gateway_view_changed();
+    for(unsigned aac=0;aac<2;aac++)for(unsigned mode=0;mode<GATEWAY_MODES;mode++){
+        gateway_monitor=0;gateway_settings_changed();gateway_mode=mode;gateway_aac_active=aac;gateway_graph_mask=aac?0:3;gateway_view_changed();
         unsigned free=plat_work_available(),source=0,index=0;
         const unsigned order[]={PLAT_MONITOR_USB,PLAT_MONITOR_BT,PLAT_MONITOR_OUT,PLAT_MONITOR_MASTER};
         for(unsigned i=0;i<sizeof turns/sizeof *turns;i++){
@@ -105,7 +120,7 @@ static void cycles(void)
         }
         if(!aac){now_ms+=750;app_loop();gateway_settings_t s;plat_store_load(OBJ_SETTINGS,&s,sizeof s);assert(s.bt_reserved[1]==source);}
     }
-    puts("PASS: forward/reverse cyclic SELECT on all three HOME modes and AAC fallback, accumulated/extreme steps, persistence, no hidden capture or memory growth");
+    puts("PASS: forward/reverse cyclic SELECT on all four HOME modes and AAC fallback, accumulated/extreme steps, persistence, no hidden capture or memory growth");
 }
 int main(void)
 {

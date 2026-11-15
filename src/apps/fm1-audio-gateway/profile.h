@@ -53,7 +53,7 @@ int gateway_profile_sysex(const uint8_t *data,uint32_t n)
            ((data[5]&(PROFILE_NO_WAVE_UI|PROFILE_NO_WAVE_CAPTURE)) && !gateway_has_wave()) ||
            !plat_profile_start(data[4],data[5])){gateway_profile_send("error start");return 1;}
         gateway_profile_mode=gateway_mode;gateway_profile_source=gateway_monitor;
-        gateway_profile_zoom=(uint8_t)gateway_zoom;gateway_profile_auto=gateway_master_wave_auto_scale;
+        gateway_profile_zoom=(uint8_t)gateway_zoom;gateway_profile_auto=gateway_wave_auto_scale;
         gateway_profile_send("started");
     }else if(data[3]==0 || data[3]==2){
         if(plat_profile_stop())gateway_profile_restore();

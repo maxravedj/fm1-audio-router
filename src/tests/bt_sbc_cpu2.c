@@ -99,6 +99,11 @@ int main(int argc,char **argv)
     btr_media_reset();assert(!allocations && !worker_fn);
     uint32_t n=btr_frame_size(stream,size,BTR_CAPS),half=n/2;
     /* Fragment lifetime, duplicate suppression and a malformed full packet. */
+    /* Fragment scratch is lazy too, and released even without a complete frame. */
+    fail_alloc=1;packet(stream,half,0xc2);
+    assert(!allocations && !btr_sbc && !btr_fragmenting && !worker_fn);
+    fail_alloc=0;packet(stream,half,0xc2);assert(allocations==1 && btr_sbc && !worker_fn);
+    btr_media_reset();assert(!allocations && !btr_sbc && !worker_fn);
     seq=65535;uint32_t before=output_frames;
     packet(stream,half,0xc2);assert(!worker_fn);
     packet(stream+half,n-half,0xa1);assert(worker_fn && output_frames==before);drain();

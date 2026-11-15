@@ -17,12 +17,12 @@ int main(void)
 {
     palette_set(APP_PALETTE);now_ms=100;app_init();app_ui_init();app_loop();app_frame();lights();plat_store_save(OBJ_SETTINGS,&gateway_saved,sizeof gateway_saved);
     assert(gateway_mode==GATEWAY_MODE_METERS && !gateway_display_block);
-    /* Fresh boot: 1 meters -> 2 waveform -> 3 spectrum -> 1 meters. */
+    /* Fresh boot: 1 meters -> 2 waveform -> 3 spectrum -> 4 vectorscope -> 1 meters. */
     tap(B_HOME);assert(gateway_has_wave());
     held_btn=1u<<B_HOME;app_input_only();assert(gateway_has_spectrum());
     for(unsigned i=0;i<30;i++)app_input_only();assert(gateway_has_spectrum());
-    held_btn=0;app_input_only();tap(B_HOME);assert(gateway_mode==GATEWAY_MODE_METERS);
-    for(unsigned mode=0;mode<3;mode++){
+    held_btn=0;app_input_only();tap(B_HOME);assert(gateway_has_vectorscope());tap(B_HOME);assert(gateway_mode==GATEWAY_MODE_METERS);
+    for(unsigned mode=0;mode<GATEWAY_MODES;mode++){
         assert(gateway_mode==mode);enc_acc[EN_SELECT]=1;app_input_only();tap(B_EDIT);app_loop();app_frame();lights();
         assert(gateway_screen==GATEWAY_SETTINGS && !gateway_display_block);
         assert(!usb_input_wave_enabled && !usb_input_meter_enabled && !master_meter_enabled && !usb_spectrum_enabled);

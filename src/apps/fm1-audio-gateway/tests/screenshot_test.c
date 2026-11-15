@@ -17,10 +17,10 @@ int main(void){
  assert(plat_screenshot_pixel(237)==0x001f && plat_screenshot_pixel(238)==0xffff && plat_screenshot_pixel(239)==0x1234);
  for(unsigned i=0;i<512;i++)pcm[i]=i&1?-524288:1048576;
  usb_play_buf=pcm;usb_play_n=256;plat_usb_play_gain(4096);gateway_fade_time=0;
- for(unsigned page=0;page<9;page++){
+ for(unsigned page=0;page<10;page++){
   control(0);master=4096;
-  gateway_screen=page<3?GATEWAY_MAIN:page==3?GATEWAY_SETTINGS:page==4?GATEWAY_MIXER:GATEWAY_FX;
-  gateway_mode=page<3?page:0;gateway_fx_limiter=page==6 || page==8;gateway_view_changed();if(page!=8){app_loop();app_frame();}
+  gateway_screen=(page<3 || page==9)?GATEWAY_MAIN:page==3?GATEWAY_SETTINGS:page==4?GATEWAY_MIXER:GATEWAY_FX;
+  gateway_mode=page==9?GATEWAY_MODE_VECTORSCOPE:page<3?page:0;gateway_fx_limiter=page==6 || page==8;gateway_view_changed();if(page!=8){app_loop();app_frame();}
   for(unsigned i=0;i<8;i++)gateway_meter[i]=(gateway_meter_t){400+i*20,500+i*10,750,0,0,0};
   if(gateway_has_wave())for(unsigned x=0;x<GATEWAY_WAVE_W;x++){
    gateway_wave[x][0]=-10000-(x%30)*500;gateway_wave[x][1]=5000+(x%30)*500;
@@ -29,7 +29,8 @@ int main(void){
   if(gateway_has_spectrum())for(unsigned i=0;i<40;i++){
    gateway_spectrum_level[i]=-1000-(int)i*1000;gateway_spectrum_peak[i]=gateway_spectrum_level[i]+900;
   }
-  if(page>=7)gateway_fx_dialog=page==7?1:2;
+  if(gateway_has_vectorscope())for(unsigned y=12;y<132;y++)gateway_vectorscope_buffers->plot[y][y/8]|=1u<<(y%8);
+  if(page==7 || page==8)gateway_fx_dialog=page==7?1:2;
   gateway_settings_dirty=0;begin();static uint16_t expected[240*240];memcpy(expected,fb,sizeof fb);
   unsigned changes=lcd_changes,bl=blits,writes=store_writes;
   gateway_meter_t meters[8];memcpy(meters,gateway_meter,sizeof meters);
@@ -69,6 +70,6 @@ int main(void){
  begin();app_bt_aac_prepare();assert(!gateway_shot_frozen); /* before graph buffers can be reused */
  begin();app_panic();assert(!gateway_shot_frozen && !gateway_shot_pending && !gateway_display_block);
  app_ui_init();begin();uint8_t invalid[]={0x7d,0x4c,0x49,1,127,127,1};app_sysex(invalid,sizeof invalid);assert(!gateway_shot_pending);control(0);
- puts("PASS: frozen RGB565 screenshot equals paused LCD on all 7 pages and both FX dialogs while live PCM/master/history continue; no display or settings writes during download");
+ puts("PASS: frozen RGB565 screenshot equals paused LCD on all 8 pages and both FX dialogs while live PCM/master/history continue; no display or settings writes during download");
  puts("PASS: resume on end, idle/hard timeout, USB reconnect, panel/encoder/PLAY changes, AAC buffer release and updater; idempotent begin, backpressure and invalid rows");
 }

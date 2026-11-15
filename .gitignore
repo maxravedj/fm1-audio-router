@@ -10,6 +10,7 @@ __pycache__/
 **/build
 .DS_Store
 ._*
+.fuse_hidden*
 *.swp
 *.bak
 /backups/

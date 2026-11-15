@@ -14,7 +14,7 @@ static void start(unsigned mode,unsigned source)
 }
 static void selected_meter(void)
 {
-    for(unsigned mode=GATEWAY_MODE_FULL;mode<=GATEWAY_MODE_SPECTRUM;mode++)for(unsigned source=0;source<4;source++){
+    for(unsigned mode=GATEWAY_MODE_FULL;mode<GATEWAY_MODES;mode++)for(unsigned source=0;source<4;source++){
         start(mode,source);memcpy(saved,fb,sizeof fb);
         gateway_meter[0]=(gateway_meter_t){.level=600};
         gateway_meter[1]=(gateway_meter_t){.level=300};gateway_draw_meter(1);
@@ -35,7 +35,7 @@ static void selected_meter(void)
             assert(fb[225*240+30]==swap16(gateway_meter_color(60))); /* Only Mixer grays muted meters. */
         }
     }
-    puts("PASS: waveform/spectrum selected-source horizontal stereo meter, seven-pixel thickness, exact segments/gaps, values above, mute color preserved outside Mixer, chart/header preservation and idle skip");
+    puts("PASS: waveform/spectrum/vectorscope selected-source horizontal stereo meter, seven-pixel thickness, exact segments/gaps, values above, mute color preserved outside Mixer, chart/header preservation and idle skip");
 }
 static void fullpage_grid(void)
 {
@@ -92,7 +92,7 @@ static void spectrum_sources(void)
 static void master_wave(void)
 {
     static int32_t lr[512];
-    gateway_master_wave_auto_scale=1;gateway_wave_color=GATEWAY_WAVE_BLUE;
+    gateway_wave_auto_scale=1;gateway_wave_color=GATEWAY_WAVE_BLUE;
     start(GATEWAY_MODE_FULL,PLAT_MONITOR_MASTER);gateway_zoom=11;
     for(unsigned i=0;i<256;i++){lr[2*i]=768000;lr[2*i+1]=-1024000;}
     master_meter_samples(lr,256);gateway_capture_wave(now_ms);

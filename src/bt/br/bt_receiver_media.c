@@ -1,10 +1,39 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include "bt_receiver.h"
 #include "sbc_dec/oi_codec_sbc.h"
+#ifdef APP_BT_SBC_CPU2
+/* Only CPU0 owns the queue cursors/allocator. An executing packet is retained
+ * until the mailbox completes; CPU1 only reads its immutable payload. */
+#define BTR_SBC_QUEUE_BYTES 4096u
+#define BTR_SBC_QUEUE_SLOTS 16u
+struct btr_sbc_packet {uint32_t start;uint16_t bytes;uint8_t frames,reset;};
+struct btr_sbc_mem {
+    OI_CODEC_SBC_DECODER_CONTEXT decoder;
+    uint32_t decoder_data[CODEC_DATA_WORDS(2,SBC_CODEC_FAST_FILTER_BUFFERS)];
+    int16_t decoded[256];
+    uint8_t fragment[1024];
+    uint8_t queue[BTR_SBC_QUEUE_BYTES];
+    struct btr_sbc_packet packets[BTR_SBC_QUEUE_SLOTS];
+    volatile uint32_t queue_w,queue_r,packet_w,packet_r;uint32_t started;
+    uint8_t active,reset_next;
+#ifdef APP_BT_RESAMPLE_CPU2
+    uint16_t frame_at;uint8_t frame_done;volatile uint8_t job_done;
+#endif
+};
+static struct btr_sbc_mem *btr_sbc;
+/* Scratch is owned by the same SBC session as its immutable packet queue.
+ * Joining the worker before releasing this block also retires decoder history. */
+#define btr_decoder (btr_sbc->decoder)
+#define btr_decoder_data (btr_sbc->decoder_data)
+#define btr_decoded (btr_sbc->decoded)
+#define btr_fragment (btr_sbc->fragment)
+#else
 static OI_CODEC_SBC_DECODER_CONTEXT btr_decoder;
 static uint32_t btr_decoder_data[CODEC_DATA_WORDS(2,SBC_CODEC_FAST_FILTER_BUFFERS)];
 static int16_t btr_decoded[256];
-static uint8_t btr_fragment[1024],btr_have_sequence,btr_fragmenting;
+static uint8_t btr_fragment[1024];
+#endif
+static uint8_t btr_have_sequence,btr_fragmenting;
 static uint32_t btr_fragment_n;
 static uint8_t btr_fragments_left;
 static uint16_t btr_sequence;
@@ -20,21 +49,6 @@ static int btr_decode(const uint8_t *p,uint32_t n)
     btr_pcm_put(btr_decoded,bytes/4);btr_stats.frames++;return 1;
 }
 #ifdef APP_BT_SBC_CPU2
-/* Only CPU0 owns the queue cursors/allocator. An executing packet is retained
- * until the mailbox completes; CPU1 only reads its immutable payload. */
-#define BTR_SBC_QUEUE_BYTES 4096u
-#define BTR_SBC_QUEUE_SLOTS 16u
-struct btr_sbc_packet {uint32_t start;uint16_t bytes;uint8_t frames,reset;};
-struct btr_sbc_mem {
-    uint8_t queue[BTR_SBC_QUEUE_BYTES];
-    struct btr_sbc_packet packets[BTR_SBC_QUEUE_SLOTS];
-    volatile uint32_t queue_w,queue_r,packet_w,packet_r;uint32_t started;
-    uint8_t active,reset_next;
-#ifdef APP_BT_RESAMPLE_CPU2
-    uint16_t frame_at;uint8_t frame_done;volatile uint8_t job_done;
-#endif
-};
-static struct btr_sbc_mem *btr_sbc;
 static void btr_sbc_job(uint32_t arg)
 {
     (void)arg;
@@ -100,19 +114,22 @@ static void btr_sbc_poll(void)
     btr_sbc_poll_inner();
 #endif
 }
+/* Called only by foreground media ingress, never by the worker or IRQ poll. */
+static int btr_sbc_allocate(void)
+{
+    if(btr_sbc)return 1;
+#ifdef APP_BT_RESAMPLE_CPU2
+    struct btr_sbc_mem *mem=plat_work_alloc_top(sizeof *mem);
+#else
+    struct btr_sbc_mem *mem=plat_work_alloc(sizeof *mem);
+#endif
+    if(!mem){btr_stats.gaps++;return 0;}
+    memset(mem,0,sizeof *mem);mem->reset_next=1;
+    plat_cpu2_sync();btr_sbc=mem;return 1;
+}
 static void btr_sbc_submit(const uint8_t *p,uint32_t n,uint32_t frames)
 {
-    if(!btr_sbc) {
-#ifdef APP_BT_RESAMPLE_CPU2
-        struct btr_sbc_mem *mem=plat_work_alloc_top(sizeof *mem);
-        if(!mem){btr_stats.gaps++;return;}
-        memset(mem,0,sizeof *mem);mem->reset_next=1;plat_cpu2_sync();btr_sbc=mem;
-#else
-        btr_sbc=plat_work_alloc(sizeof *btr_sbc);
-        if(!btr_sbc){btr_stats.gaps++;return;}
-        memset(btr_sbc,0,sizeof *btr_sbc);btr_sbc->reset_next=1;
-#endif
-    }
+    if(!btr_sbc_allocate())return;
     btr_sbc_poll();
     struct btr_sbc_mem *m=btr_sbc;
     uint32_t w=m->queue_w,at=w&(BTR_SBC_QUEUE_BYTES-1);
@@ -170,7 +187,9 @@ void btr_media_reset(void)
     btr_ldac_reset();
 #endif
     btr_have_sequence=btr_fragmenting=0;btr_fragment_n=0;
+#ifndef APP_BT_SBC_CPU2
     OI_CODEC_SBC_DecoderReset(&btr_decoder,btr_decoder_data,sizeof btr_decoder_data,2,2,FALSE);
+#endif
 }
 void btr_media(const uint8_t *p,uint32_t n,const uint8_t conf[4])
 {
@@ -194,6 +213,9 @@ void btr_media(const uint8_t *p,uint32_t n,const uint8_t conf[4])
         if(flags&0x40){if(flags&0x20)goto bad;btr_fragmenting=1;btr_fragment_n=0;btr_fragments_left=flags&15;}
         if(!btr_fragmenting || at==n || n-at>sizeof btr_fragment-btr_fragment_n)goto bad;
         if ((flags&15)!=btr_fragments_left || ((flags&0x20)!=0)!=(btr_fragments_left==1)) goto bad;
+#ifdef APP_BT_SBC_CPU2
+        if(!btr_sbc_allocate()){btr_fragmenting=0;return;}
+#endif
         btr_fragments_left--;
         for(i=at;i<n;i++)btr_fragment[btr_fragment_n++]=p[i];
         if(!(flags&0x20))return;

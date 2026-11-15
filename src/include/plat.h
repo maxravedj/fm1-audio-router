@@ -732,6 +732,10 @@ void plat_usb_input_observe(int peaks, int waveform);
 #define PLAT_SPECTRUM_FRAMES 4096u
 void plat_usb_spectrum_enable(int enabled);
 int plat_usb_input_spectrum(int16_t (*out)[2], uint32_t *position);
+/* Same capture and validity rules, reading only the latest `frames` stereo
+ * pairs (1..PLAT_SPECTRUM_FRAMES). Writes exactly `frames` pairs to out.
+ * Short visualizer windows avoid copying a complete FFT window. */
+int plat_usb_input_spectrum_window(int16_t (*out)[2], uint32_t frames, uint32_t *position);
 /* APP_MASTER_METER: main-loop snapshot/clear of stereo sample peaks after
  * USB playback trim and MASTER gain, in the same unsigned 24-bit units as
  * input peaks. Reads the post-MASTER mix before optional user mute/fade,

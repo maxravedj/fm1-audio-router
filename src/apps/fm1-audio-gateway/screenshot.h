@@ -55,6 +55,7 @@ static void gateway_shot_paint(void){
     else{
         if(gateway_has_wave()){gateway_draw_wave(1);gateway_draw_zoom();}
         if(gateway_has_spectrum())gateway_spectrum_paint(1);
+        if(gateway_has_vectorscope())gateway_vectorscope_paint(1);
         if(gateway_has_meters())gateway_draw_meter(1);
     }
     gateway_screenshot_painting=0;

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MPL-2.0
- * Raw stereo capture for foreground spectral analysis. The USB observer only
+ * Raw stereo capture for foreground spectrum/vectorscope. The USB observer only
  * copies PCM; no FFT, windowing or floating point runs in an interrupt. */
 #pragma once
 #define USB_SPECTRUM_RING (2u * PLAT_SPECTRUM_FRAMES)
@@ -70,25 +70,27 @@ static void usb_input_spectrum_push(int32_t l, int32_t r)
     usb_spectrum_count++;
 }
 
-int plat_usb_input_spectrum(int16_t (*out)[2], uint32_t *position)
+int plat_usb_input_spectrum_window(int16_t (*out)[2], uint32_t frames, uint32_t *position)
 {
+    if (!frames || frames > PLAT_SPECTRUM_FRAMES) return 0;
     uint32_t lock = plat_lock(), end = usb_spectrum_count;
     uint32_t generation = usb_spectrum_generation, i, k;
-    int valid = usb_spectrum_enabled && usb_spectrum_filled >= PLAT_SPECTRUM_FRAMES &&
+    int valid = usb_spectrum_enabled && usb_spectrum_filled >= frames &&
         usb_spectrum_packet_seen && plat_ms() - usb_spectrum_packet_ms < 100u;
     plat_unlock(lock);
     if (!valid) return 0;
-    /* Half a ring of headroom, and at most 32 stereo frames per IRQ lock.
+    /* At least half a ring of headroom, at most 32 stereo frames per IRQ lock.
      * Check both stream generation and overwrite age for every chunk. */
-    for (i = 0; i < PLAT_SPECTRUM_FRAMES; i += 32u) {
-        uint32_t start = end - PLAT_SPECTRUM_FRAMES + i;
+    for (i = 0; i < frames; i += 32u) {
+        uint32_t start = end - frames + i, count = frames - i;
+        if (count > 32u) count = 32u;
         lock = plat_lock();
         if (generation != usb_spectrum_generation ||
                 usb_spectrum_count - start > USB_SPECTRUM_RING) {
             plat_unlock(lock);
             return 0;
         }
-        for (k = 0; k < 32u; k++) {
+        for (k = 0; k < count; k++) {
             uint32_t at = (start + k) & (USB_SPECTRUM_RING - 1u);
             out[i+k][0] = usb_spectrum_ring[at][0];
             out[i+k][1] = usb_spectrum_ring[at][1];
@@ -101,4 +103,9 @@ int plat_usb_input_spectrum(int16_t (*out)[2], uint32_t *position)
     plat_unlock(lock);
     if (valid) *position = end;
     return valid;
+}
+
+int plat_usb_input_spectrum(int16_t (*out)[2], uint32_t *position)
+{
+    return plat_usb_input_spectrum_window(out, PLAT_SPECTRUM_FRAMES, position);
 }

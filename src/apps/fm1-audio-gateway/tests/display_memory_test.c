@@ -15,7 +15,7 @@ int main(void)
     assert(usb_wave_history && !usb_spectrum_ring && gateway_wave_buffers && !gateway_spectrum_buffers);
     for(unsigned i=0;i<512;i++)input[i]=1000000;
     usb_input_meter_samples(input,256);assert(usb_wave_filled==256);
-    tap(B_HOME);tap(B_HOME);assert(gateway_mode==GATEWAY_MODE_METERS && plat_work_available()==total);
+    tap(B_HOME);tap(B_HOME);tap(B_HOME);assert(gateway_mode==GATEWAY_MODE_METERS && plat_work_available()==total);
     assert(!gateway_display_block && !usb_wave_history && !usb_spectrum_ring);
     /* Reuse every released byte; hidden producers must not touch it. */
     uint8_t *reuse=plat_work_alloc(total);assert(reuse);memset(reuse,0xa5,total);
@@ -31,7 +31,7 @@ int main(void)
         tap(B_EDIT);assert(plat_work_available()==total && !usb_wave_history && !usb_spectrum_ring);
         usb_input_meter_samples(input,256);
         tap(B_HOME);assert(gateway_has_spectrum() && total-plat_work_available()==73736 && !usb_spectrum_filled);
-        tap(B_HOME);assert(plat_work_available()==total);
+        tap(B_HOME);assert(gateway_has_vectorscope());tap(B_HOME);assert(plat_work_available()==total);
         tap(B_HOME);assert(gateway_has_wave() && total-plat_work_available()==wave && !usb_wave_filled);
         tap(B_HOME);assert(gateway_has_spectrum());
     }

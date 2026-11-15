@@ -60,10 +60,13 @@ ir=(out/'unity.opt.ll').read_text()
 alloc=re.search(r'@plat_work_alloc\(i32(?: \w+)* (\d+)\)[^\n]*\n[^\n]*store ptr [^\n]*@btr_aac',ir)
 assert alloc,'AAC context allocation must be identifiable in target IR'
 context=int(alloc[1]);aac=context+48768
-sbc_alloc=re.search(r'@plat_work_alloc_top\(i32(?: \w+)* (\d+)\)',ir)
+sbc_ir=re.search(r'define[^\n]*@btr_sbc_allocate\([^}]+}',ir)[0]
+sbc_alloc=re.search(r'@plat_work_alloc_top\(i32(?: \w+)* (\d+)\)',sbc_ir)
 assert sbc_alloc,'SBC high-end allocation must be identifiable in target IR'
-sbc_context=int(sbc_alloc[1]);assert 4248<=sbc_context<=4280
+sbc_context=int(sbc_alloc[1]);assert 7760<=sbc_context<=7792
 sbc=(sbc_context+7)&~7
+for scratch in ('btr_decoder','btr_decoder_data','btr_decoded','btr_fragment'):
+ assert not re.search(r'^@'+scratch+r' =',ir,re.M),scratch+' must live in SBC session workspace'
 aptx_ir=next(q.read_text() for q in out.rglob('*.opt.ll') if re.search(r'define[^\n]*@aptx_context_size',q.read_text()))
 aptx_context=int(re.search(r'define[^\n]*@aptx_context_size[^}]+ret i32 (\d+)',aptx_ir)[1])
 aptx_alloc=re.search(r'@aptx_context_size\(\)[^\n]*\n[^\n]*add i32 [^,]+, (\d+)',ir)
@@ -79,7 +82,8 @@ ldac=(ldac_workspace+int(ldac_alloc[1])+7)&~7
 graph_ir=re.search(r'define[^\n]*@gateway_acquire_display\([^}]+}',ir)[0]
 assert '[ 40968,' in graph_ir and '[ 32768,' in graph_ir
 assert '[ 3656,' in graph_ir and '[ 57344,' in graph_ir
-graph=40968+32768;wave=3656+57344
+assert '[ 15960,' in graph_ir
+graph=40968+32768;wave=3656+57344;vectorscope=15960+32768
 # This includes compressed queue, low-byte PCM, decoder state and alignment.
 # FIR/output preparation has no path from the CPU0 mixer. Only a nonblocking
 # mailbox kick crosses that boundary; the audio IRQ cannot join the worker.
@@ -106,7 +110,7 @@ fx_bytes=int(fx_line.split()[-2],16)
 record=(2048+fx_bytes+7)&~7
 assert free-8192>=graph+record+sbc and free-8192>=aac+record
 assert free-8192>=graph+record+aptx
-assert free-8192>=ldac+record
+assert free-8192>=ldac+record+vectorscope
 loop=dis.split('fm1_cpu1_main:\n',1)[1].split('\n\n',1)[0]
 if 'ui_profile_idle_spins' in loop:
  assert re.search(r'@ui_profile_idle_spins = .*global i32 64,',ir)
@@ -123,6 +127,7 @@ else:
  assert re.search(r'0x40|64',loop),'idle backoff must survive target optimization'
 report={'ram_free':free,'aac_context_bytes':context,'aac_workspace_bytes':48768,'aac_dynamic_bytes':aac,
  'aptx_context_bytes':aptx_context,'aptx_dynamic_bytes':aptx,'usb_record_aptx_spectrum_margin':free-8192-graph-record-aptx,
+ 'vectorscope_workspace_bytes':vectorscope,'usb_record_ldac_vectorscope_margin':free-8192-ldac-record-vectorscope,
  'spectrum_workspace_bytes':graph,'waveform_workspace_bytes':wave,'ldac_workspace_bytes':ldac_workspace,'ldac_dynamic_bytes':ldac,
  'usb_record_ldac_margin':free-8192-ldac-record,'usb_record_ldac_waveform_margin':free-8192-ldac-record-wave,
  'usb_record_ldac_spectrum_margin':free-8192-ldac-record-graph,

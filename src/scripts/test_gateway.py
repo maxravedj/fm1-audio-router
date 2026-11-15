@@ -28,7 +28,7 @@ if args.suite in ('ui', 'all'):
         'fx_gui_test', 'fx_integration_test', 'fx_presets_test', 'fx_preset_flash_test',
         'midi_controller_test', 'midi_persistence_test', 'midi_overlay_test', 'settings_scroll_test', 'settings_dirty_test', 'aptx_settings_test', 'ldac_settings_test', 'ldac_redraw_test', 'peak_readout_test', 'gain_range_test', 'badge_layout_test', 'screenshot_test',
         'aac_display_recovery_test', 'display_memory_test', 'spectrum_memory_test',
-        'spectrum_test', 'spectrum_controls_test', 'waveform_cost_test',
+        'vectorscope_test', 'spectrum_test', 'spectrum_controls_test', 'wave_settings_test', 'waveform_cost_test',
         'profile_ui_test', 'navigation_test', 'parameters_test')
 if args.suite in ('dsp', 'all'):
     run(APP / 'tests/run_master_fx.py')

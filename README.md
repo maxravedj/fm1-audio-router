@@ -24,12 +24,12 @@
 - FX chain of 5 bands parametric EQ and peak limiter with 8 presets
 - Mixer
 - MIDI controller functionality
-- 3 Visualizers: meters, waveforms and 40-band spectrum
+- 4 visualizers: meters, waveforms, 40-band spectrum and vectorscope
 
 # Installation
 1. Flash m-bootloader with [M-Flasher](https://github.com/jvitkauskas/m-flasher)
 2. Turn off FM-1 and turn on while holding **REC** button
-3. Flash [latest firmware](https://github.com/maxravedj/fm1-audio-router/releases/latest/download/fm1-audio-router-v0.4.0.fwsc) with M-Flasher
+3. Flash [latest firmware](https://github.com/maxravedj/fm1-audio-router/releases/latest/download/fm1-audio-router-v0.5.0.fwsc) with M-Flasher
 
 See additional [installation instructions](docs/INSTALL.md)
 
@@ -55,20 +55,21 @@ Use **F3**/**G3**/**A3**/**B3** to mute and **F4**/**G4**/**A4**/**B4** to solo.
 Press **EDIT** to open settings, use **SELECT** to scroll, **ALGORITHM** to change parameters and **SAVE** to save and apply settings.
 - Bluetooth: enable/disable bluetooth
 - Bluetooth codecs: **SEL** opens a checklist; **SELECT** scrolls, **SEL** toggles, **OCT−** cancels and **OCT+** confirms the draft. Press **SAVE** in Settings to apply it.
-- Master waveform auto scale: automatically scale master waveform to achieve  always fat waveform
+- Waveform auto scale: automatically fit the selected USB IN, BT IN, USB OUT or MASTER waveform to the display.
 - USB OUT: send audio back to USB, select source here.
 
 ### MIDI controller
 Enable MIDI in settings.
-With USB connected, press **REC** to enter or leave MIDI mode. Encoders send absolute CCs (0–127) with gentle acceleration; keys send notes. **OCT−/OCT+** shift up to three octaves; press both to reset. **MASTER** keeps controlling audio.
+With USB connected, press **REC** to enter or leave MIDI mode. Encoders send absolute CCs (0–127) with gentle acceleration; keys send notes. **OCT−/OCT+** shift up to three octaves; press both to reset. Leaving MIDI saves encoder positions and octave shift for the next boot. **MASTER** keeps controlling audio.
 
 ### Visualizers
 Press **HOME** to open visualizers screen and cycle through different visualizers.
  - Meters: no controls
  - Waveforms: **SELECT** knob scrolls through audio sources to visualize, use **K1** to choose window size
  - Spectrum: **SELECT** for source, **K1** and **K2** for minimum and maximum displayed dB, **K3** controls decay rate
+ - Vectorscope: **SELECT** for source; mono is vertical and out-of-phase stereo spreads horizontally. Change Vectorscope color in Settings.
 
-AAC uses meters during playback to free decoder memory. LDAC supports stereo 44.1/48 kHz; spectrum yields memory first, and waveforms remain available when SRAM allows.
+AAC uses meters during playback to free decoder memory. LDAC supports stereo 44.1/48 kHz; spectrum yields memory first, and waveforms/vectorscope remain available when SRAM allows.
 
 ## Other usefull stuff
 

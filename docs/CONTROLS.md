@@ -4,7 +4,7 @@
 
 | Control | Action |
 | --- | --- |
-| HOME | Return to Home; press again to cycle meters → waveforms → spectrum, skipping unavailable graphs. |
+| HOME | Return to Home; press again to cycle meters → waveforms → spectrum → vectorscope, skipping unavailable graphs. |
 | GLO | Open the mixer. |
 | EDIT | Open Settings. SELECT chooses a row; ALGORITHM edits its draft value. |
 | SAVE in Settings | Fully lit with unsaved changes; saves and applies the draft. Red UNSAVED becomes green SAVED until leaving or editing. |
@@ -24,23 +24,30 @@ it includes UI/LCD waits, rather than instruction utilization alone.
 ## Home visualizers
 
 The meter page shows USB IN, BT IN, USB OUT and MASTER; SELECT does nothing.
-On waveform/spectrum pages, SELECT cycles those sources in that order.
-Both visualizers have a horizontal selected-source stereo meter, held peak
+On waveform/spectrum/vectorscope pages, SELECT cycles those sources in that order.
+All three graph views have a horizontal selected-source stereo meter, held peak
 and source footer.
 Meter graphics cover -60 to 0 dBFS. Numeric held peaks keep their one-decimal
 readout below that floor, down to the smallest nonzero 24-bit sample (about
 -138.5 dBFS). Silence shows `--` once the held peak has decayed. The same numeric
 range is used on Home meters, Mixer and the limiter.
 
-- Waveforms: K1 adjusts the visible window from 8 seconds to 4 ms. MASTER
-  auto scale is optional and display-only; it changes neither audio nor meters.
+- Waveforms: K1 adjusts the visible window from 8 seconds to 4 ms. Auto
+  scale is optional for USB IN, BT IN, USB OUT and MASTER. It changes only the
+  display, leaving audio and meter levels unchanged.
 - Spectrum: K1 sets minimum displayed dB, K2 maximum, K3 decay rate.
   The footer shows MIN/MAX/rate. Forty logarithmic bands have held peak lines.
+- Vectorscope: a rotated L/R point cloud shows the latest 2048 stereo samples
+  (~46 ms) at roughly 60 fps
+  (16 ms refresh interval; actual rate depends on workload).
+  Mono is vertical, opposite-polarity stereo horizontal; L-only leans left and
+  R-only right. Settings offers stereo-linked auto scale (ON by default); OFF
+  uses fixed full scale. The larger plot has no title and never alters audio.
 - During an accepted AAC session, graph views yield their memory to decoding
   and the display uses meters. The selected visualizer returns after disconnect.
-- LDAC gives decoding priority over graphs. Spectrum (and waveforms if needed)
+- LDAC gives decoding priority over graphs. Spectrum (and waveforms/vectorscope if needed)
   falls back to meters when SRAM is insufficient. HOME skips unavailable graphs
-  instead of visiting a duplicate meter page. Available waveforms remain usable
+  instead of visiting a duplicate meter page. Available waveforms/vectorscope remain usable
   while paused; disconnect restores normal graph availability.
 - USB OUT monitoring shows silence until the host records and routing is enabled.
 
@@ -83,15 +90,16 @@ written only by confirmation, and presets do not contain bypass state.
 
 ## Settings and Bluetooth
 
-Settings include Bluetooth OFF/ON, a Bluetooth codecs checklist, MASTER waveform
-auto scale, separate waveform/spectrum colors, battery percentage display,
+Settings include Bluetooth OFF/ON, a Bluetooth codecs checklist, waveform
+auto scale followed by vectorscope auto scale, separate waveform/spectrum/vectorscope
+colors, battery percentage display,
 CPU display, USB OUT routing, mute/solo fade time and MIDI controller options. Fade choices are OFF,
 10/50/100/500 ms and 1 s. Colors include red, green, blue, yellow, light gray,
 white and orange. Battery percentage is an uncalibrated estimate; no voltage
 mode is provided.
 
 Fresh settings default to Bluetooth ON with SBC and AAC selected,
-MASTER waveform auto scale OFF, green waveforms, yellow spectrum, battery and
+waveform auto scale OFF, vectorscope auto scale ON, green waveforms/vectorscope, yellow spectrum, battery and
 CPU displays ON, USB OUT OFF and a 50-ms mute/solo fade. The global FX chain
 starts bypassed, with EQ and limiter individually enabled. Existing saved
 preferences take priority over these defaults.
@@ -125,9 +133,10 @@ PRESET and ALGORITHM in row 2, columns 2 and 3; K1–K4 across row 3.
 Choose **Absolute** interpretation in the receiving software. Each encoder has
 an independent 0–127 value, initially 64. Each clockwise detent
 increases it, each anticlockwise detent decreases it; values
-clamp at 0 and 127 without wrapping. Leaving MIDI with REC saves the positions
-for the next entry and reboot. Turning knobs does not write flash; power loss
-before leaving MIDI restores the previous saved positions. Slow turns step
+clamp at 0 and 127 without wrapping. Leaving MIDI with **REC** saves the positions
+and octave shift for the next entry and reboot. Turning knobs or changing octaves
+does not write flash; power loss before leaving MIDI restores the previous saved
+positions and octave. Slow turns step
 by one per detent. Continued turns in the same direction step by two below
 80 ms per detent, or three below 35 ms. The first turn, direction changes and
 pauses return to fine control; each encoder tracks its speed independently.
@@ -140,7 +149,8 @@ either direction. Press both OCT buttons together to reset to zero. Both buttons
 are dim at zero. The shifted direction is bright
 at one octave, blinks with a one-second cycle at two, and a 400 ms cycle at three;
 the other direction stays dim. Held notes are released at their old pitch before
-restarting at the new pitch. The shift survives REC toggles and resets on boot.
+restarting at the new pitch. The shift saved on **REC** exit survives reboot;
+older settings and fresh installs start at zero.
 In confirmation dialogs, OCT−/OCT+ keep their cancel/confirm functions. Bluetooth
 pairing with OCT+ is available after leaving MIDI mode.
 
@@ -170,7 +180,7 @@ HOME, EDIT, GLO or FX cancels an open checklist. At least one codec must
 remain checked; use Bluetooth OFF to disable the receiver. Older AUTO/AAC/SBC
 settings migrate to the corresponding selection. Changing the advertised list
 disconnects an existing stream so the source can negotiate again. aptX/aptX HD
-keep waveform and spectrum views available; AAC retains its meter fallback.
+keep waveform, spectrum and vectorscope views available; AAC retains its meter fallback.
 LDAC supports stereo 44.1/48 kHz with memory-dependent visualizer availability.
 The checkboxes advertise capabilities; the source chooses a mutually supported
 codec. Keep AAC or SBC checked for sources that cannot use aptX/aptX HD/LDAC.
