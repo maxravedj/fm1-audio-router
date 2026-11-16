@@ -99,7 +99,7 @@ void btr_media(const uint8_t *p,uint32_t n,const uint8_t conf[4]){(void)p;(void)
 #define APP_BT_AAC_DISPLAY
 #define BTR_FLUSH(rate) reset(rate)
 #define BTR_SECURE() 1
-#define BTR_SEND(p,n) ((void)(p),(void)(n))
+#define BTR_SEND(p,n) ((void)(p),(void)(n),1)
 #include "../bt/br/bt_receiver_l2cap.c"
 static void signal_ldac(const uint8_t *p,unsigned n)
 {

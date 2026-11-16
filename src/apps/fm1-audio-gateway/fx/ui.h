@@ -8,13 +8,13 @@ static uint8_t gateway_fx_row,gateway_fx_dirty,gateway_fx_notice,gateway_fx_limi
 static gateway_meter_t gateway_fx_meter[2];
 static uint32_t gateway_fx_meter_ms,gateway_fx_reduction;
 static uint32_t gateway_fx_ms,gateway_fx_retry_ms,gateway_fx_draw_ms,gateway_fx_fault_seen;
-static const char *const gateway_fx_names[]={"Chain","EQ / post gain","Band 1","Band 2","Band 3","Band 4","Band 5","Peak limiter"};
+static const char *const gateway_fx_names[]={"Chain","EQ / post gain","Band 1","Band 2","Band 3","Band 4","Band 5","Dynamics"};
 static const char *const gateway_fx_types[]={"BELL","LOW PASS","HIGH PASS","LOW SHELF","HIGH SHELF"};
 static void gateway_fx_publish(const fx_params_t *p);
 #include "presets.h"
 static void gateway_fx_init(void)
 {
-    fx_bank_t b;gateway_fx_presets_load();fx_build(&gateway_fx_params,&b);fx_init(&gateway_fx,&b);
+    fx_bank_t b;gateway_fx_presets_load();fx_build(&gateway_fx_params,&b);b.dynamics=gateway_dynamics_mode;fx_init(&gateway_fx,&b);
     gateway_fx_fault_seen=0;gateway_fx_dirty=gateway_fx_notice=gateway_fx_limiter=0;gateway_fx_row=2;
     gateway_fx_dialog=gateway_fx_save_tracking=gateway_fx_save_held=0;
     gateway_fx_ms=plat_ms();gateway_fx_retry_ms=plat_ms()-5000u;
@@ -22,7 +22,8 @@ static void gateway_fx_init(void)
 static void gateway_fx_publish(const fx_params_t *p)
 {
     fx_bank_t b;
-    if(!memcmp(p,&gateway_fx_params,sizeof *p) || !fx_build(p,&b))return;
+    if((!memcmp(p,&gateway_fx_params,sizeof *p) && gateway_fx.pending.dynamics==gateway_dynamics_mode) || !fx_build(p,&b))return;
+    b.dynamics=gateway_dynamics_mode;
     /* Only this small bank copy is protected; coefficient math stays foreground. */
     uint32_t lock=plat_lock();gateway_fx.pending=b;gateway_fx.generation++;gateway_usb_out_publish(&b);plat_unlock(lock);
     gateway_fx_params=*p;gateway_fx_work_capture();gateway_fx_metadata_changed();gateway_fx_notice=0;
@@ -34,6 +35,15 @@ static void gateway_fx_save(uint32_t now,int force)
     if(gateway_fx_dialog || !gateway_fx_dirty || (!force && (now-gateway_fx_ms<750u || now-gateway_fx_retry_ms<5000u)))return;
     gateway_fx_presets_t r=gateway_fx_presets_saved;
     gateway_fx_metadata(&r);gateway_fx_write(&r); /* Saved slots only: never working edits. */
+}
+static void gateway_fx_dynamics_mode_apply(unsigned mode)
+{
+    if(mode==gateway_dynamics_mode)return;
+    gateway_fx_work_capture(); /* Capture under the outgoing mode's ownership. */
+    gateway_dynamics_mode=mode;
+    fx_params_t p=gateway_fx_params;
+    gateway_fx_lim_put(&p,&gateway_fx_dynamics_work()[gateway_fx_selected[gateway_fx_preset_index(1)]]);
+    gateway_fx_publish(&p); /* Keep the single dynamics bypass flag untouched. */
 }
 static int gateway_fx_clamp(int n,int lo,int hi){return n<lo?lo:n>hi?hi:n;}
 static uint32_t gateway_fx_turn_ms[NE];
@@ -54,8 +64,13 @@ static void gateway_fx_turn(unsigned enc,int delta)
     fx_params_t p=gateway_fx_params;
     int step=gateway_fx_step(enc,delta);
     if(gateway_fx_limiter){
-        if(enc==EN_K1)p.input=gateway_fx_clamp(p.input+step*delta,-240,240);
-        if(enc==EN_K2)p.release=gateway_fx_clamp(p.release+step*delta,10,1000);
+        /* LM puts its editable ceiling before the automatic-release row. */
+        if(gateway_dynamics_mode==FX_DYNAMICS_LM){
+            if(enc==EN_K2)enc=EN_K3;
+            else if(enc==EN_K3)enc=EN_K2;
+        }
+        if(enc==EN_K1)p.input=gateway_fx_clamp(p.input+step*delta,-240,300);
+        if(enc==EN_K2 && gateway_dynamics_mode==FX_DYNAMICS_PEAK)p.release=gateway_fx_clamp(p.release+step*delta,10,1000);
         if(enc==EN_K3)p.ceiling=gateway_fx_clamp(p.ceiling+step*delta,-240,0);
 
     }

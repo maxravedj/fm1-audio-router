@@ -11,16 +11,28 @@
 #define APP_BT_AAC
 #define APP_BT_APTX
 #define APP_BT_LDAC
+#ifdef TEST_MULTIPOINT
+#define APP_BT_MULTIPOINT
+#define BR_LINKS 2u
+static uint8_t br_current,br_audio_link;
+static void br_stream_claim(void){assert(!"UI must never switch streams");}
+#define BTR_OWNS_AUDIO() (br_current==br_audio_link)
+#endif
 #define BTI_RING 32u
 #define BTI_RING_HAVE 1
 #define BTI_K_ACL 7u
 #define BR_LINKED 5u
 #define RING_PUBLISH() __asm__ volatile("" ::: "memory")
-struct bti_rx {uint8_t kind,idx;uint32_t len;uint8_t data[340];};
+struct bti_rx {uint8_t kind,idx,link,generation;uint32_t len;uint8_t data[340];};
 static struct bti_rx ring[BTI_RING];
 #define BTI_RX_AT(i) (&ring[(i)%BTI_RING])
 static uint32_t bti_rr,bti_rw;
+#ifdef TEST_MULTIPOINT
+static struct {unsigned on,closing,phase,setup,encrypted,generation;} br_links[BR_LINKS];
+#define brl (br_links[br_current])
+#else
 static struct {unsigned on,closing,phase,setup,encrypted;} brl;
+#endif
 static int memory;
 static int *btr_sbc,*btr_aptx,*btr_ldac;
 static struct {void *workspace;} aac_mem,*btr_aac;
@@ -43,7 +55,7 @@ static void btr_ldac_media(const uint8_t *p,uint32_t n){media(BTR_CODEC_LDAC,p,n
 static int btr_ldac_allocate(void){assert(!"UI must never allocate");return 0;}
 static void btr_decode_poll_irq(void){dispatches++;}
 static uint32_t plat_ms(void){return us/1000;}
-static void send_forbidden(const uint8_t *p,unsigned n){(void)p;(void)n;assert(!"UI must never send signalling");}
+static int send_forbidden(const uint8_t *p,unsigned n){(void)p;(void)n;assert(!"UI must never send signalling");return 0;}
 #define BTR_SEND(p,n) send_forbidden(p,n)
 #define BTR_SECURE() brl.encrypted
 #define BTR_FLUSH(rate) ((void)(rate),assert(!"UI must never reset/join/free"))
@@ -58,6 +70,9 @@ static void push(unsigned kind,unsigned llid,const uint8_t *p,unsigned n)
     assert(n<=340);
     if(bti_rw-bti_rr==BTI_RING){drops++;return;}
     struct bti_rx *r=BTI_RX_AT(bti_rw++);r->kind=kind;r->idx=llid;r->len=n;memcpy(r->data,p,n);
+#ifdef TEST_MULTIPOINT
+    r->link=br_audio_link;r->generation=brl.generation;
+#endif
 }
 static void packet(void)
 {
@@ -95,6 +110,9 @@ static void fm1_lcd_baud(unsigned b){(void)b;}
 #include "../device/lcd.c"
 static void reset(unsigned codec)
 {
+#ifdef TEST_MULTIPOINT
+    br_current=br_audio_link=0;brl.generation=17;
+#endif
     simulation=0;us+=1000;memset(&brc,0,sizeof brc);memset(media_calls,0,sizeof media_calls);
     brl.on=brl.setup=brl.encrypted=1;brl.closing=0;brl.phase=BR_LINKED;btr_worker_enabled=1;
     btr_sbc=btr_aptx=btr_ldac=&memory;btr_aac=&aac_mem;aac_mem.workspace=&memory;
@@ -113,8 +131,18 @@ static void ownership(void)
         brl.encrypted=0;production_service();assert(bti_rr!=bti_rw);brl.encrypted=1;
         brl.on=0;production_service();assert(bti_rr!=bti_rw);brl.on=1;
         brl.closing=1;production_service();assert(bti_rr!=bti_rw);brl.closing=0;
+        brc.pending=1;production_service();assert(bti_rr!=bti_rw);brc.pending=0;
+        brc.ch[2].cfg_in=0;production_service();assert(bti_rr!=bti_rw);brc.ch[2].cfg_in=1;
         btr_worker_enabled=0;production_service();assert(bti_rr!=bti_rw);btr_worker_enabled=1;
         brc.profile.state=BTR_OPEN;production_service();assert(bti_rr!=bti_rw);brc.profile.state=BTR_STREAMING;
+#ifdef TEST_MULTIPOINT
+        uint32_t mp_head=bti_rr;
+        br_audio_link=255;production_service();assert(bti_rr==mp_head && br_current==0);br_audio_link=0;
+        ring[mp_head%BTI_RING].link=1;production_service();assert(bti_rr==mp_head);ring[mp_head%BTI_RING].link=0;
+        us+=1000;ring[mp_head%BTI_RING].generation=16;production_service();assert(bti_rr==mp_head);ring[mp_head%BTI_RING].generation=17;
+        us+=1000;br_current=1;production_service();assert(br_current==1 && bti_rr==bti_rw);br_current=0;
+        assert(media_calls[codec]==1);
+#endif
         production_service();assert(bti_rr==bti_rw && media_calls[codec]==1);
         for(unsigned i=0;i<12;i++)packet();
         production_service();assert(bti_rw-bti_rr==12); /* once/ms */

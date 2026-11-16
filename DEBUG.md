@@ -52,11 +52,26 @@ rows distinguish a paired link from an actual audio stream. A radio skipped
 after a crash is intentional protection; collect logs, then Settings SAVE can
 explicitly retry Bluetooth ON.
 
+Multipoint logs keep the existing codec/profile rows on the selected audio
+session. `BT links` reports encrypted-peer count, selected audio slot and
+current radio slot (slots 1/2, audio slot 0 when none). `BT peer1` and `BT peer2`
+report each slot's baseband phase, security state and AVDTP state. Fault rows
+retain the most recent failure; live peer rows distinguish it from a healthy
+other link. For handover problems, capture logs with both sources connected,
+name the device that started last and whether the old source actually paused.
+
 During aptX/aptX HD playback, `BT aptX us` reports average/max decode-job time
 and job count (at most 256 PCM frames per job); `BT FIR us` reports average/max time for a 256-frame resampler
 block and block count. Times are CPU1 wall microseconds. `BT queue` lists
 underruns, PCM overruns and compressed packet gaps/drops. Capture these rows
 while the problem is happening; disconnecting releases codec timing data.
+`BT ingress` reports dropped controller RX events, currently queued RX events
+and the 32-event queue capacity. Drops here mean an acknowledged radio packet
+was lost before foreground processing; zero ingress drops with increasing
+compressed gaps points further upstream. `BT AAC us/mem` reports the maximum
+AAC access-unit decode time, allocated bytes and whether the AAC context exists.
+Compare logs during one-client and two-client AAC playback, without
+disconnecting between captures, to see whether loss counters keep increasing.
 
 For LDAC, `BT codec 5 44100 2` (or `48000`) identifies the negotiated codec,
 rate and stereo channels. `BT LDAC us` reports average/max per-frame decode time

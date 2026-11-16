@@ -23,6 +23,9 @@ static void feed(unsigned source)
 static void capture_window(void)
 {
     gateway_monitor=PLAT_MONITOR_USB;gateway_vectorscope_auto_gain=1;view();
+    assert(usb_spectrum_capacity==4096 && plat_usb_spectrum_window_mem_bytes(2048)==16384);
+    assert(!plat_usb_spectrum_window_mem_bytes(0) && !plat_usb_spectrum_window_mem_bytes(2047));
+    assert(!plat_usb_spectrum_window_mem_bytes(PLAT_SPECTRUM_FRAMES+1));
     /* A short view warms up after 2048 pairs and never waits for an FFT window. */
     for(unsigned i=0;i<GATEWAY_VECTOR_FRAMES;i++){
         pcm[2*i]=(int32_t)i*256;pcm[2*i+1]=-(int32_t)i*256;
@@ -54,6 +57,10 @@ static void capture_window(void)
     assert(guarded.before[0]==0x5a5a && guarded.before[1]==0x5a5a && guarded.after[0]==0x5a5a && guarded.after[1]==0x5a5a);
     assert(!plat_usb_input_spectrum_window(guarded.data,0,&position));
     assert(!plat_usb_input_spectrum_window(guarded.data,PLAT_SPECTRUM_FRAMES+1,&position));
+    /* Even with a full small ring, an FFT-sized read is refused before any
+     * destination write. A caller must attach the larger FFT allocation. */
+    feed(PLAT_MONITOR_USB);assert(usb_spectrum_filled==4096);
+    assert(!plat_usb_input_spectrum_window(guarded.data,PLAT_SPECTRUM_FRAMES,&position));
     now_ms+=100;assert(!plat_usb_input_spectrum_window(guarded.data,33,&position));
     puts("PASS: latest 2048 pairs, short-window warmup, old peaks excluded, bounded partial-chunk copies, ring/counter wrap and stale capture");
 }
@@ -178,7 +185,7 @@ static void settings(void)
     app_init();assert(gateway_vectorscope_auto_gain && gateway_vectorscope_color==GATEWAY_WAVE_ORANGE);
     s=gateway_settings();s.version=20;s.vectorscope_color=GATEWAY_WAVE_RED;
     plat_store_save(OBJ_SETTINGS,&s,32);app_init();assert(gateway_vectorscope_color==GATEWAY_WAVE_RED && gateway_vectorscope_auto_gain);
-    s=gateway_settings();s.vectorscope_color|=128;s.zoom=9;
+    s=gateway_settings();s.version=22;s.vectorscope_color|=128;s.zoom=9;
     plat_store_save(OBJ_SETTINGS,&s,32);app_init();assert(gateway_zoom==6);
     s.version=19;s.mode=GATEWAY_MODE_SPECTRUM;s.vectorscope_color=0;s.midi_position[EN_K1]=25;
     plat_store_save(OBJ_SETTINGS,&s,32);app_init();assert(gateway_mode==GATEWAY_MODE_SPECTRUM && gateway_vectorscope_color==GATEWAY_WAVE_GREEN && gateway_midi_resume[EN_K1]==25);
@@ -190,7 +197,7 @@ static void settings(void)
 static void memory(void)
 {
     app_ui_init();view();uint32_t used=sizeof work_host_storage-plat_work_available();
-    assert(used==((sizeof(gateway_vectorscope_buffers_t)+7u)&~7u)+plat_usb_spectrum_mem_bytes());
+    assert(used==((sizeof(gateway_vectorscope_buffers_t)+7u)&~7u)+plat_usb_spectrum_window_mem_bytes(GATEWAY_VECTOR_FRAMES));
     assert(used<=((sizeof(gateway_wave_buffers_t)+7u)&~7u)+plat_usb_wave_mem_bytes());
     tap(B_EDIT);assert(!gateway_vectorscope_buffers && !usb_spectrum_ring && !usb_spectrum_enabled && plat_work_available()==sizeof work_host_storage);
     uint8_t *reuse=plat_work_alloc(used);assert(reuse);memset(reuse,0xa5,used);feed(PLAT_MONITOR_USB);
@@ -204,7 +211,7 @@ static void memory(void)
     void *decoder=plat_work_alloc_top(23840);assert(decoder);
     btr_host_connected=1;btr_host_codec=PLAT_BT_CODEC_LDAC;btr_host_ldac_ready=1;tap(B_HOME);app_loop();
     assert(gateway_has_vectorscope());
-    tap(B_EDIT);void *extra=plat_work_alloc_top(20000);assert(extra);tap(B_HOME);assert(!gateway_vectorscope_buffers && gateway_wide_meters());
+    tap(B_EDIT);void *extra=plat_work_alloc_top(40000);assert(extra);tap(B_HOME);assert(!gateway_vectorscope_buffers && gateway_wide_meters());
     plat_work_free(extra);now_ms+=500;app_loop();assert(gateway_has_vectorscope());
     tap(B_EDIT);plat_work_free(decoder);plat_work_free(record);plat_work_free(pressure);btr_host_connected=0;btr_host_ldac_ready=0;app_loop();
     assert(plat_work_available()==sizeof work_host_storage && !cv_cuts && !cpu_work_depth);

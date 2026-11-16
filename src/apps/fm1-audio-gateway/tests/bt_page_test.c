@@ -142,7 +142,7 @@ static void outgoing(void)
     assert(f->clk_off_lo==offset && f->bitoff==bit && brl.last_good==fm1_ms); /* Central keeps its own clock */
     brl.phase=BR_PAGE_SCAN;brl.central=0;br_retry_at=fm1_ms;br_reconnect_poll();
     assert(!memcmp(brl.remote,bta.mem[2].addr,6)); /* skip unbonded, round-robin bonds */
-    br_page_train=BTI_CLK-100;bti.train=0;bp_alarm(1948);assert(bti.train==1 && f->format==132);
+    br_page_train=BTI_CLK-100;brl.train=0;bp_alarm(1948);assert(brl.train==1 && f->format==132);
     fm1_ms=br_page_at+5119;previous=stops;br_reconnect_poll();assert(brl.central && stops==previous);
     fm1_ms++;br_reconnect_poll();assert(!brl.central && stops==previous+1 && f->format==5);
     previous=starts;fm1_ms=br_retry_at-1;br_reconnect_poll();assert(starts==previous);

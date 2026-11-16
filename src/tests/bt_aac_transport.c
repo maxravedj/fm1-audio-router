@@ -47,7 +47,7 @@ static uint8_t ba_live;
 static uint32_t selected_rate;
 static int secure=1;
 #define BTR_SECURE() secure
-#define BTR_SEND(p,n) ((void)(p),(void)(n))
+#define BTR_SEND(p,n) ((void)(p),(void)(n),1)
 #ifdef TEST_BOTH_CODECS
 #define BTR_FLUSH(rate) do {selected_rate=(rate);btr_media_reset();} while(0)
 #else

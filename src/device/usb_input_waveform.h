@@ -1,11 +1,11 @@
 /* SPDX-License-Identifier: MPL-2.0
  * Read-only stereo history. One USB ISR producer; main-loop readers use short
  * per-column locks, never a framebuffer-sized interrupt-disabled copy.
- * Seven 4:1 resolutions retain both extrema, including one-sample transients.
+ * Six 4:1 resolutions retain both extrema, including one-sample transients.
  * No allocation, division, drawing or floating point in the producer. */
 #ifndef FM1B_USB_INPUT_WAVEFORM_H
 #define FM1B_USB_INPUT_WAVEFORM_H
-#define USB_WAVE_LEVELS 7u
+#define USB_WAVE_LEVELS 6u
 #define USB_WAVE_RING 1024u
 typedef union { int16_t v[4]; uint32_t words[2]; } usb_wave_bin_t; /* L min/max, R min/max */
 #ifdef APP_DYNAMIC_DISPLAY
@@ -89,7 +89,7 @@ static void usb_input_wave_push(int32_t l, int32_t r)
         dst=&usb_wave_history[level][((count>>shift)-1u)&(USB_WAVE_RING-1u)];
         dst->words[0]=bin.words[0];dst->words[1]=bin.words[1];
     }
-    if (usb_wave_filled < USB_WAVE_RING * 4096u) usb_wave_filled++;
+    if (usb_wave_filled < USB_WAVE_RING * (1u << (2u * (USB_WAVE_LEVELS-1u)))) usb_wave_filled++;
     usb_wave_count = count;
 }
 

@@ -4,6 +4,10 @@
 #include "bt_aac_transport.c"
 #undef main
 static uint32_t fm1_ms,btr_rate;
+/* This formatter fixture models one selected link without radio/SSP code. */
+#define BR_LINKS 1u
+#define br_current 0u
+enum { BTP_FAILED=14 };
 static struct {
     uint32_t phase,started,last_good,good,bad,syncs,carries,bit,offset,rxbit,status;
     uint8_t encrypted,reconnect_hold;

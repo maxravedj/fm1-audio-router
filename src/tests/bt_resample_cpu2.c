@@ -50,11 +50,12 @@ int plat_cpu2_run(void (*fn)(uint32_t),uint32_t arg)
 int plat_cpu2_wait(void){assert(!irq && !core);waits++;finish();return 0;}
 static int32_t monitored[512],recorded[512];
 static unsigned monitor_at,record_mode,meter_on;
+static void (*monitor_hook)(void);
 static uint32_t meter_peak[2];
 static float fader=1;
 void plat_audio_monitor_reset(int source){(void)source;assert(!core);}
 void plat_audio_monitor_bt_begin(void){assert(!core);monitor_at=0;}
-void plat_audio_monitor_bt_sample(int32_t l,int32_t r){assert(!core && monitor_at<256);monitored[monitor_at*2]=l;monitored[monitor_at*2+1]=r;monitor_at++;}
+void plat_audio_monitor_bt_sample(int32_t l,int32_t r){assert(!core && monitor_at<256);monitored[monitor_at*2]=l;monitored[monitor_at*2+1]=r;monitor_at++;if(monitor_hook)monitor_hook();}
 static unsigned app_usb_out_bt_mode(void){assert(!core);return record_mode;}
 static void app_usb_out_bt_sample(uint32_t i,uint32_t ch,int32_t v){assert(!core && i<256);recorded[2*i+ch]=v;}
 static int app_input_fader_meter_enabled(void){assert(!core);return meter_on;}
@@ -74,12 +75,67 @@ static void checked_put(const int16_t *p,uint32_t n)
 #undef btr_pcm_put
 static uint8_t ba_live;
 #define BTR_SECURE() 1
-#define BTR_SEND(p,n) ((void)(p),(void)(n))
+#define BTR_SEND(p,n) ((void)(p),(void)(n),1)
 #define BTR_FLUSH(rate) do {btr_media_reset();btr_audio_reset(rate);} while(0)
 #include "../bt/br/bt_receiver_l2cap.c"
 static uint32_t rng=237;
 static uint32_t random32(void){return rng=rng*1664525u+1013904223u;}
 static void reset(unsigned rate){btr_media_reset();btr_audio_reset(rate);}
+static void recovery(void)
+{
+    static uint8_t low[BTR_RING][2];
+    const int32_t extremes[]={INT32_MIN,INT32_MAX,-8388608,8388607,-32768,32767,-65,-1,0,1,65};
+    for(unsigned k=0;k<sizeof extremes/sizeof extremes[0];k++)for(unsigned g=0;g<=64;g++)
+        assert(btr_recovery_gain(extremes[k],g)==(int64_t)extremes[k]*g/64);
+    for(unsigned wide=0;wide<2;wide++)for(unsigned mode=1;mode<=2;mode++){
+        reset(44100);btr_worker_enabled=0;btr_pcm_low=wide?low:0;
+        fader=.5f;record_mode=mode;meter_on=1;
+        btr_out_r=UINT32_MAX-1u;btr_out_w=btr_out_r+3;btr_primed=1;
+        int32_t level=wide?6291449:24573;
+        for(unsigned i=0;i<3;i++){
+            btr_output[(btr_out_r+i)&(BTR_OUT_RING-1)][0]=level;
+            btr_output[(btr_out_r+i)&(BTR_OUT_RING-1)][1]=-level;
+        }
+        for(unsigned pass=0;pass<3;pass++){
+            int32_t audio[512]={0};unsigned before=waits;monitor_at=0;
+            irq=1;btr_pcm_mix(audio,pass==0?8:64,4096);irq=0;assert(waits==before);
+            unsigned frames=pass==0?8:64;
+            for(unsigned i=0;i<frames;i++)for(unsigned ch=0;ch<2;ch++){
+                unsigned offset=pass==0?i:8u+(pass-1u)*64u+i;
+                int32_t v=level*(ch?-1:1);
+                if(offset>=3)v=(int32_t)((int64_t)v*(offset<67?66-offset:0)/64);
+                int32_t raw=wide?v:v*256,post=(int32_t)((float)raw*.5f);
+                assert(audio[2*i+ch]==post);
+                if(pass<2){assert(monitored[2*i+ch]==raw);assert(recorded[2*i+ch]==(mode==1?raw:post));}
+            }
+            assert(btr_output_underruns==1 && !btr_primed);
+            if(pass==2)assert(!monitor_at);
+        }
+        assert(btr_gap && !btr_fade_down && !btr_fade_up && btr_out_r==btr_out_w);
+        /* Underfilled output remains queued: do not repeatedly play a small
+         * burst or charge another underrun while waiting for the watermark. */
+        btr_out_w=btr_out_r+1535;int32_t silence[512]={0};
+        irq=1;btr_pcm_mix(silence,64,4096);irq=0;
+        for(unsigned i=0;i<128;i++)assert(!silence[i]);
+        uint32_t at=btr_out_r;btr_out_w++;
+        for(unsigned i=0;i<1536;i++)for(unsigned ch=0;ch<2;ch++)
+            btr_output[(at+i)&(BTR_OUT_RING-1)][ch]=level*(ch?-1:1);
+        int32_t audio[512]={0};irq=1;btr_pcm_mix(audio,128,4096);irq=0;
+        for(unsigned i=0;i<128;i++)for(unsigned ch=0;ch<2;ch++){
+            int32_t v=level*(ch?-1:1);if(i<64)v=(int32_t)((int64_t)v*(i+1)/64);
+            int32_t raw=wide?v:v*256,post=(int32_t)((float)raw*.5f);
+            assert(monitored[2*i+ch]==raw && audio[2*i+ch]==post);
+            assert(recorded[2*i+ch]==(mode==1?raw:post));
+        }
+        assert(btr_primed && !btr_gap && !btr_fade_up && btr_output_underruns==1 && btr_out_r==at+128);
+        btr_pcm_low=0;reset(44100);btr_worker_enabled=0;
+        assert(!btr_gap && !btr_last_output[0] && !btr_last_output[1]);
+        memset(audio,0,sizeof audio);irq=1;btr_pcm_mix(audio,64,4096);irq=0;
+        for(unsigned i=0;i<128;i++)assert(!audio[i]);
+    }
+    fader=1;record_mode=meter_on=0;reset(44100);
+    puts("PASS: 16/24-bit stereo underrun/reprime ramps, partial callback/ring wrap, exact quiet return, reset, pre/post-trim taps and no IRQ allocation/join");
+}
 static void oracle(void)
 {
     static int32_t want[BTR_OUT_RING][2];
@@ -138,6 +194,120 @@ static void consume(void)
 {
     int32_t out[512]={0};unsigned before=waits;irq=1;btr_pcm_mix(out,256,4096);irq=0;assert(waits==before);
     for(unsigned i=0;i<512;i++)heard|=out[i]!=0;
+}
+static uint32_t publication_start;
+static void publish_during_mix(void)
+{
+    if(monitor_at!=64)return;
+    /* Model CPU1 publishing an already-prepared block while CPU0 consumes
+     * its previous snapshot. There is no allocation or worker join here. */
+    for(unsigned i=128;i<384;i++){
+        btr_output[(publication_start+i)&(BTR_OUT_RING-1)][0]=15000;
+        btr_output[(publication_start+i)&(BTR_OUT_RING-1)][1]=-16000;
+    }
+    plat_cpu2_sync();btr_out_w=publication_start+384;
+}
+static void live_publication(void)
+{
+    reset(44100);btr_worker_enabled=0;btr_primed=1;
+    publication_start=UINT32_MAX-100u;btr_out_r=publication_start;btr_out_w=publication_start+128;
+    for(unsigned i=0;i<128;i++){
+        btr_output[(publication_start+i)&(BTR_OUT_RING-1)][0]=15000;
+        btr_output[(publication_start+i)&(BTR_OUT_RING-1)][1]=-16000;
+    }
+    monitor_hook=publish_during_mix;consume();monitor_hook=0;
+    assert(!btr_output_underruns && btr_primed && btr_out_r==publication_start+256);
+    for(unsigned i=0;i<256;i++)assert(monitored[i*2]==15000*256 && monitored[i*2+1]==-16000*256);
+    reset(44100);
+    puts("PASS: CPU0 consumes a newly published CPU1 block during the callback without a false underrun, including cursor wrap");
+}
+/* Use the production radio policy with register/clock stubs. The decoder,
+ * PCM cursors and backpressure are real; no hopping/ARQ/RF is emulated. */
+#define BR_LINKS 2u
+#define BTI_CLK 0x07ffffffu
+#define FM1_BR_OFF_FRAME 368u
+#define BTI_OFF_EIR_TX 4224u
+static struct {uint8_t on,closing,central,phase,encrypted,pairing,parity;uint32_t started;} br_links[BR_LINKS];
+static uint8_t br_current,br_radio,br_switching,br_audio_link;
+static uint32_t br_slice_at,radio_clock,radio_alarm,fm1_ms;
+static unsigned br_page_step;
+static uint16_t radio_table[16];
+#define bti_tab ((uint8_t *)radio_table)
+#define brl (br_links[br_current])
+static struct {uint32_t w,r;} radio_tx[BR_LINKS];
+#define blt (radio_tx[br_current])
+enum {BR_INQUIRY,BR_PAGE_SCAN,BR_PAGE_RESPONSE,BR_FHS_ACK,BR_CONNECTING,BR_LINKED};
+static uint32_t bti_clkn(void){return radio_clock;}
+static void bti_alarm_arm(uint32_t slots){radio_alarm=(radio_clock+slots)&BTI_CLK;}
+static void fm1_br_xchg(uint8_t *tab,unsigned i,unsigned v){assert(i<16);((uint16_t *)tab)[i]=(uint16_t)v;}
+static void fm1_br_eir_tx(unsigned n,unsigned t,unsigned p){(void)n;(void)t;(void)p;}
+static void br_exchange(unsigned parity){assert(parity<=2);}
+#include "../bt/br/bt_receiver_radio.c"
+#undef blt
+#undef brl
+static void aac_radio_jitter(const char *name)
+{
+    struct packet {uint32_t bytes;uint8_t data[1200];};
+    struct packet *packets=calloc(512,sizeof *packets);assert(packets);
+    FILE *f=fopen(name,"rb");assert(f);uint8_t conf[6];assert(fread(conf,1,6,f)==6);
+    unsigned count=0;
+    for(;;){
+        uint8_t z[4];assert(fread(z,1,4,f)==4);uint32_t n=z[0]|z[1]<<8|z[2]<<16|z[3]<<24;
+        if(!n)break;assert(count<512 && n<=1200);packets[count].bytes=n;
+        assert(fread(packets[count].data,1,n,f)==n);count++;
+    }
+    fclose(f);assert(count);
+    unsigned rate=conf[2]&128?48000:44100,total_starves=0;
+    for(unsigned phase=0;phase<180;phase+=16){
+        reset(rate);memset((void *)&btr_stats,0,sizeof btr_stats);
+        memset(br_links,0,sizeof br_links);memset(radio_tx,0,sizeof radio_tx);
+        for(unsigned i=0;i<BR_LINKS;i++)br_links[i].on=br_links[i].encrypted=1,br_links[i].phase=BR_LINKED;
+        br_audio_link=br_radio=1;br_current=0;br_switching=0;br_slice_at=0;ba_live=1;
+        radio_clock=radio_alarm=phase;
+        __atomic_store_n(&hold_job,1,__ATOMIC_RELEASE);
+        unsigned at=0,frame=0,audio=0,deadline=0,started=0,first_starve=0,control=0;
+        for(unsigned us=0;us<3000000;us+=125){
+            if(deadline && us>=deadline){
+                __atomic_store_n(&hold_job,0,__ATOMIC_RELEASE);finish();
+                __atomic_store_n(&hold_job,1,__ATOMIC_RELEASE);deadline=0;
+            }
+            /* A control burst from the old source around one second after
+             * switching. Real br_schedule decides when PCM can cover it. */
+            if(!control && us>=1000000u){radio_tx[0].w=1;control=1;}
+            radio_clock=(phase+us/625u)&BTI_CLK;fm1_ms=us/1000u;
+            if(((radio_clock-radio_alarm)&BTI_CLK)<(BTI_CLK>>1)){
+                br_current=br_radio;br_schedule(radio_clock);br_current=0;
+                if(control==1 && br_radio==0 && br_switching){radio_tx[0].r=1;control=2;}
+            }
+            int active=br_radio==br_audio_link && !br_switching;
+            while(active && (uint64_t)frame*1024000000ull<=(uint64_t)us*rate){
+                uint32_t timestamp=btr_be32(packets[at].data+4);
+                do {
+                    uint8_t p[1200];unsigned n=packets[at].bytes;memcpy(p,packets[at].data,n);
+                    p[2]=(uint8_t)(seq>>8);p[3]=(uint8_t)seq++;
+                    uint32_t ts=frame*1024u;for(unsigned k=0;k<4;k++)p[4+k]=(uint8_t)(ts>>(24u-8u*k));
+                    btr_aac_media(p,n,conf);at++;
+                }while(at<count && btr_be32(packets[at].data+4)==timestamp);
+                if(at==count)at=0;frame++;
+            }
+            if(us%500u==0u){irq=1;btr_decode_poll_irq();irq=0;}
+            audio+=44100u;if(audio>=2048000u){
+                audio-=2048000u;consume();
+                if(btr_primed && !started)started=us;
+                if(btr_output_underruns && !first_starve)first_starve=us;
+            }
+            /* Delay real AAC jobs by 13 ms and resample jobs by 2.3 ms to
+             * exercise asynchronous publications. Synthetic service delays
+             * do not assert device execution times or RF throughput. */
+            if(!deadline && plat_cpu2_busy())deadline=us+(job_fn==btr_aac_job?13000u:2300u);
+        }
+        __atomic_store_n(&hold_job,0,__ATOMIC_RELEASE);finish();
+        assert(started && started<=120000u && control==2 && !btr_stats.overruns && !btr_stats.decoder_errors && !btr_stats.gaps && !btr_stats.malformed);
+        if(btr_output_underruns)fprintf(stderr,"AAC jitter phase %u: %u underruns, first at %u ms\n",phase,btr_output_underruns,first_starve/1000u);
+        total_starves+=btr_output_underruns;
+    }
+    reset(44100);free(packets);assert(!total_starves);
+    puts("PASS: real AAC/FIR workers and production radio policy sustain 12 clock phases and old-client control visits for three seconds from stream startup, without underruns or packet loss");
 }
 static void sbc_stream(const char *name,const char *out)
 {
@@ -304,7 +474,9 @@ static void drift(void)
 }
 int main(int argc,char **argv)
 {
-    assert(argc==5);if(!getenv("FM1_SKIP_ORACLE")){oracle();drift();}sbc_stream(argv[1],argv[3]);aac_stream(argv[2],argv[4],0);aac_stream(argv[2],argv[4],1);multi_au(argv[2]);pressure(argv[1]);foreground_stall(argv[1],argv[2]);
+    assert(argc==5);if(!getenv("FM1_SKIP_ORACLE")){aac_radio_jitter(argv[2]);live_publication();recovery();oracle();drift();}
+    if(getenv("FM1_RADIO_JITTER"))aac_radio_jitter(argv[2]);
+    sbc_stream(argv[1],argv[3]);aac_stream(argv[2],argv[4],0);aac_stream(argv[2],argv[4],1);multi_au(argv[2]);pressure(argv[1]);foreground_stall(argv[1],argv[2]);
     assert(plat_work_available()==sizeof work_host_storage && !locks && !plat_cpu2_busy());
     printf("PASS: %u real threaded bounded jobs, worker/IRQ separation, all scratch released\n",jobs);
 }

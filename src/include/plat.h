@@ -1078,6 +1078,10 @@ uint32_t plat_usb_wave_mem_bytes(void);
 void plat_usb_wave_mem(void *p);
 uint32_t plat_usb_spectrum_mem_bytes(void);
 void plat_usb_spectrum_mem(void *p);
+/* Power-of-two foreground window; reserves two windows for IRQ-safe copies.
+ * Detach/disable the producer before freeing or changing the capture block. */
+uint32_t plat_usb_spectrum_window_mem_bytes(uint32_t frames);
+void plat_usb_spectrum_window_mem(void *p, uint32_t frames);
 
 /* Gateway telemetry selection: no change to audible routing. */
 enum { PLAT_MONITOR_USB, PLAT_MONITOR_BT, PLAT_MONITOR_MASTER, PLAT_MONITOR_OUT };

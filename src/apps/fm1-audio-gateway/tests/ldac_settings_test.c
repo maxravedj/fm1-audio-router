@@ -69,9 +69,10 @@ int main(void)
         tap(B_HOME);assert(gateway_has_wave());
     }
     tap(B_EDIT);tap(B_HOME);assert(gateway_has_wave());
-    /* If even waveform won't fit, keep telemetry visible and retry on release. */
+    /* Exhaust waveform and the smaller vectorscope; keep telemetry visible
+     * and retry on release. */
     gateway_mode=GATEWAY_MODE_METERS;gateway_view_changed();
-    void *pressure=plat_work_alloc_top(20000);assert(pressure);
+    void *pressure=plat_work_alloc_top(40000);assert(pressure);
     gateway_mode=GATEWAY_MODE_FULL;gateway_view_changed();assert(!gateway_display_block && gateway_wide_meters());
     tap(B_HOME);assert(gateway_mode==GATEWAY_MODE_METERS && !gateway_display_block);
     plat_work_free(pressure);tap(B_HOME);assert(gateway_has_wave());

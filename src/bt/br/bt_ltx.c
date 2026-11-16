@@ -44,23 +44,34 @@
 #define BLT_CLK 0x07FFFFFFu                        /* 27 bits of slots (FM1_BR_CLK_MASK) */
 #define BLT_AFH_OP ((uint8_t)(BTL_SET_AFH << 1))   /* LMP_set_AFH's first byte (the master's, TID 0) */
 
+#ifndef BLT_CONTEXTS
+#define BLT_CONTEXTS 1u
+#define BLT_CONTEXT 0u
+#endif
 static struct {
     uint8_t q[BLT_Q][BTL_MAX], ql[BLT_Q], qllid[BLT_Q];
     volatile uint32_t w, pub, r;                   /* queued (main loop), may go (main loop), handed over (IRQ 40) */
+#ifndef APP_BT_RECEIVER
+    /* The receiver never originates LMP_set_AFH. Do not reserve a Source's
+     * pending AFH table/map in each receiver session. */
     uint8_t afh_tab[80];                           /* the next hop set: frq_table[1]'s content, the map words, on / off */
     uint32_t afh_words[3];
     uint8_t afh_on;
     volatile uint8_t afh_state;                    /* BLT_AFH_*: none, queued (no instant yet), due at afh_at */
     volatile uint32_t afh_at;                      /* the instant, CLKN slots (even: a master-to-slave slot) */
     uint32_t afh_switches;                         /* switches made this link (the diagnostics' line) */
-} blt;
+#endif
+} blt_contexts[BLT_CONTEXTS];
+#define blt (blt_contexts[BLT_CONTEXT])
 enum { BLT_AFH_NONE, BLT_AFH_QUEUED, BLT_AFH_DUE };
 
 static void blt_reset(void)                        /* a new link: nothing queued, no switch due (IRQ 40 held or off) */
 {
     blt.w = blt.pub = blt.r = 0;
+#ifndef APP_BT_RECEIVER
     blt.afh_state = BLT_AFH_NONE;
     blt.afh_switches = 0;
+#endif
 }
 static int blt_put(const uint8_t *pdu, uint32_t len, uint32_t llid)   /* the main loop -> 1 queued */
 {
@@ -71,8 +82,10 @@ static int blt_put(const uint8_t *pdu, uint32_t len, uint32_t llid)   /* the mai
         blt.q[k][i] = pdu[i];
     blt.ql[k] = (uint8_t)len;
     blt.qllid[k] = (uint8_t)llid;
+#ifndef APP_BT_RECEIVER
     if (llid == 3u && pdu[0] == BLT_AFH_OP && len >= 5u)
         blt.afh_state = BLT_AFH_QUEUED;            /* (its instant set at the hand-over) */
+#endif
     __asm__ volatile("" ::: "memory");             /* (the slot before the index: RING_PUBLISH) */
     blt.w++;
     return 1;
@@ -88,6 +101,7 @@ static void blt_load_sig(struct fm1_br_frame *f, uint8_t *tab, uint32_t i)
 {
     uint32_t k = blt.r % BLT_Q, n = blt.ql[k], j;
     uint8_t *dst = tab + (i ? BLT_OFF_TX1 : BLT_OFF_TX0);
+#ifndef APP_BT_RECEIVER
     if (blt.qllid[k] == 3u && blt.q[k][0] == BLT_AFH_OP && n >= 5u) {
         uint32_t at = (BLT_CLKN() + BLT_AFH_AHEAD) & BLT_CLK & ~1u;
         for (j = 0; j < 4u; j++)
@@ -95,6 +109,7 @@ static void blt_load_sig(struct fm1_br_frame *f, uint8_t *tab, uint32_t i)
         blt.afh_at = at;
         blt.afh_state = BLT_AFH_DUE;
     }
+#endif
     for (j = 0; j < n; j++)
         dst[j] = blt.q[k][j];
     f->txptr[i] = (uint16_t)(i ? BLT_OFF_TX1 : BLT_OFF_TX0);
@@ -129,6 +144,7 @@ static void blt_fill(struct fm1_br_frame *f, uint8_t *tab)
 }
 
 /* the next hop set (the main loop, bt_page.c bp_afh_send): kept here until its instant; its PDU queued by the caller */
+#ifndef APP_BT_RECEIVER
 static void blt_afh_stage(const uint8_t table[80], const uint32_t words[3], uint32_t on)
 {
     uint32_t i;
@@ -160,3 +176,4 @@ static uint32_t blt_afh_alarm(uint32_t now, struct fm1_br_frame *f, uint8_t *tab
     }
     return left < 18u ? left : 18u;
 }
+#endif

@@ -8,7 +8,7 @@
 | GLO | Open the mixer. |
 | EDIT | Open Settings. SELECT chooses a row; ALGORITHM edits its draft value. |
 | SAVE in Settings | Fully lit with unsaved changes; saves and applies the draft. Red UNSAVED becomes green SAVED until leaving or editing. |
-| FX | Open the last FX page; subsequent presses alternate EQ and limiter. |
+| FX | Open the last FX page; subsequent presses alternate EQ and dynamics. |
 | Hold FX for 1 s | Toggle the complete master FX chain. |
 | SEL on an FX page | Toggle that individual effect; its LED is bright when enabled. |
 | PLAY | Toggle MASTER mute from any page. Green means unmuted, red means muted. |
@@ -65,35 +65,63 @@ Meters continue showing post-fader signal before their mute/solo gates, in
 gray when suppressed. Gray styling is confined to the mixer. PLAY and the
 MASTER mute box control the same state.
 
-## EQ and limiter
+## EQ and dynamics
 
 The EQ page has five band cards and a combined response graph. SELECT cycles
 five bands and post-EQ gain. ALGORITHM selects bell, low/high pass or low/high
 shelf. For a band: K1 frequency, K2 gain (or 12/24/36/48-dB/oct pass slope),
 K3 Q/resonance. With post gain selected, K1 adjusts it. Knobs do not toggle
 bypass. Individual bypass grays that effect's graph, independently of global FX.
+The bypassed EQ keeps its configured combined response outline without fill.
 
-The limiter page has K1 input gain, K2 release, K3 ceiling, post-limiter meters
-and a red gain-reduction line. It is a linked sample-peak limiter with 128-frame
-lookahead (about 2.9 ms), anticipatory curved attack and exponential release.
-Slow release-knob turns adjust by 1 ms; fast turns accelerate up to 30 ms per detent.
-Settled global/limiter bypass removes that delay. Changing delay alignment
+The second FX page is titled **FX: DYNAMICS: Peak Limiter** or
+**FX: DYNAMICS: LM-Maximizer**. Select the mode in Settings with **Dynamics mode**,
+then SAVE to apply it. Both modes have K1 input gain (−24..+30 dB), post-dynamics meters and
+a red gain-reduction line.
+
+- **Peak Limiter** retains 128-frame lookahead (about 2.9 ms), anticipatory
+  curved attack and exponential release. K2 sets release; slow turns adjust
+  by 1 ms and fast turns accelerate up to 30 ms per detent. K3 sets ceiling.
+- **LM-Maximizer** is an original LoudMax-inspired maximizer with 55-frame
+  lookahead (about 1.25 ms) and automatic, input-history-dependent release.
+  K2 sets ceiling. Release displays AUTO in the third row; K3 has no effect.
+  Input gain and ceiling have the same ranges as Peak Limiter. It approximates
+  the researched behavior rather than
+  reproducing LoudMax exactly; see [Dynamics](DYNAMICS.md).
+
+Both modes link stereo sample peaks. Settled global/dynamics bypass removes
+the delay. Changing mode or delay alignment
 uses a 5-ms fade down, silent switch and 5-ms fade up; the level dip can be heard.
-It is not a true-peak/inter-sample limiter.
+Neither mode is a true-peak/inter-sample limiter.
 
-PRESET cycles eight EQ presets or eight limiter presets and applies them
+PRESET cycles eight presets for the current processor and applies them
 immediately. Unsaved edits stay in each working slot until reboot; yellow
 text and fully lit SAVE indicate an unsaved slot. SAVE asks to save; hold SAVE for
 1 second to initialize. OCT- cancels and OCT+ confirms (YES for initialize).
 Selected slot and bypass metadata are retained independently. Preset data is
 written only by confirmation, and presets do not contain bypass state.
+Peak Limiter and LM-Maximizer have separate eight-slot banks and remember their
+own selected slot and unsaved edits. Changing mode loads that mode's working
+preset. Dynamics has one shared bypass state: changing mode, recalling or
+initializing a preset leaves it unchanged. The mode is a separate saved Settings
+preference. Existing shared dynamics presets migrate into both banks without
+losing saved parameters.
 
 ## Settings and Bluetooth
+
+The receiver supports two connected source devices and plays one at a time.
+Starting a stream on the other device selects it and sends Pause to the previous
+source. Hold **OCT+** for one second to pair a second device without dropping the
+first; press it again to stop pairing. Pairing is unavailable when both slots
+are occupied. A manual source disconnect is held until that source reconnects
+itself or pairing is explicitly requested; range loss still permits automatic
+reconnection. This branch's two-link radio scheduling requires physical testing;
+see [Bluetooth](BLUETOOTH.md).
 
 Settings include Bluetooth OFF/ON, a Bluetooth codecs checklist, waveform
 auto scale followed by vectorscope auto scale, separate waveform/spectrum/vectorscope
 colors, battery percentage display,
-CPU display, USB OUT routing, mute/solo fade time and MIDI controller options. Fade choices are OFF,
+CPU display, USB OUT routing, mute/solo fade time, dynamics mode and MIDI controller options. Fade choices are OFF,
 10/50/100/500 ms and 1 s. Colors include red, green, blue, yellow, light gray,
 white and orange. Battery percentage is an uncalibrated estimate; no voltage
 mode is provided.
@@ -101,7 +129,8 @@ mode is provided.
 Fresh settings default to Bluetooth ON with SBC and AAC selected,
 waveform auto scale OFF, vectorscope auto scale ON, green waveforms/vectorscope, yellow spectrum, battery and
 CPU displays ON, USB OUT OFF and a 50-ms mute/solo fade. The global FX chain
-starts bypassed, with EQ and limiter individually enabled. Existing saved
+starts bypassed, with EQ and dynamics individually enabled and Peak Limiter
+selected. Existing saved
 preferences take priority over these defaults.
 
 ## MIDI controller

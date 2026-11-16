@@ -1,2 +1,3 @@
-- Vectorscope visualizer
-- Auto scale now applies to all i/o
+- Bluetooth multipoint
+- New FX: LM-Maximizer - maximizer inspired by LoudMax VST
+- UI/UX improvements

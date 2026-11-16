@@ -121,7 +121,7 @@ static void edits(void)
 {
     fx_params_t p;fx_bank_t b;fx_engine_t e;fx_defaults(&p);assert(fx_build(&p,&b));fx_init(&e,&b);
     for(unsigned t=0;t<3000;t++){
-        p.chain=t%7!=0;p.lim=t%11!=0;p.eq=t%13!=0;p.ceiling=-(int)(rnd()%241);p.input=rnd()%481-240;p.release=10+rnd()%991;
+        p.chain=t%7!=0;p.lim=t%11!=0;p.eq=t%13!=0;p.ceiling=-(int)(rnd()%241);p.input=(int)(rnd()%541)-240;p.release=10+rnd()%991;
         for(unsigned j=0;j<5;j++){p.slope[j]=rnd()%4;p.band[j]=(fx_band_t){20+rnd()%19831,(int)(rnd()%481)-240,10+rnd()%1791,rnd()%5,rnd()%2};}
         assert(fx_build(&p,&b));e.pending=b;e.generation++;
         int32_t pcm[512];for(unsigned j=0;j<512;j++)pcm[j]=(int32_t)(rnd()%33554432)-16777216;
@@ -344,7 +344,7 @@ static void eq_history_switch(void)
 }
 static void strict_ceilings(void)
 {
-    fx_params_t p;fx_bank_t b;fx_engine_t e;fx_defaults(&p);p.chain=1;p.eq=0;
+    fx_params_t p;fx_bank_t b;fx_engine_t e;fx_defaults(&p);p.chain=1;p.eq=0;p.input=300;
     for(int tenth=0;tenth<=240;tenth++){
         int cap=(int)floor(pow(10.,-tenth/200.)*8388608.);
         assert(fx_ceiling_q23[tenth]==(uint32_t)cap);
@@ -356,7 +356,7 @@ static void strict_ceilings(void)
             fx_process(&e,frame,1,4096);assert(abs(frame[0])<=cap && abs(frame[1])<=cap);
         }
     }
-    puts("PASS: all 241 ceiling settings vs independent double dB oracle: no positive/negative sample exceeds the configured integer ceiling, including headroom/isolated peaks");
+    puts("PASS: all 241 ceiling settings vs independent double dB oracle: no positive/negative sample exceeds the configured integer ceiling, including +30 dB drive/headroom/isolated peaks");
 }
 static void slopes(void)
 {

@@ -1,6 +1,10 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 /* Incoming baseband, shared verbatim by the device and register-model tests.
  * Hardware timing facts/provenance: docs/bt/BT-RECEIVER-PAGE.md. */
+#ifdef APP_BT_MULTIPOINT
+static int br_frame_safe(void);
+static void br_schedule(uint32_t now);
+#endif
 static void br_addr(struct fm1_br_frame *f,const uint8_t a[6])
 {
     uint8_t parity[5];bti_parity(a[0]|(uint32_t)a[1]<<8|(uint32_t)a[2]<<16,parity);
@@ -9,7 +13,11 @@ static void br_addr(struct fm1_br_frame *f,const uint8_t a[6])
 }
 static void br_exchange(uint32_t parity)
 {
-    for(uint32_t i=0;i<16;i++)fm1_br_xchg(bti_tab,i,FM1_BR_OFF_FRAME|(parity==2 || (i&1)==parity?0:1u<<12));
+    brl.parity=(uint8_t)parity;
+#ifdef APP_BT_MULTIPOINT
+    if(br_current!=br_radio || br_switching)return;
+#endif
+    for(uint32_t i=0;i<16;i++)fm1_br_xchg(bti_tab,i,(FM1_BR_OFF_FRAME+180u*br_current)|(parity==2 || (i&1)==parity?0:1u<<12));
 }
 /* RXBIT is a receive timestamp, not the transmit bit offset. */
 static uint16_t br_page_bit(uint16_t timestamp)
@@ -25,13 +33,17 @@ static void br_page_reply(struct fm1_br_frame *f)
 }
 static void br_scan_program(int inquiry,uint32_t now)
 {
-    struct fm1_br_frame *f=fm1_br_frame(bti_tab,0);
+    struct fm1_br_frame *f=BR_FRAME();
     bti_frame_defaults(f);f->clk_off_lo=f->clk_off_hi=0;f->wincntl=0x8022;
     if(inquiry) {
         struct bti_fhs fh={0};memcpy(fh.addr,bti.own,6);fh.eir=1;fh.sr=1;fh.cod=0x240414;
         bti_fhs_build(&fh,bti_tab+BTI_OFF_FHS_TX);bti_giac(f);
         static const uint8_t eir[]={16,9,'F','M','1',' ','B','T',' ','R','e','c','e','i','v','e','r',3,3,0x0b,0x11};
-        memcpy(bti_tab+BTI_OFF_EIR_TX,eir,sizeof eir);fm1_br_eir_tx(sizeof eir,10,BTI_OFF_EIR_TX);
+        memcpy(bti_tab+BTI_OFF_EIR_TX,eir,sizeof eir);
+#ifdef APP_BT_MULTIPOINT
+        if(br_current==br_radio)
+#endif
+        fm1_br_eir_tx(sizeof eir,10,BTI_OFF_EIR_TX);
         f->format=11;f->txptr[0]=f->txptr[1]=BTI_OFF_FHS_TX;
         f->txphdr[0]=f->txphdr[1]=(uint16_t)(sizeof eir<<3|3);f->linkcntl[0]=0x4102;f->linkcntl[1]=0x4112;
         brl.phase=BR_INQUIRY;
@@ -39,13 +51,27 @@ static void br_scan_program(int inquiry,uint32_t now)
         br_addr(f,bti.own);f->format=5;f->linkcntl[0]=0x4000;f->linkcntl[1]=0x4010;
         f->txphdr[0]=f->txphdr[1]=2;
         f->rxptr[0]=f->rxptr[1]=FM1_BR_OFF_FHS;f->lmprxptr[0]=f->lmprxptr[1]=FM1_BR_OFF_FHS;
+#ifdef APP_BT_MULTIPOINT
+        if(br_current==br_radio)
+#endif
         fm1_br_eir_tx(0,0,0);brl.phase=BR_PAGE_SCAN;
     }
-    f->rxbufcntl[0]=f->rxbufcntl[1]=0;bti.last_rx_clkn=0xffffffffu;
+    f->rxbufcntl[0]=f->rxbufcntl[1]=0;brl.last_rx_clkn=0xffffffffu;
     brl.scan_at=now;br_exchange(0);bti.mode=BTI_M_PAGE;
 }
 static void br_listen(void)
 {
+#ifdef APP_BT_MULTIPOINT
+    if(bti_busy()){
+        fm1_br_irqs_hold(1);
+        if(!br_frame_safe()){fm1_br_irqs_hold(0);return;}
+        brl.closing=0;
+        bti_frame_defaults(BR_FRAME());brl.generation++;
+        brl.central=0;blt_reset();br_scan_program(brl.pairing,bti_clkn());
+        fm1_br_irqs_hold(0);return;
+    }
+    br_radio=br_current;br_switching=0;br_slice_at=bti_clkn();brl.generation++;
+#endif
     brl.central=0;
     bti_defaults();bti.o_sweep=0;
     if(!bti_prepare(BTI_M_PAGE))return;
@@ -64,7 +90,7 @@ static void br_connection(struct fm1_br_frame *f)
     f->format=3;f->bufcntl=(uint16_t)((f->bufcntl&~0x0f20u)|3);
     f->txbufcntl[0]=f->txbufcntl[1]=1;
     for(uint32_t i=0;i<2;i++) {
-        f->rxptr[i]=f->lmprxptr[i]=(uint16_t)(1088+i*680);
+        f->rxptr[i]=f->lmprxptr[i]=(uint16_t)(BR_RX_OFF+i*680);
         f->rxbufcntl[i]=0;f->linkcntl[i]=0x4000;f->txphdr[i]=2;
     }
     brl.phase=BR_CONNECTING;brl.started=brl.last_good=fm1_ms;
@@ -98,10 +124,10 @@ static void br_rx_good(uint32_t stat,uint32_t clk,struct fm1_br_frame *f)
     brl.last_good=fm1_ms;brl.noise^=stat^clk^f->rxbit;
     if(brl.phase==BR_CONNECTING){brl.phase=BR_LINKED;bti_push(BTI_K_CONN,0,stat,clk,0,0);}
 }
-static void bp_rx(void)
+static void br_rx_current(void)
 {
     if(brl.closing)return;
-    struct fm1_br_frame *f=fm1_br_frame(bti_tab,0);
+    struct fm1_br_frame *f=BR_FRAME();
     uint32_t i,idx=(f->rxtog&1)^1,stat=f->rxstat[idx],type=stat&15;
     uint32_t clk=f->rx_clkn_lo|(uint32_t)f->rx_clkn_hi<<16;
     if(brl.central && brl.phase<BR_CONNECTING){br_central_page_rx(f,idx,stat,clk);return;}
@@ -117,17 +143,17 @@ static void bp_rx(void)
                 br_rx_good(stat,clk,f);
                 if(stat>>8==0x8f && bti_is_data(type)) {
                     uint32_t llid=f->rxphdr[i]&3,n=(f->rxphdr[i]>>3)&1023;
-                    if(n<=339 && llid)bti_push(llid==3?BTI_K_LMP:BTI_K_ACL,llid,stat,clk,bti_tab+1088+i*680,n);
+                    if(n<=339 && llid)bti_push(llid==3?BTI_K_LMP:BTI_K_ACL,llid,stat,clk,bti_tab+BR_RX_OFF+i*680,n);
                 }
             }
             f->rxbufcntl[i]&=(uint8_t)~1u;f->linkcntl[i]|=1u<<14;
         }
         /* A NULL/POLL has no payload DMA buffer but establishes/refreshes ACL. */
-        if(!any && clk!=bti.last_rx_clkn && (stat>>8==0x8f || stat>>8==0xaf))br_rx_good(stat,clk,f);
-        bti.last_rx_clkn=clk;
+        if(!any && clk!=brl.last_rx_clkn && (stat>>8==0x8f || stat>>8==0xaf))br_rx_good(stat,clk,f);
+        brl.last_rx_clkn=clk;
         blt_fill(f,bti_tab);return;
     }
-    if(clk==bti.last_rx_clkn)return;bti.last_rx_clkn=clk;
+    if(clk==brl.last_rx_clkn)return;brl.last_rx_clkn=clk;
     if(stat>>8!=0x8f)return;
     bti_agc_follow(f);
     if(brl.phase==BR_PAGE_SCAN && type==0) {
@@ -138,6 +164,10 @@ static void bp_rx(void)
     } else if(brl.phase==BR_PAGE_RESPONSE && type==2) {
         struct bti_fhs fh;bti_fhs_parse(bti_tab+FM1_BR_OFF_FHS,&fh);
         if(!fh.lt_addr)return;
+#ifdef APP_BT_MULTIPOINT
+        for(unsigned j=0;j<BR_LINKS;j++)if(j!=br_current && br_links[j].phase>=BR_CONNECTING &&
+           !memcmp(br_links[j].remote,fh.addr,6)){br_scan_program(0,bti_clkn());return;}
+#endif
         brl.fhs++;
         memcpy(brl.remote,fh.addr,6);
         brl.fhs_bit=f->rxbit&1023u;brl.lt=fh.lt_addr;
@@ -149,16 +179,46 @@ static void bp_rx(void)
     }
     f->rxbufcntl[idx]&=(uint8_t)~1;f->linkcntl[idx]|=1u<<14;
 }
-static int bp_alarm(uint32_t now)
+static int br_alarm_current(uint32_t now)
 {
-    if(brl.closing){blt_fill(fm1_br_frame(bti_tab,0),bti_tab);bti_alarm_arm(18);return 1;}
+    if(brl.closing){blt_fill(BR_FRAME(),bti_tab);bti_alarm_arm(18);return 1;}
     if(brl.central && brl.phase<BR_CONNECTING){br_central_alarm(now);return 1;}
-    if(brl.phase==BR_FHS_ACK) {br_connection(fm1_br_frame(bti_tab,0));}
+    if(brl.phase==BR_FHS_ACK) {br_connection(BR_FRAME());}
     else if(brl.phase<BR_CONNECTING) {
         if(brl.phase==BR_PAGE_RESPONSE) {
             if(((now-brl.scan_at)&BTI_CLK)>=16)br_scan_program(0,now);
         } else if(brl.pairing && ((now-brl.scan_at)&BTI_CLK)>=800)br_scan_program(brl.phase==BR_PAGE_SCAN,now);
         else if(!brl.pairing && brl.phase==BR_INQUIRY)br_scan_program(0,now);
-    } else blt_fill(fm1_br_frame(bti_tab,0),bti_tab);
+    } else blt_fill(BR_FRAME(),bti_tab);
     bti_alarm_arm(18);return 1;
+}
+
+static void bp_rx(void)
+{
+#ifdef APP_BT_MULTIPOINT
+    uint8_t saved=br_current;br_current=br_radio;
+#endif
+    br_rx_current();
+#ifdef APP_BT_MULTIPOINT
+    /* A just-received page may race the start of a quiet interval. Resume
+     * this same frame immediately to finish its time-critical handshake. */
+    if(br_switching && (brl.phase==BR_PAGE_RESPONSE || brl.phase==BR_FHS_ACK ||
+       (brl.central && brl.phase<BR_CONNECTING && br_page_step))){
+        br_switching=0;br_slice_at=bti_clkn();br_exchange(brl.parity);
+    }
+    br_current=saved;
+#endif
+}
+static int bp_alarm(uint32_t now)
+{
+#ifdef APP_BT_MULTIPOINT
+    uint8_t saved=br_current;br_current=br_radio;
+#endif
+#ifdef APP_BT_MULTIPOINT
+    int result=br_switching?1:br_alarm_current(now);
+    br_schedule(now);br_current=saved;
+#else
+    int result=br_alarm_current(now);
+#endif
+    return result;
 }

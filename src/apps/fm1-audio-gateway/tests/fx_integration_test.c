@@ -49,14 +49,14 @@ static void controls(void)
     assert(gateway_fx_params.release==release-1);
     puts("PASS: limiter release has exact 1-ms slow detents across its range, accelerated 30-ms detents and idle reset");
     turn(EN_K1,INT_MAX);turn(EN_K2,INT_MAX);turn(EN_K3,INT_MIN);
-    assert(gateway_fx_params.input==240 && gateway_fx_params.release==1000 && gateway_fx_params.ceiling==-240);
+    assert(gateway_fx_params.input==300 && gateway_fx_params.release==1000 && gateway_fx_params.ceiling==-240);
     turn(EN_K1,INT_MIN);turn(EN_K2,INT_MIN);turn(EN_K3,INT_MAX);tap(B_SEL);
     assert(gateway_fx_params.input==-240 && gateway_fx_params.release==10 && !gateway_fx_params.ceiling && !gateway_fx_params.lim);
     tap(B_SAVE);assert(gateway_fx_dialog==1);tap(B_OCTUP);assert(!gateway_fx_dirty && gateway_fx_notice==1);
     tap(B_FX);tap(B_SAVE);tap(B_OCTUP); /* Save EQ separately from limiter. */
     fx_params_t expected=gateway_fx_params;tap(B_HOME);app_init();app_ui_init();
     assert(!memcmp(&expected,&gateway_fx_params,sizeof expected));
-    gateway_fx_presets_t saved;assert(plat_store_load(OBJ_FX,&saved,sizeof saved)==sizeof saved && saved.version==4);
+    gateway_fx_presets_t saved;assert(plat_store_load(OBJ_FX,&saved,sizeof saved)==sizeof saved && saved.version==5);
     gateway_fx_record_t r;
     /* CRC-valid but semantically invalid/mis-sized records must leave neutral defaults. */
     for(unsigned bad=0;bad<7;bad++){

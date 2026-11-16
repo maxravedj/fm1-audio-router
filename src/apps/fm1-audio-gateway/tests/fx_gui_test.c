@@ -18,11 +18,11 @@ static void migration(void)
     tap(B_FX);assert(!gateway_fx_limiter && gateway_fx_row==2);
     turn(EN_ALGO,1);turn(EN_K2,2);assert(gateway_fx_params.slope[0]==2);
     tap(B_SAVE);assert(gateway_fx_dialog==1);tap(B_OCTUP);gateway_fx_presets_t saved;
-    assert(plat_store_load(OBJ_FX,&saved,sizeof saved)==sizeof saved && saved.version==4 && saved.eq[0].slope[0]==2);
+    assert(plat_store_load(OBJ_FX,&saved,sizeof saved)==sizeof saved && saved.version==5 && saved.eq[0].slope[0]==2);
     app_init();app_ui_init();assert(gateway_fx_params.slope[0]==2 && gateway_fx_params.band[2].gain==90);
     saved.eq[0].slope[0]=4;plat_store_save(OBJ_FX,&saved,sizeof saved);app_init();app_ui_init();
     assert(!gateway_fx_params.chain && !gateway_fx_params.slope[0]);
-    puts("PASS: AFX v1 56-byte migration preserves every old control and defaults to 12 dB/oct; v4 preset slopes save/reboot and malformed slopes default safely");
+    puts("PASS: AFX v1 56-byte migration preserves every old control and defaults to 12 dB/oct; v5 preset slopes save/reboot and malformed slopes default safely");
 }
 static void eq(void)
 {
@@ -42,6 +42,8 @@ static void eq(void)
     assert(abs(curves[2][at]-gateway_fx_y(6))<=1 && curves[5][at]==curves[2][at]);
     p.band[2].on=0;gateway_fx_curves(&p,curves);assert(curves[5][at]==87);
     p.band[2].on=1;p.chain=0;gateway_fx_curves(&p,curves);assert(curves[5][at]==curves[2][at] && curves[2][at]<87);
+    p.eq=0;p.post=30;gateway_fx_curves(&p,curves);assert(abs(curves[5][at]-gateway_fx_y(9))<=1);
+    p.eq=1;p.post=0;
     p.chain=1;p.band[0].type=FX_HIGH_PASS;p.band[0].hz=1000;p.slope[0]=3;
     gateway_fx_curves(&p,curves);assert(curves[0][0]==FX_GRAPH_BOTTOM && abs(curves[0][at]-gateway_fx_y(-3))<=1);
     gateway_fx_publish(&p);select_row(2);turn(EN_K2,INT_MIN);assert(!gateway_fx_params.slope[0]);

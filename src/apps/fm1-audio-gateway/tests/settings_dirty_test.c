@@ -27,7 +27,7 @@ int main(void)
         uint8_t old=row==GATEWAY_SET_BT?gateway_bt_draft:row==GATEWAY_SET_AUTO_SCALE?gateway_auto_scale_draft:
             row==GATEWAY_SET_COLOR?gateway_color_draft:row==GATEWAY_SET_SPECTRUM_COLOR?gateway_spectrum_color_draft:
             row==GATEWAY_SET_VECTORSCOPE_COLOR?gateway_vectorscope_color_draft:
-            row==GATEWAY_SET_VECTOR_GAIN?gateway_vector_gain_draft:
+            row==GATEWAY_SET_VECTOR_GAIN?gateway_vector_gain_draft:row==GATEWAY_SET_DYNAMICS?gateway_dynamics_draft:
             row==GATEWAY_SET_BATTERY?gateway_battery_draft:row==GATEWAY_SET_CPU?gateway_cpu_draft:
             row==GATEWAY_SET_USB_OUT?gateway_usb_out_draft:row==GATEWAY_SET_MIDI?gateway_midi_draft:
             row==GATEWAY_SET_MIDI_CHANNEL?gateway_midi_channel_draft:row==GATEWAY_SET_MIDI_C?gateway_midi_c_draft:gateway_fade_draft;

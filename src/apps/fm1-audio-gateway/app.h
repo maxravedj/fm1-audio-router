@@ -65,6 +65,7 @@ void app_say(const char *a, const char *b);
 #define APP_BT_APTX
 #define APP_BT_LDAC
 #ifndef PLAT_HOST
+#define APP_BT_MULTIPOINT
 #define APP_BT_SBC_CPU2
 #define APP_BT_RESAMPLE_CPU2
 #define APP_UI_PROFILE

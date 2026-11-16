@@ -9,7 +9,9 @@ cmd=[os.environ.get('CC','cc'),'-std=c99','-O1','-g','-fwrapv','-fsanitize=addre
 subprocess.run(list(map(str,cmd)),check=True)
 for i,fixture in enumerate(sorted(a.fixtures.glob('*.rtp'))):
  sbc=a.sbc/f'{i%6}.sbc';spcm=a.out/'sbc.pcm';apcm=a.out/'aac.pcm'
- subprocess.run(list(map(str,[exe,sbc,fixture,spcm,apcm])),check=True,env={**os.environ,**({"FM1_SKIP_ORACLE":"1"} if i else {})})
+ env={**os.environ,**({"FM1_SKIP_ORACLE":"1"} if i else {})}
+ if fixture.name in {'44100-2-256k-900.rtp','48000-2-256k-900.rtp'}:env['FM1_RADIO_JITTER']='1'
+ subprocess.run(list(map(str,[exe,sbc,fixture,spcm,apcm])),check=True,env=env)
  assert spcm.read_bytes()==(a.sbc/f'{i%6}-reference.pcm').read_bytes(),sbc
  assert apcm.read_bytes()==fixture.with_suffix('.pcm').read_bytes(),fixture
  print('PASS: real CPU2 resampler/decoder, frozen raw PCM match:',fixture.name,sbc.name,flush=True)
