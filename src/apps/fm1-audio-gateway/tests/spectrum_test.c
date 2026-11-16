@@ -8,6 +8,71 @@
 #include <math.h>
 static int32_t pcm[2u * PLAT_SPECTRUM_FRAMES];
 static int16_t snapshot[PLAT_SPECTRUM_FRAMES][2];
+static float reference_fft[PLAT_SPECTRUM_FRAMES][2];
+static float reference_twiddle[PLAT_SPECTRUM_FRAMES / 2u][2];
+/* Group-first scalar reference for the phase-first FFT optimization. Build
+ * bit-reversed input out-of-place, so this also checks the overlapping PCM
+ * expansion. Keep the original arithmetic order, including signed zero. The
+ * analytic tests below independently check window/band normalization. */
+static void reference_transform(void)
+{
+    int32_t sums[2] = {0, 0};
+    for (unsigned i = 0; i < PLAT_SPECTRUM_FRAMES; i++)
+        for (unsigned ch = 0; ch < 2; ch++) sums[ch] += snapshot[i][ch];
+    for (unsigned i = 0; i < PLAT_SPECTRUM_FRAMES / 2u; i++)
+        for (unsigned ch = 0; ch < 2; ch++)
+            reference_twiddle[i][ch] = gateway_twiddle_part(i, ch);
+    for (unsigned i = 0; i < PLAT_SPECTRUM_FRAMES; i++) {
+        unsigned reversed = 0;
+        for (unsigned bit = PLAT_SPECTRUM_FRAMES / 2u, v = i; bit; bit >>= 1, v >>= 1)
+            if (v & 1u) reversed |= bit;
+        float c = reference_twiddle[i & (PLAT_SPECTRUM_FRAMES / 2u - 1u)][0];
+        float window = 0.5f - 0.5f * (i < PLAT_SPECTRUM_FRAMES / 2u ? c : -c);
+        for (unsigned ch = 0; ch < 2; ch++) {
+            float mean = (float)sums[ch] / (float)PLAT_SPECTRUM_FRAMES;
+            reference_fft[reversed][ch] = ((float)snapshot[i][ch] - mean) * window / 32768.0f;
+        }
+    }
+    for (unsigned len = 2; len <= PLAT_SPECTRUM_FRAMES; len *= 2u) {
+        unsigned half = len / 2u, stride = PLAT_SPECTRUM_FRAMES / len;
+        for (unsigned start = 0; start < PLAT_SPECTRUM_FRAMES; start += len)
+            for (unsigned j = 0; j < half; j++) {
+                unsigned a = start + j, z = a + half;
+                float wr = reference_twiddle[j * stride][0], wi = reference_twiddle[j * stride][1];
+                float re = wr * reference_fft[z][0] - wi * reference_fft[z][1];
+                float im = wr * reference_fft[z][1] + wi * reference_fft[z][0];
+                reference_fft[z][0] = reference_fft[a][0] - re;
+                reference_fft[z][1] = reference_fft[a][1] - im;
+                reference_fft[a][0] += re; reference_fft[a][1] += im;
+            }
+    }
+}
+static void fft_equivalence(void)
+{
+    uint32_t random = 731;
+    for (unsigned fixture = 0; fixture < 20; fixture++) {
+        for (unsigned i = 0; i < PLAT_SPECTRUM_FRAMES; i++) {
+            int16_t left = 0, right = 0;
+            random = random * 1664525u + 1013904223u;
+            if (fixture == 1) { left = 32767; right = -32768; } /* DC */
+            else if (fixture == 2) { left = i == 1 ? -32768 : 0; right = i == 2048 ? 32767 : 0; }
+            else if (fixture == 3) { left = i & 1u ? 32767 : -32768; right = -left / 2; }
+            else if (fixture == 4) { left = (int16_t)(random >> 16) % 3; right = -left; }
+            else if (fixture >= 5) {
+                left = (int16_t)(random >> 16);
+                random = random * 1664525u + 1013904223u;
+                right = fixture == 5 ? left : fixture == 6 ? -(left / 2) : (int16_t)(random >> 16);
+            }
+            snapshot[i][0] = left; snapshot[i][1] = right;
+        }
+        memcpy(gateway_spectrum_pcm, snapshot, sizeof snapshot);
+        if (fixture < 2) gateway_twiddle_ready = 0; /* cold and warm lookups */
+        gateway_spectrum_analyze();
+        reference_transform();
+        assert(!memcmp(gateway_fft, reference_fft, sizeof reference_fft));
+    }
+    puts("PASS: all 4096 complex FFT bins bit-identical to group-first reference on 20 stereo fixtures, cold/warm table and in-place PCM expansion");
+}
 static unsigned loudest(void)
 {
     unsigned i, best = 0;
@@ -76,6 +141,7 @@ int main(void)
     app_init();
     gateway_mode=GATEWAY_MODE_SPECTRUM;
     gateway_view_changed();
+    fft_equivalence();
     analytic_bands();
     tones(440.0f, 660.0f, 0.5f, 0);
     assert(gateway_spectrum_target[17] > -10000 && gateway_spectrum_target[20] > -10000);

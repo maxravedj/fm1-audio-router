@@ -186,15 +186,17 @@ static void gateway_fx_limiter_region(unsigned left,unsigned top,unsigned width,
         cv_text((FX_LIMITER_SCALE_RIGHT-text_w(&FONT_T,"-60")-text_w(&FONT_XS,text))/2,204,&FONT_XS,text,active?RGB(255,80,80):C_GRAY);}
         if(full || left){gateway_peak_label(text,gateway_fx_meter[0].peak>gateway_fx_meter[1].peak?gateway_fx_meter[0].peak:gateway_fx_meter[1].peak);
         cv_text(158-(int)left+(58-text_w(&FONT_XS,text))/2,35,&FONT_XS,text,active?C_WHITE:C_GRAY);}
-        if(full){gateway_fx_limiter_value(48,"K1 INPUT",gateway_fx_params.input,1,"dB");
-        if(gateway_dynamics_mode==FX_DYNAMICS_LM){
-            gateway_fx_limiter_value(99,"K2 CEILING",gateway_fx_params.ceiling,1,"dB");
+        if(full){
+        unsigned lm=gateway_dynamics_mode==FX_DYNAMICS_LM;
+        gateway_fx_limiter_value(48,lm?"K1 THRESHOLD":"K1 INPUT",
+            lm?gateway_fx_params.ceiling-gateway_fx_params.input:gateway_fx_params.input,1,"dB");
+        if(lm){
             int space=FX_LIMITER_SCALE_RIGHT-text_w(&FONT_T,"-60");
-            gateway_fx_center(0,150,space,"RELEASE",C_GRAY);
-            cv_text((space-text_w(&FONT_L,"AUTO"))/2,166,&FONT_L,"AUTO",C_WHITE);
+            gateway_fx_center(0,99,space,"RELEASE",C_GRAY);
+            cv_text((space-text_w(&FONT_L,"AUTO"))/2,115,&FONT_L,"AUTO",C_WHITE);
         }else{
-            gateway_fx_limiter_value(99,"K2 RELEASE",gateway_fx_params.release,0,"ms");
-            gateway_fx_limiter_value(150,"K3 CEILING",gateway_fx_params.ceiling,1,"dB");}}
+            gateway_fx_limiter_value(99,"K2 RELEASE",gateway_fx_params.release,0,"ms");}
+        gateway_fx_limiter_value(150,"K3 CEILING",gateway_fx_params.ceiling,1,"dB");}
         cv_oy=0;cv_blit(left,band);
     }
 }

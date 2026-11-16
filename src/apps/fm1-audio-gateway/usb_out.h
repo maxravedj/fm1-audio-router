@@ -50,7 +50,7 @@ static void gateway_usb_out_apply(int32_t *p,unsigned mode){
 }
 /* Called with the same short lock as the main chain's coefficient publication. */
 static void gateway_usb_out_publish(const fx_bank_t *b){
-    if(gateway_usb_fx){gateway_usb_fx->pending=*b;gateway_usb_fx->generation++;}
+    if(gateway_usb_fx)fx_publish(gateway_usb_fx,b);
 }
 void app_usb_out_begin(uint32_t n,int capturing){
     unsigned mode=capturing && gateway_usb_pcm && n<=APP_BLOCK?gateway_usb_out_mode:0;

@@ -128,19 +128,31 @@ static void gateway_fx_presets_load(void)
     }
     memcpy(gateway_eq_work,r->eq,sizeof gateway_eq_work);memcpy(gateway_lim_work,r->lim,sizeof gateway_lim_work);
     memcpy(gateway_lm_work,r->lm,sizeof gateway_lm_work);
+    /* Retain the AFX v5 gain encoding. Only legacy LM knees outside the new
+     * -30..0 dB range are clamped in RAM; explicit SAVE owns persistence. */
+    for(unsigned i=0;i<8;i++){
+        gateway_lim_preset_t *l=&gateway_lm_work[i];
+        if(l->input<l->ceiling)l->input=l->ceiling;
+        if(l->input>l->ceiling+300)l->input=l->ceiling+300;
+    }
     memcpy(gateway_fx_selected,r->selected,sizeof r->selected);gateway_fx_selected[2]=r->lm_selected;gateway_fx_params.chain=r->chain;
     gateway_fx_params.eq=r->enabled&1u;gateway_fx_params.lim=(r->enabled>>1)&1u;
     gateway_fx_eq_put(&gateway_fx_params,&gateway_eq_work[r->selected[0]]);
     gateway_fx_lim_put(&gateway_fx_params,&gateway_fx_dynamics_work()[gateway_fx_selected[gateway_fx_preset_index(1)]]);
+}
+/* Share recall/initialization in foreground to keep the linked SRAM budget. */
+static __attribute__((noinline)) void gateway_fx_preset_apply(unsigned effect,unsigned reset)
+{
+    unsigned slot=gateway_fx_selected[effect];fx_params_t p=gateway_fx_params;
+    if(effect)gateway_fx_lim_put(&p,&gateway_fx_dynamics_work()[slot]);else gateway_fx_eq_put(&p,&gateway_eq_work[slot]);
+    gateway_fx_publish_reset(&p,reset);
 }
 static void gateway_fx_preset_select(int delta)
 {
     unsigned effect=gateway_fx_preset_index(gateway_fx_limiter),old=gateway_fx_selected[effect];
     unsigned slot=(old+delta%8+8)%8;if(slot==old)return;
     gateway_fx_selected[effect]=slot;
-    fx_params_t p=gateway_fx_params;
-    if(effect)gateway_fx_lim_put(&p,&gateway_fx_dynamics_work()[slot]);else gateway_fx_eq_put(&p,&gateway_eq_work[slot]);
-    gateway_fx_publish(&p);gateway_fx_metadata_changed();gateway_page_redraw=1;gateway_lights();
+    gateway_fx_preset_apply(effect,effect==2);gateway_fx_metadata_changed();gateway_page_redraw=1;gateway_lights();
 }
 static int gateway_fx_preset_confirm(void)
 {
@@ -151,7 +163,5 @@ static int gateway_fx_preset_confirm(void)
     else{r.eq[slot]=gateway_eq_work[slot];if(gateway_fx_dialog==2)gateway_fx_eq_get(&r.eq[slot],&initial);}
     if(gateway_fx_write(&r)){gateway_page_redraw=1;return 0;}
     if(effect)work[slot]=saved[slot];else gateway_eq_work[slot]=r.eq[slot];
-    fx_params_t p=gateway_fx_params;
-    if(effect)gateway_fx_lim_put(&p,&saved[slot]);else gateway_fx_eq_put(&p,&r.eq[slot]);
-    gateway_fx_publish(&p);gateway_fx_dialog=0;gateway_page_redraw=1;gateway_lights();return 1;
+    gateway_fx_preset_apply(effect,effect==2 && gateway_fx_dialog==2);gateway_fx_dialog=0;gateway_page_redraw=1;gateway_lights();return 1;
 }

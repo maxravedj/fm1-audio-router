@@ -8,9 +8,9 @@ retain their positions in the signal path.
 
 | Control/behavior | Peak Limiter | LM-Maximizer |
 | --- | --- | --- |
-| K1 | Input gain, −24..+30 dB | Input gain, −24..+30 dB |
-| K2 | Release, 10..1000 ms | Ceiling, −24..0 dBFS |
-| K3 | Ceiling, −24..0 dBFS | Unused; display shows AUTO release |
+| K1 | Input gain, −24..+30 dB | Threshold, −30..0 dB |
+| K2 | Release, 10..1000 ms | Unused; middle row shows AUTO release |
+| K3 | Ceiling, −24..0 dBFS | Ceiling, −24..0 dBFS |
 | Lookahead | 128 samples, about 2.90 ms | 55 samples, about 1.25 ms |
 | Attack | Finite curved gain ramp | Inverse-gain ramp with retained slew |
 | Release | Manual exponential | Automatic fast, medium and long recovery |
@@ -26,6 +26,25 @@ Presets contain input, ceiling and manual release, never mode or bypass. The
 manual release value is retained but ignored in LM-Maximizer. Mode remains a
 separate Settings preference. Older shared presets and their selected position
 migrate into both banks, which can then be edited independently.
+
+Selecting or initializing an LM-Maximizer preset clears its gain, peak and
+automatic-release history on both MASTER and source-only post-FX USB routes,
+even when the preset parameters match. An active reset uses a 5-ms fade-out,
+resets at silence, then fades in over 5 ms. EQ and lookahead buffers stay warm.
+Saving a preset and ordinary parameter edits keep the running history.
+
+LM-Maximizer's threshold determines where limiting begins. Clockwise raises
+it toward 0 dB; lowering it increases limiting and loudness. Makeup gain is
+`ceiling − threshold` in dB, so changing only ceiling scales the output without
+changing the limiting envelope. For example, threshold −12 dB and ceiling
+−1 dB apply 11 dB of makeup gain. The initial preset's threshold is −1 dB,
+matching its −1 dB ceiling and zero makeup gain.
+
+The saved gain/ceiling encoding and preset format stay unchanged. Existing
+LM presets display `threshold = ceiling − input gain`. Only thresholds outside
+−30..0 dB are clamped in the RAM working bank; their preset labels show unsaved
+changes until explicitly saved. Booting or metadata autosave never rewrites
+those saved slots. Peak Limiter presets retain their original input gains.
 
 ## LM-Maximizer controller
 
@@ -78,7 +97,9 @@ telemetry does not count that switching envelope as limiting.
 Host tests cover all 241 integer ceilings with driven/headroom input, linked
 stereo, lookahead deadlines, block-size invariance, timestamp wrap, independent
 routes, automatic-release independence from the saved manual value, recovery
-recurrences and silent mode transitions. UI tests cover draft/discard/failure/
+recurrences and silent mode transitions. Knob-driven audio tests cover output
+scaling at fixed threshold and identical source-only USB FX processing.
+UI tests cover threshold bounds, legacy preset clamping, draft/discard/failure/
 save/boot behavior, presets, both USB FX routes and settings migrations. Linked
 target checks verify SRAM placement, stacks, callback ownership and scratch
 budgets. These checks do not establish physical CPU headroom or listening

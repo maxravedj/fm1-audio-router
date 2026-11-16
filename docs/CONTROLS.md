@@ -76,16 +76,19 @@ The bypassed EQ keeps its configured combined response outline without fill.
 
 The second FX page is titled **FX: DYNAMICS: Peak Limiter** or
 **FX: DYNAMICS: LM-Maximizer**. Select the mode in Settings with **Dynamics mode**,
-then SAVE to apply it. Both modes have K1 input gain (−24..+30 dB), post-dynamics meters and
-a red gain-reduction line.
+then SAVE to apply it. Both modes have post-dynamics meters and a red
+gain-reduction line.
 
 - **Peak Limiter** retains 128-frame lookahead (about 2.9 ms), anticipatory
-  curved attack and exponential release. K2 sets release; slow turns adjust
+  curved attack and exponential release. K1 sets input gain (−24..+30 dB).
+  K2 sets release; slow turns adjust
   by 1 ms and fast turns accelerate up to 30 ms per detent. K3 sets ceiling.
 - **LM-Maximizer** is an original LoudMax-inspired maximizer with 55-frame
   lookahead (about 1.25 ms) and automatic, input-history-dependent release.
-  K2 sets ceiling. Release displays AUTO in the third row; K3 has no effect.
-  Input gain and ceiling have the same ranges as Peak Limiter. It approximates
+  K1 sets threshold (−30..0 dB); clockwise raises the threshold and reduces
+  limiting. K2 has no effect; release displays AUTO in the middle row.
+  K3 sets ceiling (−24..0 dBFS) in the bottom row without changing threshold.
+  Makeup gain is automatic: ceiling minus threshold. It approximates
   the researched behavior rather than
   reproducing LoudMax exactly; see [Dynamics](DYNAMICS.md).
 
