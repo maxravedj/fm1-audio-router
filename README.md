@@ -20,8 +20,8 @@
 
 # Features
 - 2in/2out 16/44100 USB audio interface
-- Bluetooth audio receiver with SBC, AAC, aptX, aptX HD and LDAC support
-- FX chain of 5 bands parametric EQ and peak limiter with 8 presets
+- Bluetooth multipoint receiver with SBC, AAC, aptX, aptX HD and LDAC support
+- FX chain of 5-band parametric EQ and dynamics (Peak Limiter or LM-Maximizer), with 8 independent presets for each processor
 - Mixer
 - MIDI controller functionality
 - 4 visualizers: meters, waveforms, 40-band spectrum and vectorscope
@@ -29,7 +29,7 @@
 # Installation
 1. Flash m-bootloader with [M-Flasher](https://github.com/jvitkauskas/m-flasher)
 2. Turn off FM-1 and turn on while holding **REC** button
-3. Flash [latest firmware](https://github.com/maxravedj/fm1-audio-router/releases/latest/download/fm1-audio-router-v0.5.0.fwsc) with M-Flasher
+3. Flash [latest firmware](https://github.com/maxravedj/fm1-audio-router/releases/latest/download/fm1-audio-router-v0.6.0.fwsc) with M-Flasher
 
 See additional [installation instructions](docs/INSTALL.md)
 
@@ -39,13 +39,14 @@ Plug your FM-1 to computer and it should be deteceted as class compliant 2in/2ou
 
 ### Bluetooth
 Enable bluetooth in settings and hold **OCT+** to enter or exit pairing mode. BT badge in status bar is yellow during pairing mode.
+Connect up to two devices; the last device to start playback takes over and pauses the previous one.
 
 ### FX chain
 Hold **FX** button to enable or disable FX chain. Press **SEL** on specific FX screen to bypass that FX
 - EQ: use **SELECT** to cycle through five bands and post-EQ gain, **ALGORITHM** to select filter type, **K1** for frequency, **K2** for gain or slope, **K3** for Q or resonance
-- Peak limiter: use **K1** for input gain, **K2** for release, **K3** for ceiling
+- Dynamics: choose Peak Limiter or the LoudMax-inspired LM-Maximizer in Settings. **K1** sets input gain. Peak Limiter uses **K2** for release and **K3** for ceiling; LM-Maximizer uses **K2** for ceiling and automatic release.
 
-Use **PRESETS** knob to scroll presets. EQ and limiter have 8 preset slots each. Use **SAVE** to store changes to current preset.
+Use **PRESETS** knob to scroll presets. EQ, Peak Limiter and LM-Maximizer each have 8 independent slots; Dynamics bypass is shared between its two modes. Use **SAVE** to store changes to the current preset. See [dynamics details](docs/DYNAMICS.md).
 
 ### Mixer
 Press **GLO** to open mixer. Use **K1**-**K3** to trim volumes on inputs and USB output. Use **MASTER** knob to control Master volume. Press **PLAY/STOP** to mute Master (works on any screen).

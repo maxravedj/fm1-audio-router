@@ -8,7 +8,7 @@ Generic Dinghy examples do not describe every detail of this runtime.
 
 ```text
 USB playback ─ trim/gate ─┐
-                         ├─ sum ─ 5-band EQ/post ─ limiter ─ MASTER ─ mute ─ codec
+                         ├─ sum ─ 5-band EQ/post ─ dynamics ─ MASTER ─ mute ─ codec
 BT decode/FIR ─ trim/gate ┘
 ```
 
@@ -72,9 +72,14 @@ retained, so earlier MASTER-only preferences now apply to every waveform source.
 
 Spectrum reuses its int16 PCM staging buffer for the complex float FFT,
 expanding backwards after reading the DC mean. Quarter-wave twiddles are
-reflected for the remaining phases. Capture plus FFT scratch is 73,736 bytes,
-24,568 fewer than before; stereo power analysis and Hann normalization are
+reflected from one cosine table for the remaining phases. Capture plus FFT scratch is 69,640 bytes;
+stereo power analysis, FFT resolution and Hann normalization are
 unchanged.
+
+Waveform history keeps six levels (1 to 1024 samples per bucket). The unused
+4096-sample level is removed: every displayed window, including 8 seconds at
+the current graph width, uses a finer level. Waveform capture and UI occupy
+52,808 bytes, 8192 fewer than before.
 
 Vectorscope shares the raw stereo capture producer with spectrum, but does no
 FFT. It plots `x ∝ R−L`, `y ∝ −(L+R)` using integer arithmetic
@@ -83,7 +88,7 @@ from the latest 2048 paired samples (~46 ms), with a 16 ms refresh interval
 176×176 maps track current/drawn points; only changed 16-row canvas strips
 reach the LCD. Only those 2048 pairs are copied, scanned for auto gain and plotted;
 the spectrum reader retains its full 4096-frame window. Capture, staging, maps
-and timing occupy 48,728 bytes, all
+and timing occupy 32,344 bytes, all
 allocated on entry and detached/freed on exit. Hidden views do no capture or
 plotting; screenshot and MIDI overlay replay paints the frozen map only.
 Optional stereo-linked auto scale measures the snapshot peak with integer math;
@@ -122,12 +127,18 @@ spectrum yields memory. See [LDAC](LDAC.md) for measured sizes and validation.
 EQ uses cascaded trapezoidal SVFs with a stable-bank transition for edits.
 Unchanged EQ paths copy their warm histories on unrelated limiter/post-gain
 edits. Five bands offer bell/pass/shelf types; pass slopes cascade 1–4 stages.
-The limiter links stereo sample peaks and uses a monotonic lookahead deque,
-finite curved anticipatory gain ramp, existing exponential release and final
-integer ceiling guards. No audio callback allocation occurs.
+Dynamics links stereo sample peaks and uses a monotonic lookahead deque and
+final integer ceiling guards. Peak Limiter retains its finite curved
+anticipatory gain ramp and manual exponential release. LM-Maximizer has an
+inverse-gain anticipatory ramp and automatic fast/medium/long recovery driven
+by input history. Its original, causal controller approximates the black-box
+measurements described in [Dynamics](DYNAMICS.md). The two controllers share
+an exclusive storage union; deque timestamps use bounded byte ages. Neither
+mode allocates in the audio callback or changes CPU1 ownership.
 
-Delay is 128 frames only while the limiter output is active. Global/limiter
-bypass switches at silence between 221-frame down/up envelopes. Detection may
+Delay is 128 frames for Peak Limiter or 55 for LM-Maximizer, only while dynamics
+output is active. Global/dynamics bypass and mode changes switch at silence
+between 221-frame down/up envelopes. Detection may
 warm during fade-out, but a pending ceiling must not clamp the old bypass
 path. The active limited output is constrained through fade-in and steady
 operation. A changing time alignment/level dip is not universally inaudible.
@@ -135,9 +146,15 @@ operation. A changing time alignment/level dip is not universally inaudible.
 ## Persistence and recovery
 
 CRC-checked A/B objects retain panel calibration, application settings, saved
-FX presets and bond metadata. Settings payload schema is 20 (32 bytes); FX
-preset schema is 4 (456 bytes). These are storage format numbers, independent
+FX presets and bond metadata. Settings payload schema is 23 (32 bytes); FX
+preset schema is 5 (522 bytes). These are storage format numbers, independent
 of manually chosen firmware tags. Keep their migrations, not DSP history.
+AFX v5 preserves the 456-byte v3/v4 prefix and appends eight LM-Maximizer slots
+and its selected position. Peak Limiter and LM-Maximizer have separate working
+banks, selected positions and explicit preset saves, with one shared Dynamics
+bypass flag. Migration copies the old shared presets and selection into both
+banks without a boot-time write. The larger record uses three payload pages
+plus the final commit header in the existing FX A/B sectors.
 
 Relevant physical flash offsets:
 
@@ -160,6 +177,17 @@ configuration retires the initial setup timeout for that ACL, so stream
 teardown cannot preempt its later manual-disconnect reason. Keep saved-key
 and crossed-authentication handling. The radio crash guard intentionally skips
 automatic radio startup after a crash; an explicit Settings SAVE retries it.
+
+The receiver has two independent ACL/security/L2CAP/AVDTP sessions and one
+shared decoder/FIR/PCM pipeline. The last accepted AVDTP START takes ownership;
+the previous source receives AVRCP Pause press/release, and its late media is
+excluded. CPU1 is joined before decoder ownership changes. Manual disconnect
+holds follow peer addresses across slots; range loss remains eligible for
+reconnection. Bounded control replies retry without consuming subsequent RX
+or replaying already committed signalling commands. A real PCM starvation
+uses a 64-frame down-ramp and a 64-frame up-ramp after the existing rebuffer
+watermark; uninterrupted samples are unchanged. See [Bluetooth](BLUETOOTH.md)
+for radio scheduling provenance, host evidence and required physical checks.
 
 Host tests provide protocol/register, pixel, sample and lifecycle evidence.
 Actual RF timing, power-loss recovery, CPU headroom and listening remain
@@ -188,8 +216,14 @@ reserved byte as zero. Settings v21 uses bit 3 of the final byte for vectorscope
 auto gain (default ON for older records), leaving color in bits 0–2 and the
 32-byte record and flash sectors unchanged. Settings v22 stores the last-exit
 MIDI octave shift plus 3 in bits 4–6 of the final byte (codes 0–6 map to −3..+3).
-Bit 7 and octave code 7 remain invalid; older versions default to octave zero
-and retain their existing reserved-bit validation. The record remains 32 bytes.
+Bit 7 and octave code 7 remain invalid in v22; older versions default to octave
+zero and retain their existing reserved-bit validation. Settings v23 uses bit 7
+to select Peak Limiter (0) or LM-Maximizer (1), independently of dynamics presets
+and bypass metadata. Old records default to Peak Limiter. Color, auto scale and
+all MIDI octave codes retain their bits; the record remains 32 bytes. Only a
+successful Settings SAVE applies the draft mode and its selected working preset
+to both the master and an allocated source-only USB OUT engine, preserving
+shared Dynamics bypass.
 REC activation and held notes remain volatile.
 
 The controller runs only in the CPU0 foreground, ahead of screen/modal input.

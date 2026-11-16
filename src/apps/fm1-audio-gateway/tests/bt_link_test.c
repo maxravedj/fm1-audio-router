@@ -21,14 +21,14 @@
 #define BTI_K_CONN 6
 #define BTI_K_LMP 5
 #define BTI_K_ACL 7
-struct bti_rx {uint8_t kind,idx;uint32_t len;uint8_t data[340];};
+struct bti_rx {uint8_t kind,idx,link,generation;uint32_t len;uint8_t data[340];};
 static uint64_t table[650];
 #define bti_tab ((uint8_t *)table)
 static struct { uint8_t own[6],mode,o_sweep,train;uint32_t last_rx_clkn; } bti;
 static uint32_t fm1_ms,clock_now,alarm_slots,window=46,events,irq_depth;
 static uint8_t ba_live;
 static int busy,log_count;
-static struct fm1_br_frame *fm1_br_frame(uint8_t *t,unsigned n){assert(!n);return (void *)(t+FM1_BR_OFF_FRAME);}
+static struct fm1_br_frame *fm1_br_frame(uint8_t *t,unsigned n){assert(n<2);return (void *)(t+FM1_BR_OFF_FRAME+180u*n);}
 static void fm1_br_xchg(uint8_t *t,unsigned i,unsigned v){assert(i<16);((uint16_t *)t)[i]=v;}
 static void fm1_br_eir_tx(unsigned n,unsigned t,unsigned p){(void)n;(void)t;(void)p;}
 static unsigned fm1_br_rx_window(void){return window;}
@@ -60,6 +60,9 @@ static void bti_push(unsigned k,unsigned idx,unsigned s,unsigned c,const uint8_t
 static void packet_tid(unsigned op,unsigned tid,const uint8_t *params,unsigned n)
 {
     struct bti_rx r={0};r.kind=BTI_K_LMP;
+#ifdef APP_BT_MULTIPOINT
+    r.link=br_current;r.generation=brl.generation;
+#endif
     if(op>>8==BTL_ESCAPE){r.data[0]=(BTL_ESCAPE<<1)|tid;r.data[1]=(uint8_t)op;r.len=2;}
     else{r.data[0]=(uint8_t)((op<<1)|tid);r.len=1;}
     if(n)memcpy(r.data+r.len,params,n);r.len+=n;
@@ -68,7 +71,7 @@ static void packet_tid(unsigned op,unsigned tid,const uint8_t *params,unsigned n
 static void packet(unsigned op,const uint8_t *params,unsigned n){packet_tid(op,0,params,n);}
 static void drain(void)
 {
-    struct fm1_br_frame *f=fm1_br_frame(bti_tab,0);
+    struct fm1_br_frame *f=fm1_br_frame(bti_tab,br_current);
     for(unsigned i=0;i<32;i++) {
         f->txbufcntl[0]=f->txbufcntl[1]=1;blt_publish();blt_fill(f,bti_tab);
         if(blt.r==blt.w)break;
@@ -167,6 +170,9 @@ static void saved_bond_reconnect(int bad)
 static void acl(const uint8_t *p,unsigned n,unsigned llid)
 {
     struct bti_rx r={0};r.kind=BTI_K_ACL;r.idx=(uint8_t)llid;r.len=n;
+#ifdef APP_BT_MULTIPOINT
+    r.link=br_current;r.generation=brl.generation;
+#endif
     memcpy(r.data,p,n);bp_print_rx(&r);
 }
 static void unencrypted_discovery(void)

@@ -10,7 +10,7 @@
  * continuation (every answer fits BSD_OUT). Uses bt_l2cap.c's data-element reader (bl_de, bl_uint): included after
  * it. Host-tested in tests/bt_sdps_test.c. Written from the specification, no vendor code. */
 
-#define BSD_OUT 256u                               /* the largest answer (all three records, every attribute) */
+#define BSD_OUT 256u
 #define BSD_HANDLE0 (1u << 16)                     /* our records' handles, from 1 << 16 (0 is the server's own); a
                                                     * shift, not the hex literal: the MMIO check reads it as an address */
 
@@ -78,6 +78,19 @@ static const struct bsd_attr BSD_DID[] = {
     {0x0203, sizeof BSD_D0203, BSD_D0203}, {0x0204, sizeof BSD_D0204, BSD_D0204}, {0x0205, sizeof BSD_D0205, BSD_D0205},
 };
 static const uint16_t BSD_DID_U[] = {0x1200, 0x1002};
+#ifdef APP_BT_MULTIPOINT
+/* Basic AVRCP Controller (category 1): PAUSE via AV/C PASS THROUGH. No
+ * absolute-volume Target or browsing service is advertised. */
+static const uint8_t BSD_C0000[]={0x0a,0,1,0,2};
+static const uint8_t BSD_C0001[]={0x35,6,0x19,0x11,0x0e,0x19,0x11,0x0f};
+static const uint8_t BSD_C0009[]={0x35,8,0x35,6,0x19,0x11,0x0e,0x09,1,0};
+static const struct bsd_attr BSD_CT[]={
+    {0,sizeof BSD_C0000,BSD_C0000},{1,sizeof BSD_C0001,BSD_C0001},
+    {4,sizeof BSD_T0004,BSD_T0004},{5,sizeof BSD_T0005,BSD_T0005},
+    {9,sizeof BSD_C0009,BSD_C0009},{0x0311,sizeof BSD_T0311,BSD_T0311}
+};
+static const uint16_t BSD_CT_U[]={0x110e,0x110f,0x0100,0x0017,0x1002};
+#endif
 
 #define BSD_N(x) (uint8_t)(sizeof x / sizeof x[0])
 static const struct bsd_rec BSD_REC[] = {      /* (index i: handle BSD_HANDLE0 + i, as attribute 0x0000 says) */
@@ -86,6 +99,9 @@ static const struct bsd_rec BSD_REC[] = {      /* (index i: handle BSD_HANDLE0 +
     {BSD_TG, BSD_N(BSD_TG), BSD_N(BSD_TG_U), BSD_TG_U},
 #endif
     {BSD_DID, BSD_N(BSD_DID), BSD_N(BSD_DID_U), BSD_DID_U},
+#ifdef APP_BT_MULTIPOINT
+    {BSD_CT, BSD_N(BSD_CT), BSD_N(BSD_CT_U), BSD_CT_U},
+#endif
 };
 #define BSD_NREC BSD_N(BSD_REC)
 

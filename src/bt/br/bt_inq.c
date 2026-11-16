@@ -31,6 +31,9 @@
 #include "../ble/ble_vm.c"                         /* the stored trims in stock V15's VM (read only) */
 #endif
 #include "bt_inq_core.c"
+#ifdef APP_BT_MULTIPOINT
+#include "bt_receiver_page.h"
+#endif
 
 #if !FELUCCA_FLASH
 #error "BT_AUDIO reads the RF trims from flash (FELUCCA_FLASH)"
@@ -59,7 +62,11 @@ void ble_wl82_rx_irq(void) {}
 /* the table (BR §3), then our own TX buffers inside the engine's 32 KB window */
 #define BTI_OFF_FHS_TX 4200u                       /* the inquiry scan's FHS payload (18 B) */
 #define BTI_OFF_EIR_TX 4224u                       /* its EIR (25 B as stock's) */
+#ifdef APP_BT_RECEIVER
+#define BTI_TAB_ALLOC 4352u /* Receiver uses two DM1 TX pairs below 4352, never source DH5 TX. */
+#else
 #define BTI_TAB_ALLOC (4480u + 2u * 344u)          /* (+ bt_page.c's two DH5 TX buffers, BP_OFF_TXB0 / 1) */
+#endif
 static uint8_t bti_tab[BTI_TAB_ALLOC] IN_POOL __attribute__((aligned(4)));   /* zeroed (the pool); the engine's DMA */
 static uint8_t bti_le_bb[64] IN_POOL __attribute__((aligned(4)));    /* the LE block's RAM window, no links (`ble`) */
 
@@ -88,6 +95,9 @@ static struct bti_stat bti_st = {BTI_MAGIC};
 enum { BTI_K_FHS = 1, BTI_K_EIR = 2, BTI_K_ID = 3, BTI_K_PSTEP = 4, BTI_K_LMP = 5, BTI_K_CONN = 6, BTI_K_ACL = 7 };
 struct bti_rx {
     uint8_t kind, type, idx, rxfreq;
+#ifdef APP_BT_MULTIPOINT
+    uint8_t link,generation;
+#endif
     uint32_t clkn, stat, agc, len, rssi1;
     uint8_t data[340];                             /* (a DH5's 339 B whole: our features say 5-slot, bt_lmp.c) */
 };
@@ -298,7 +308,11 @@ static void bti_trace_add(uint32_t pend)
 
 static void bti_push(uint32_t kind, uint32_t idx, uint32_t stat, uint32_t clkn, const uint8_t *src, uint32_t len)
 {
+#ifdef APP_BT_MULTIPOINT
+    struct fm1_br_frame *f = fm1_br_frame(bti_tab, br_radio);
+#else
     struct fm1_br_frame *f = fm1_br_frame(bti_tab, 0);
+#endif
     struct bti_rx *r;
     uint32_t i;
     if (!BTI_RING_HAVE || bti_rw - bti_rr >= BTI_RING) {
@@ -306,6 +320,9 @@ static void bti_push(uint32_t kind, uint32_t idx, uint32_t stat, uint32_t clkn, 
         return;
     }
     r = BTI_RX_AT(bti_rw);
+#ifdef APP_BT_MULTIPOINT
+    r->link=br_radio;r->generation=br_links[br_radio].generation;
+#endif
     r->kind = (uint8_t)kind;
     r->idx = (uint8_t)idx;
     r->stat = stat;
@@ -726,6 +743,8 @@ static void bta_named(const uint8_t a[6], const char *nm);
 #include "bt_inq_con.c"                            /* the options, the printing, the console commands */
 
 #ifdef APP_BT_RECEIVER
+#define BTR_RX_DROPPED() (bti_st.dropped)
+#define BTR_RX_QUEUED() (bti_rw-bti_rr)
 #include "bt_receiver_link.c"
 #else
 #include "bt_page.c"                               /* stage 2: btpage (the page, the link, the minimal LMP) */
@@ -748,10 +767,16 @@ static void bti_poll(void)                         /* the main loop */
     }
     while (BTI_RING_HAVE && bti_rr != bti_rw) {
         RING_PUBLISH();
+#ifdef APP_BT_RECEIVER
+        if(!br_rx_ready(BTI_RX_AT(bti_rr)))break;
+#endif
         bti_print_rx(BTI_RX_AT(bti_rr));
         RING_PUBLISH();
         bti_rr++;
     }
+#ifdef APP_BT_MULTIPOINT
+    br_current=0;
+#endif
     if (bti.mode >= BTI_M_PAGE)
         bp_poll();
     if (bti_st.phase == BTI_INQ_RUN && fm1_ms - bti.sec_ms >= 1000u) {   /* once a second */

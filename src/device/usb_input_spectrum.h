@@ -10,6 +10,7 @@ static volatile int16_t usb_spectrum_ring[USB_SPECTRUM_RING][2];
 #endif
 static volatile uint32_t usb_spectrum_count, usb_spectrum_filled, usb_spectrum_generation;
 static volatile uint8_t usb_spectrum_enabled;
+static uint32_t usb_spectrum_capacity = USB_SPECTRUM_RING;
 static uint32_t usb_spectrum_packet_ms;
 static uint8_t usb_spectrum_packet_seen;
 
@@ -28,17 +29,32 @@ uint32_t plat_usb_spectrum_mem_bytes(void)
     return 0;
 #endif
 }
-void plat_usb_spectrum_mem(void *p)
+uint32_t plat_usb_spectrum_window_mem_bytes(uint32_t frames)
+{
+    if (!frames || frames > PLAT_SPECTRUM_FRAMES || (frames & (frames-1u))) return 0;
+#ifdef APP_DYNAMIC_DISPLAY
+    return frames * 2u * 2u * sizeof(int16_t);
+#else
+    return 0;
+#endif
+}
+void plat_usb_spectrum_window_mem(void *p, uint32_t frames)
 {
 #ifdef APP_DYNAMIC_DISPLAY
     uint32_t lock = plat_lock();
     usb_spectrum_enabled = 0;
-    usb_spectrum_ring = p;
+    usb_spectrum_ring = plat_usb_spectrum_window_mem_bytes(frames) ? p : 0;
+    usb_spectrum_capacity = usb_spectrum_ring ? 2u * frames : USB_SPECTRUM_RING;
     usb_input_spectrum_stream_start();
     plat_unlock(lock);
 #else
     (void)p;
+    (void)frames;
 #endif
+}
+void plat_usb_spectrum_mem(void *p)
+{
+    plat_usb_spectrum_window_mem(p, PLAT_SPECTRUM_FRAMES);
 }
 
 void plat_usb_spectrum_enable(int enabled)
@@ -63,10 +79,10 @@ static void usb_input_spectrum_packet_begin(void)
 
 static void usb_input_spectrum_push(int32_t l, int32_t r)
 {
-    uint32_t at = usb_spectrum_count & (USB_SPECTRUM_RING - 1u);
+    uint32_t at = usb_spectrum_count & (usb_spectrum_capacity - 1u);
     usb_spectrum_ring[at][0] = (int16_t)(l >> 8);
     usb_spectrum_ring[at][1] = (int16_t)(r >> 8);
-    if (usb_spectrum_filled < USB_SPECTRUM_RING) usb_spectrum_filled++;
+    if (usb_spectrum_filled < usb_spectrum_capacity) usb_spectrum_filled++;
     usb_spectrum_count++;
 }
 
@@ -76,6 +92,7 @@ int plat_usb_input_spectrum_window(int16_t (*out)[2], uint32_t frames, uint32_t 
     uint32_t lock = plat_lock(), end = usb_spectrum_count;
     uint32_t generation = usb_spectrum_generation, i, k;
     int valid = usb_spectrum_enabled && usb_spectrum_filled >= frames &&
+        frames <= usb_spectrum_capacity / 2u &&
         usb_spectrum_packet_seen && plat_ms() - usb_spectrum_packet_ms < 100u;
     plat_unlock(lock);
     if (!valid) return 0;
@@ -86,12 +103,12 @@ int plat_usb_input_spectrum_window(int16_t (*out)[2], uint32_t frames, uint32_t 
         if (count > 32u) count = 32u;
         lock = plat_lock();
         if (generation != usb_spectrum_generation ||
-                usb_spectrum_count - start > USB_SPECTRUM_RING) {
+                usb_spectrum_count - start > usb_spectrum_capacity) {
             plat_unlock(lock);
             return 0;
         }
         for (k = 0; k < count; k++) {
-            uint32_t at = (start + k) & (USB_SPECTRUM_RING - 1u);
+            uint32_t at = (start + k) & (usb_spectrum_capacity - 1u);
             out[i+k][0] = usb_spectrum_ring[at][0];
             out[i+k][1] = usb_spectrum_ring[at][1];
         }

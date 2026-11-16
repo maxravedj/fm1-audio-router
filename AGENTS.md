@@ -58,7 +58,12 @@ controls, build/release instructions and recovery guidance are in `docs/`.
   accepted by USB and release old-channel notes before changing channel.
   Settings v21 packs vectorscope auto gain into bit 3 of the final byte; color
   remains in bits 0..2. Settings v22 stores last-exit MIDI octave + 3 in bits 4..6
-  of that byte; older settings default to octave zero. The record stays 32 bytes.
+  of that byte; older settings default to octave zero. Settings v23 uses bit 7
+  for the dynamics mode (Peak Limiter/LM-Maximizer), independently of presets.
+  Settings stays 32 bytes; old records use Peak Limiter. AFX v5 appends an
+  independent eight-slot LM-Maximizer bank and selection (522 bytes total).
+  AFX v3/v4's shared dynamics presets migrate into both banks. Dynamics bypass
+  remains shared across modes and never belongs to a preset.
   SBC decoder/frame/fragment
   scratch belongs to its dynamic session workspace and is freed only after join.
   Persistent SBC/aptX/USB route allocations use the high end to avoid fragmentation.
@@ -83,11 +88,21 @@ controls, build/release instructions and recovery guidance are in `docs/`.
 - Bypass delay changes retain the requested 5-ms down/silent switch/5-ms up;
   settled global/limiter bypass has zero delay. Prepare limiter detection during
   fade-out but apply ceiling guards to the active limited path. Preserve warm
-  EQ state for identical paths. The limiter is sample peak, not true peak.
+  EQ state for identical paths. Dynamics mode switches use the same silent tap
+  transition: Peak Limiter has 128-frame lookahead, LM-Maximizer 55. The mutually
+  exclusive detectors share storage; each route owns its history. Both modes
+  are sample peak, not true peak. LM release is automatic; the saved manual
+  release remains untouched for Peak Limiter.
 - Preserve saved-bond mutual authentication, encryption gates, teardown/session
   resets and manual-disconnect hold. Initial profile timeout retires after the
   first successful configuration on that ACL. Do not weaken security to fix
   interoperability. Retain the radio crash guard and explicit settings SAVE retry.
+- Bluetooth multipoint owns two independent radio/security/control sessions and
+  one CPU1 decoder/FIR pipeline. Only an accepted START transfers active audio;
+  pause the old peer with AVRCP and ignore its late media. Manual holds follow
+  peer addresses across slots. Never reset an active DMA frame; mask radio IRQs
+  around the inactive/drained-frame check and update. UI checkpoints remain
+  media-only and never retry control frames or change decoder ownership.
 - Preserve settings/preset migration and flash map; preset slots save only by
   explicit confirmation and never include bypass state. See architecture docs.
 

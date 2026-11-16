@@ -57,6 +57,10 @@ check_ldac_native(dis)
 print('IRQ',r['irq_total'],'bytes; assembly _start indirect calls conservatively include all taken targets')
 sizes=json.loads((out/'sizes.json').read_text());free=sym('_sram_end')-sym('_sram_start')-sum(sizes[k] for k in ('ram','pool','ramtext'))
 ir=(out/'unity.opt.ll').read_text()
+for context in ('br_links','br_channels','br_ssp','blt_contexts'):
+ assert re.search(r'^@'+context+r' = .*global \[2 x ',ir,re.M),context+' must retain two independent sessions'
+assert re.search(r'^@bti_tab = .*global \[4352 x i8\]',ir,re.M),'two-frame DMA buffer layout changed'
+print('PASS: native image retains two independent radio/security/profile/TX contexts and the bounded receiver DMA table')
 alloc=re.search(r'@plat_work_alloc\(i32(?: \w+)* (\d+)\)[^\n]*\n[^\n]*store ptr [^\n]*@btr_aac',ir)
 assert alloc,'AAC context allocation must be identifiable in target IR'
 context=int(alloc[1]);aac=context+48768
@@ -80,10 +84,11 @@ ldac=(ldac_workspace+int(ldac_alloc[1])+7)&~7
 # Verify both graph operands against the actual target allocation IR. Capture
 # keeps two full FFT windows; PCM expands backwards into its FFT workspace.
 graph_ir=re.search(r'define[^\n]*@gateway_acquire_display\([^}]+}',ir)[0]
-assert '[ 40968,' in graph_ir and '[ 32768,' in graph_ir
-assert '[ 3656,' in graph_ir and '[ 57344,' in graph_ir
+assert '[ 36872,' in graph_ir and '[ 32768,' in graph_ir
+assert '[ 3656,' in graph_ir and '[ 49152,' in graph_ir
 assert '[ 15960,' in graph_ir
-graph=40968+32768;wave=3656+57344;vectorscope=15960+32768
+assert '[ 16384,' in graph_ir
+graph=36872+32768;wave=3656+49152;vectorscope=15960+16384
 # This includes compressed queue, low-byte PCM, decoder state and alignment.
 # FIR/output preparation has no path from the CPU0 mixer. Only a nonblocking
 # mailbox kick crosses that boundary; the audio IRQ cannot join the worker.
@@ -102,7 +107,7 @@ while fx_todo:
  fx_seen.add(fn);fx_todo.extend(c[0] for c in functions[fn]['calls'])
 assert not fx_seen.intersection({'plat_work_alloc','plat_work_alloc_top','plat_work_free','malloc','calloc','realloc','free','plat_cpu2_wait','fm1_cpu1_wait'}),fx_seen
 print('PASS: linked limiter callback has no allocation/free/worker-wait path; DSP and exact ceiling table are in SRAM')
-for name,size in [('btr_pcm',8192),('btr_output',16384),('st_buf',256),('gateway_fx_presets_saved',456),('gateway_eq_work',384),('gateway_lim_work',64)]:
+for name,size in [('btr_pcm',8192),('btr_output',16384),('st_buf',256),('gateway_fx_presets_saved',522),('gateway_eq_work',384),('gateway_lim_work',64),('gateway_lm_work',64)]:
  line=next(x for x in syms.splitlines() if x.rstrip().endswith(' '+name))
  assert int(line.split()[-2],16)==size,(name,line)
 fx_line=next(x for x in syms.splitlines() if x.rstrip().endswith(' gateway_fx'))

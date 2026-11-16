@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MPL-2.0
- * Portable master EQ/peak limiter. Coefficients are prepared in foreground;
+ * Portable master EQ/dynamics. Coefficients are prepared in foreground;
  * the audio owner alone mutates filter, delay and detector histories.
  * Trapezoidal SVF: Andrew Simper, Cytomic (public-domain technical papers).
  * https://www.cytomic.com/files/dsp/SvfLinearTrapOptimised2.pdf
@@ -19,6 +19,8 @@
 #define FX_RAMP (FX_DELAY/2u+1u)
 #define FX_GAIN_ONE 16777216u /* Q24: two 65-point sums fit uint32_t exactly. */
 #define FX_RATE 44117.647f /* ALNK0 192 MHz / 17 / 256; host uses the same DSP. */
+#include "lm_maximizer.h"
+enum { FX_DYNAMICS_PEAK, FX_DYNAMICS_LM, FX_DYNAMICS_MODES };
 enum { FX_BELL, FX_LOW_PASS, FX_HIGH_PASS, FX_LOW_SHELF, FX_HIGH_SHELF, FX_TYPES };
 typedef struct { uint16_t hz; int16_t gain; uint16_t q; uint8_t type,on; } fx_band_t;
 typedef struct {
@@ -29,16 +31,21 @@ typedef struct {
     uint8_t slope[FX_BANDS],tail; /* 0..3 -> 12/24/36/48 dB/oct; v1 prefix retained. */
 } fx_params_t;
 typedef struct { float a1,a2,a3,m0,m1,m2; } fx_coef_t;
-typedef struct { fx_coef_t c[FX_BANDS][FX_STAGES]; uint8_t stages[FX_BANDS]; float post,input,ceiling,release; uint32_t mask,lim; } fx_bank_t;
+typedef struct { fx_coef_t c[FX_BANDS][FX_STAGES]; uint8_t stages[FX_BANDS]; float post,input,ceiling,release; uint32_t mask,lim,dynamics; } fx_bank_t;
 typedef struct {
     fx_bank_t bank[2],pending;
     volatile uint32_t generation;
     uint32_t seen,fade,active,at,time,head,count;
     float z[2][FX_BANDS][FX_STAGES][2][2];
     float delay[FX_DELAY][2];
-    float peaks[FX_DELAY+1u]; uint32_t stamps[FX_DELAY+1u];
-    uint32_t ramp[2][FX_RAMP],ramp_sum[2],ramp_at;
-    uint32_t latency_on,bypass_level,detector_on;
+    float peaks[FX_DELAY+1u]; uint8_t stamps[FX_DELAY+1u];
+    /* Ages never exceed 129: byte stamps preserve wrap arithmetic while
+     * reclaiming SRAM for the additional dynamics code. Detectors are exclusive. */
+    union {
+        struct { uint32_t ramp[2][FX_RAMP],sum[2],at; } peak;
+        lm_state_t lm;
+    } detector;
+    uint32_t latency_on,bypass_level,detector_on,latency_mode,detector_mode;
     float gain,release_gain;
     volatile uint32_t reduction_q16,faults,output_peak[2],meter_reduction;
     volatile uint32_t meter_enabled;
@@ -58,7 +65,7 @@ static int fx_valid(const fx_params_t *p)
 {
     if(p->tail)return 0;
     if(p->chain>1 || p->eq>1 || p->lim>1 || p->reserved || p->post< -240 || p->post>120 ||
-       p->input< -240 || p->input>240 || p->ceiling< -240 || p->ceiling>0 || p->release<10 || p->release>1000)return 0;
+       p->input< -240 || p->input>300 || p->ceiling< -240 || p->ceiling>0 || p->release<10 || p->release>1000)return 0;
     for(unsigned i=0;i<FX_BANDS;i++){
         const fx_band_t *b=&p->band[i];
         if(b->hz<20 || b->hz>19850 || b->gain< -240 || b->gain>240 || b->q<10 || b->q>1800 || b->type>=FX_TYPES || b->on>1 || p->slope[i]>=FX_STAGES)return 0;
@@ -122,16 +129,19 @@ static int fx_build(const fx_params_t *p,fx_bank_t *b)
 }
 static void fx_detector_reset(fx_engine_t *e)
 {
-    e->head=e->count=e->ramp_at=0;e->gain=e->release_gain=1.0f;
+    e->head=e->count=0;e->gain=e->release_gain=1.0f;
+    if(e->detector_mode==FX_DYNAMICS_LM){lm_reset(&e->detector.lm);return;}
+    e->detector.peak.at=0;
     for(unsigned k=0;k<2;k++){
-        e->ramp_sum[k]=FX_RAMP*FX_GAIN_ONE;
-        for(unsigned j=0;j<FX_RAMP;j++)e->ramp[k][j]=FX_GAIN_ONE;
+        e->detector.peak.sum[k]=FX_RAMP*FX_GAIN_ONE;
+        for(unsigned j=0;j<FX_RAMP;j++)e->detector.peak.ramp[k][j]=FX_GAIN_ONE;
     }
 }
 static void fx_init(fx_engine_t *e,const fx_bank_t *b)
 {
     memset(e,0,sizeof *e);
     memcpy(&e->bank[0],b,sizeof *b);memcpy(&e->bank[1],b,sizeof *b);memcpy(&e->pending,b,sizeof *b);
+    e->latency_mode=e->detector_mode=b->dynamics;
     fx_detector_reset(e);e->latency_on=e->detector_on=b->lim;
     e->bypass_level=FX_BYPASS_FADE;e->reduction_q16=65536u;
 }
@@ -182,18 +192,24 @@ static void fx_process(fx_engine_t *e,int32_t *pcm,uint32_t n,float master_gain)
         /* Fade to exact silence before changing time alignment. The delay
          * stays warm even in bypass; no interpolation of time or dry/wet comb.
          * Reversing a request reverses the existing envelope, without jumps. */
-        if(b->lim!=e->latency_on){
+        if(b->lim!=e->latency_on || (b->lim && b->dynamics!=e->latency_mode)){
             if(e->bypass_level)e->bypass_level--;
-            if(!e->bypass_level)e->latency_on=b->lim;
+            if(!e->bypass_level){e->latency_on=b->lim;e->latency_mode=b->dynamics;}
         }else if(e->bypass_level<FX_BYPASS_FADE)e->bypass_level++;
+        if(e->latency_on && e->latency_mode==FX_DYNAMICS_LM){
+            unsigned tap=(e->at+FX_DELAY-LM_LOOK)&(FX_DELAY-1u);
+            delayed[0]=e->delay[tap][0];delayed[1]=e->delay[tap][1];
+        }
         float g=1.0f;
         unsigned detecting=b->lim || e->latency_on;
         if(detecting){
-        if(!e->detector_on)fx_detector_reset(e);
+        unsigned mode=e->latency_on?e->latency_mode:b->dynamics;
+        unsigned look=mode==FX_DYNAMICS_LM?LM_LOOK:FX_DELAY;
+        if(!e->detector_on || e->detector_mode!=mode){e->detector_mode=mode;fx_detector_reset(e);}
         e->detector_on=1;
         float peak=fm_fabsf(x[0]);if(fm_fabsf(x[1])>peak)peak=fm_fabsf(x[1]);
-        /* Window includes output sample and all 128 future samples. */
-        while(e->count && e->time-e->stamps[e->head]>FX_DELAY){if(++e->head>FX_DELAY)e->head=0;e->count--;}
+        /* Window includes the output sample and every lookahead sample. */
+        while(e->count && (uint8_t)(e->time-e->stamps[e->head])>look){if(++e->head>FX_DELAY)e->head=0;e->count--;}
         while(e->count){unsigned end=e->head+e->count-1u;if(end>FX_DELAY)end-=FX_DELAY+1u;
             if(e->peaks[end]>peak)break;
             e->count--;}
@@ -201,6 +217,8 @@ static void fx_process(fx_engine_t *e,int32_t *pcm,uint32_t n,float master_gain)
         e->peaks[end]=peak;e->stamps[end]=e->time;e->count++;
         float ceiling=b->ceiling,window=e->peaks[e->head];
         float required=window>ceiling?ceiling/window:1.0f;
+        if(mode==FX_DYNAMICS_LM)e->gain=lm_gain(&e->detector.lm,peak/ceiling,fm_maxf(1,window/ceiling));
+        else {
         /* Existing exponential release, followed by a finite S-shaped attack.
          * Two 65-point box averages have a triangular, nonnegative kernel of
          * support 129 (128 intervals). Its integrated step is a curved ramp,
@@ -213,12 +231,13 @@ static void fx_process(fx_engine_t *e,int32_t *pcm,uint32_t n,float master_gain)
         if(e->release_gain>required)e->release_gain=required;
         uint32_t v=(uint32_t)(e->release_gain*(float)FX_GAIN_ONE);
         for(unsigned j=0;j<2;j++){
-            e->ramp_sum[j]-=e->ramp[j][e->ramp_at];
-            e->ramp[j][e->ramp_at]=v;e->ramp_sum[j]+=v;
-            v=e->ramp_sum[j]/FX_RAMP;
+            e->detector.peak.sum[j]-=e->detector.peak.ramp[j][e->detector.peak.at];
+            e->detector.peak.ramp[j][e->detector.peak.at]=v;e->detector.peak.sum[j]+=v;
+            v=e->detector.peak.sum[j]/FX_RAMP;
         }
-        if(++e->ramp_at==FX_RAMP)e->ramp_at=0;
+        if(++e->detector.peak.at==FX_RAMP)e->detector.peak.at=0;
         e->gain=(float)v*(1.0f/FX_GAIN_ONE);
+        }
         g=e->latency_on?e->gain:1.0f;
         /* Rounding and live parameter/startup safety only. Steady-state
          * attenuation has already reached its target through anticipation. */

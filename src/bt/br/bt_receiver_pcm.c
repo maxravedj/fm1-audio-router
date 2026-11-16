@@ -16,6 +16,17 @@ static volatile uint32_t btr_out_w,btr_out_r;
 static volatile uint8_t btr_worker_enabled=1;
 static uint32_t btr_worker_started,btr_output_underruns;
 static uint8_t btr_worker_outstanding;
+/* Only an actual output starvation enables concealment. Normal FIR output
+ * stays bit-exact, with no added buffering or allocations in the callback. */
+#define BTR_RECOVERY_FRAMES 64u
+static int32_t btr_last_output[2];
+static uint8_t btr_gap,btr_fade_down,btr_fade_up;
+static int32_t btr_recovery_gain(int32_t sample,unsigned gain)
+{
+    /* Exact signed sample*gain/64 without a wide multiply beside SRAM loads
+     * (pi32v2 wide-result registers have special load/ABI restrictions). */
+    return (sample/64)*(int32_t)gain+((sample%64)*(int32_t)gain)/64;
+}
 static void btr_resample_fill(void);
 static void btr_resample_poll(void);
 static void btr_decode_poll_irq(void);
@@ -81,6 +92,8 @@ void btr_audio_reset(uint32_t rate)
     btr_step=rate==48000?71332:65536;
 #ifdef APP_BT_RESAMPLE_CPU2
     btr_out_r=btr_out_w=0;btr_output_underruns=0;btr_worker_enabled=1;
+    btr_gap=btr_fade_down=btr_fade_up=0;
+    btr_last_output[0]=btr_last_output[1]=0;
 #endif
 }
 static void btr_pcm_put(const int16_t *p,uint32_t frames)
@@ -165,7 +178,10 @@ static void btr_resample_poll(void)
 void btr_pcm_mix(int32_t *lr,uint32_t n,uint32_t gain)
 {
     uint32_t r=btr_out_r,w=btr_out_w;plat_cpu2_sync();
-    if(!btr_primed){if(w-r<1536u){btr_resample_poll();btr_decode_poll_irq();return;}btr_primed=1;}
+    if(!btr_primed){
+        if(w-r>=1536u && !btr_fade_down){btr_primed=1;if(btr_gap)btr_fade_up=BTR_RECOVERY_FRAMES;btr_gap=0;}
+        else if(!btr_fade_down){btr_resample_poll();btr_decode_poll_irq();return;}
+    }
     plat_profile_span_t timing=plat_profile_begin();
 #ifdef APP_USB_OUT_ROUTING
     unsigned record_mode=app_usb_out_bt_mode();
@@ -177,8 +193,34 @@ void btr_pcm_mix(int32_t *lr,uint32_t n,uint32_t gain)
     plat_audio_monitor_bt_begin();
 #endif
     for(uint32_t i=0;i<n;i++) {
-        if(r==w){btr_output_underruns++;btr_primed=0;break;}
-        const int32_t *p=btr_output[r&(BTR_OUT_RING-1)];
+        int32_t faded[2];const int32_t *p;
+        int real=btr_primed;
+        if(real && r==w){
+            /* CPU1 can publish while this callback consumes its initial
+             * snapshot. Check the live cursor before declaring starvation;
+             * a stale snapshot must not start the fade/reprime sequence. */
+            w=btr_out_w;plat_cpu2_sync();real=r!=w;
+        }
+        if(real){
+            p=btr_output[r&(BTR_OUT_RING-1)];r++;
+            for(unsigned ch=0;ch<2;ch++)btr_last_output[ch]=p[ch];
+            if(btr_fade_up){
+                unsigned gain=BTR_RECOVERY_FRAMES-btr_fade_up+1u;btr_fade_up--;
+                for(unsigned ch=0;ch<2;ch++)faded[ch]=btr_recovery_gain(p[ch],gain);
+                p=faded;
+                /* If recovery itself starves, continue from the audible
+                 * value instead of jumping back to the unfaded sample. */
+                for(unsigned ch=0;ch<2;ch++)btr_last_output[ch]=p[ch];
+            }
+        }else{
+            if(btr_primed){
+                btr_output_underruns++;btr_primed=0;btr_gap=1;
+                btr_fade_down=BTR_RECOVERY_FRAMES;btr_fade_up=0;
+            }
+            unsigned gain=btr_fade_down?--btr_fade_down:0;
+            for(unsigned ch=0;ch<2;ch++)faded[ch]=btr_recovery_gain(btr_last_output[ch],gain);
+            p=faded;
+        }
 #ifdef APP_AUDIO_MONITOR
         #ifdef APP_BT_APTX
         if(btr_pcm_low)plat_audio_monitor_bt_sample(p[0],p[1]);else
@@ -225,7 +267,6 @@ void btr_pcm_mix(int32_t *lr,uint32_t n,uint32_t gain)
 #endif
             lr[2*i+ch]+=sample;
         }
-        r++;
     }
 #ifdef APP_INPUT_FADERS
     if(fader_meter)app_input_fader_meter_peaks(1,fader_peak[0],fader_peak[1]);

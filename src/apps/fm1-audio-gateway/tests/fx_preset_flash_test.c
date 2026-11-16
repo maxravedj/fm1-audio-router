@@ -4,6 +4,7 @@
 #include "../../../host/plat_host.c"
 #undef main
 #include <assert.h>
+#include <stddef.h>
 static uint8_t nor[0x100000];
 static int cut=-1;
 static int st_read(uint32_t off,void *dst,uint32_t n){assert(off>=0xD8000 && off+n<=0xDA000);memcpy(dst,nor+off,n);return 0;}
@@ -16,18 +17,27 @@ static int st_prog(uint32_t off,const void *src,uint32_t n){
 #include "../../../device/storage.c"
 int main(void){
  memset(nor,255,sizeof nor);palette_set(APP_PALETTE);app_init();
- assert(sizeof st_buf==256 && sizeof(gateway_fx_presets_t)==456);
+ assert(sizeof st_buf==256 && sizeof(gateway_fx_presets_t)==522 && offsetof(gateway_fx_presets_t,lm)==456);
  gateway_fx_presets_t first=gateway_fx_presets_saved,next=first,loaded;
- next.eq[2].band[0].hz=1234;next.lim[5].ceiling=-68;next.selected[0]=2;next.selected[1]=5;
+ next.eq[2].band[0].hz=1234;next.lim[5].ceiling=-68;next.selected[0]=2;next.selected[1]=5;next.lm[7].input=280;next.lm_selected=7;
  assert(!st_save(OBJ_FX,&first,sizeof first));
- for(int i=0;i<3;i++){
+ for(int i=0;i<4;i++){
   cut=i;assert(st_save(OBJ_FX,&next,sizeof next));cut=-1;
-  assert(st_load(OBJ_FX,&loaded,sizeof loaded)==456 && !memcmp(&loaded,&first,456));
+  assert(st_load(OBJ_FX,&loaded,sizeof loaded)==522 && !memcmp(&loaded,&first,522));
  }
  assert(!st_save(OBJ_FX,&next,sizeof next));
- assert(st_load(OBJ_FX,&loaded,sizeof loaded)==456 && !memcmp(&loaded,&next,456));
+ assert(st_load(OBJ_FX,&loaded,sizeof loaded)==522 && !memcmp(&loaded,&next,522));
  nor[0xD9000+256+100]^=1; /* Corrupted latest payload falls back to A. */
- assert(st_load(OBJ_FX,&loaded,sizeof loaded)==456 && !memcmp(&loaded,&first,456));
+ assert(st_load(OBJ_FX,&loaded,sizeof loaded)==522 && !memcmp(&loaded,&first,522));
+ /* A failed first v5 write must leave the smaller legacy bank readable. */
+ memset(nor,255,sizeof nor);first.version=4;
+ assert(!st_save(OBJ_FX,&first,456));
+ for(int i=0;i<4;i++){
+  cut=i;assert(st_save(OBJ_FX,&next,sizeof next));cut=-1;
+  assert(st_size(OBJ_FX)==456 && st_load(OBJ_FX,&loaded,sizeof loaded)==456 && !memcmp(&loaded,&first,456));
+ }
+ assert(!st_save(OBJ_FX,&next,sizeof next));
+ assert(st_size(OBJ_FX)==522 && st_load(OBJ_FX,&loaded,sizeof loaded)==522 && !memcmp(&loaded,&next,522));
  for(unsigned i=0;i<sizeof nor;i++)if(i<0xD8000 || i>=0xDA000)assert(nor[i]==255);
- puts("PASS: actual 456-byte AFX v4 bank over two flash pages, cuts before every page/commit retain old bank, CRC fallback, unchanged FX-only sectors and 256-byte bounce buffer");
+ puts("PASS: actual 522-byte AFX v5 bank over three flash pages; cuts before every page/commit retain v4/v5 bank, CRC fallback, unchanged FX-only sectors and 256-byte bounce buffer");
 }

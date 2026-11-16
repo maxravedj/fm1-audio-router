@@ -9,7 +9,8 @@
 static int br_ui_media_ready(void)
 {
     if(!brl.on || brl.closing || brl.phase!=BR_LINKED || !brl.setup ||
-       !brl.encrypted || brc.profile.state!=BTR_STREAMING || !btr_worker_enabled)return 0;
+       !brl.encrypted || brc.pending || brc.profile.state!=BTR_STREAMING || !btr_worker_enabled ||
+       !brc.ch[2].cfg_in || !brc.ch[2].cfg_out)return 0;
     /* Media handlers allocate lazily. Only enter after the ordinary foreground
      * poll has prepared every required buffer. Nothing here can invalidate it. */
     switch(brc.profile.codec) {
@@ -28,13 +29,28 @@ static int br_ui_media_ready(void)
 }
 void plat_bt_receiver_service(void)
 {
+#ifdef APP_BT_MULTIPOINT
+    uint8_t saved=br_current;
+    if(br_audio_link>=BR_LINKS)return;
+    br_current=br_audio_link;
+#endif
     static uint32_t last_ms;
     uint32_t now=plat_ms();
-    if(now==last_ms || !br_ui_media_ready())return;
+    if(now==last_ms || !br_ui_media_ready()){
+#ifdef APP_BT_MULTIPOINT
+        br_current=saved;
+#endif
+        return;
+    }
     last_ms=now;
     for(unsigned i=0;i<8u && BTI_RING_HAVE && bti_rr!=bti_rw;i++) {
         RING_PUBLISH();
         const struct bti_rx *r=BTI_RX_AT(bti_rr);
+#ifdef APP_BT_MULTIPOINT
+        /* A different peer's packet is still FIFO control from this pump's
+         * perspective. Let the ordinary poll process or discard it safely. */
+        if(r->link!=br_audio_link || r->generation!=brl.generation)break;
+#endif
         if(r->kind!=BTI_K_ACL || r->len>sizeof r->data)break;
         /* Media uses local CID 66. Continuations belong to the one existing
          * reassembly, whose header must already identify that same channel.
@@ -42,10 +58,13 @@ void plat_bt_receiver_service(void)
         if(r->idx==2) {
             if(r->len<4u || br_le16(r->data+2)!=66u)break;
         }else if(r->idx!=1 || brc.have<4u || br_le16(brc.rx+2)!=66u)break;
-        br_acl(r->idx,r->data,r->len);
+        br_media_acl(r->idx,r->data,r->len);
         RING_PUBLISH();bti_rr++;
     }
     btr_decode_poll_irq(); /* Nonblocking CPU1 dispatch; still on CPU0 foreground. */
+#ifdef APP_BT_MULTIPOINT
+    br_current=saved;
+#endif
 }
 #else
 void plat_bt_receiver_service(void) {}

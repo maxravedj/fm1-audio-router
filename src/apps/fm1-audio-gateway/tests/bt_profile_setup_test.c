@@ -11,7 +11,7 @@
 static struct btr_counters btr_stats;
 static uint8_t ba_live,last[1024];
 static unsigned last_n,secure=1,flushes,prepared,aac_packets,sbc_packets;
-static void send_frame(const uint8_t *p,unsigned n){assert(n<=sizeof last);memcpy(last,p,n);last_n=n;}
+static int send_frame(const uint8_t *p,unsigned n){assert(n<=sizeof last);memcpy(last,p,n);last_n=n;return 1;}
 static void app_bt_aac_prepare(void){prepared++;}
 static void btr_aac_media(const uint8_t *p,unsigned n,const uint8_t *c){(void)p;(void)n;(void)c;aac_packets++;}
 void btr_media(const uint8_t *p,unsigned n,const uint8_t *c){(void)p;(void)n;(void)c;sbc_packets++;}

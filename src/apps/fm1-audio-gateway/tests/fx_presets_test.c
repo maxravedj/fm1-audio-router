@@ -12,7 +12,7 @@ static void reboot(void){held_btn=0;app_init();app_ui_init();tap(B_FX);assert(ga
 static void title(void){
  assert(!!(lights_b&(1u<<B_SAVE))==gateway_fx_preset_dirty(gateway_fx_limiter));
  assert(!(dim_btn&(1u<<B_SAVE)));
- app_loop();const char *t=gateway_fx_limiter?"FX: PEAK LIMITER":"FX: EQUALIZER";char label[40];
+ app_loop();const char *t=gateway_fx_limiter?"FX: DYNAMICS: Peak Limiter":"FX: EQUALIZER";char label[40];
  gateway_fx_format(label,"Preset ",gateway_fx_selected[gateway_fx_limiter]+1,0,"");
  static uint16_t actual[240*16];memcpy(actual,fb+18*240,sizeof actual);
  cv_begin(240,16,C_BLACK);cv_text(5,1,&FONT_T,t,(gateway_fx_limiter?gateway_fx_params.lim:gateway_fx_params.eq)?C_WHITE:C_GRAY);
@@ -61,19 +61,19 @@ static void independent_bypass(void){
  for(unsigned i=0;i<8;i++){turn(EN_PRESET,1);assert(gateway_fx_params.eq && !gateway_fx_params.lim);}
  hold_save();dialog_text();tap(B_OCTUP);assert(!gateway_fx_params.lim && gateway_fx_params.eq);title();
  now_ms+=750;app_loop();reboot();assert(gateway_fx_params.eq && !gateway_fx_params.lim);
- gateway_fx_presets_t bank;assert(plat_store_load(OBJ_FX,&bank,sizeof bank)==456 && bank.enabled==1 && bank.version==4);
+ gateway_fx_presets_t bank;assert(plat_store_load(OBJ_FX,&bank,sizeof bank)==522 && bank.enabled==1 && bank.version==5);
  for(unsigned i=0;i<8;i++)assert(!bank.eq[i].reserved && !bank.lim[i].reserved[0] && !bank.lim[i].reserved[1]);
  tap(B_HOME);assert(!(dim_btn&(1u<<B_SAVE)));tap(B_EDIT);assert(dim_btn&(1u<<B_SAVE));
  /* Migrate the actual v3 byte layout, including different flags per slot. */
  bank.version=3;bank.enabled=0;bank.selected[0]=2;bank.selected[1]=5;
  for(unsigned i=0;i<8;i++){bank.eq[i].reserved=i%2;bank.lim[i].reserved[0]=i%2;}
  bank.eq[2].post=24;bank.lim[5].ceiling=-70;
- assert(!plat_store_save(OBJ_FX,&bank,sizeof bank));reboot();
+ assert(!plat_store_save(OBJ_FX,&bank,456));reboot();
  assert(gateway_fx_selected[0]==2 && gateway_fx_selected[1]==5 && !gateway_fx_params.eq && gateway_fx_params.lim);
  assert(gateway_fx_params.post==24 && gateway_fx_params.ceiling==-70 && !gateway_fx_preset_dirty(0));
  for(unsigned i=0;i<8;i++)assert(!gateway_eq_work[i].reserved && !gateway_lim_work[i].reserved[0]);
  turn(EN_PRESET,1);assert(!gateway_fx_params.eq && gateway_fx_params.lim);now_ms+=750;app_loop();
- assert(plat_store_load(OBJ_FX,&bank,sizeof bank)==456 && bank.version==4 && bank.enabled==2 && bank.eq[2].post==24 && bank.lim[5].ceiling==-70);
+ assert(plat_store_load(OBJ_FX,&bank,sizeof bank)==522 && bank.version==5 && bank.enabled==2 && bank.eq[2].post==24 && bank.lim[5].ceiling==-70);
  /* Legacy single-snapshot formats retain effect flags as metadata too. */
  for(unsigned version=1;version<=2;version++){
   gateway_fx_record_t old={{'A','F','X'},version,{0}};fx_defaults(&old.params);
@@ -97,7 +97,7 @@ int main(void){
  tap(B_FX);assert(!gateway_fx_limiter && (lit_btn&(1u<<B_SEL)));
  assert(!gateway_fx_params.chain && !gateway_fx_dirty && store_writes==boot_writes);
  puts("PASS: fresh FX store defaults to chain bypassed, EQ/limiter enabled, bright SEL in both editors, zero DSP delay and no implicit save");
- assert(sizeof(gateway_eq_preset_t)==48 && sizeof(gateway_lim_preset_t)==8 && sizeof(gateway_fx_presets_t)==456);
+ assert(sizeof(gateway_eq_preset_t)==48 && sizeof(gateway_lim_preset_t)==8 && sizeof(gateway_fx_presets_t)==522);
  for(unsigned i=0;i<8;i++)assert(!memcmp(&gateway_eq_work[i],&gateway_eq_work[0],48) && !memcmp(&gateway_lim_work[i],&gateway_lim_work[0],8));
  assert(!gateway_fx_selected[0] && !gateway_fx_selected[1]);title();
  /* Every EQ has its own volatile edit. Cycling applies it automatically,
@@ -118,7 +118,7 @@ int main(void){
  assert(!gateway_fx_selected[1] && gateway_fx_selected[0]==6);title();
  save();assert(!gateway_fx_preset_dirty(1));gateway_lim_preset_t saved_lim=gateway_lim_work[0];
  turn(EN_PRESET,4);now_ms+=750;app_loop(); /* Only selected positions/chain auto-save. */
- gateway_fx_presets_t persisted;assert(plat_store_load(OBJ_FX,&persisted,sizeof persisted)==456 && persisted.version==4);
+ gateway_fx_presets_t persisted;assert(plat_store_load(OBJ_FX,&persisted,sizeof persisted)==522 && persisted.version==5);
  assert(persisted.selected[0]==6 && persisted.selected[1]==4);
  assert(!memcmp(&persisted.eq[6],&saved_eq,48) && !memcmp(&persisted.lim[0],&saved_lim,8));
  assert(persisted.eq[1].band[0].hz==80 && !persisted.lim[4].input);
@@ -147,18 +147,22 @@ int main(void){
  gateway_view_changed();assert(gateway_fx_dialog==1); /* Codec/view refresh cannot confirm or discard the dialog. */
  gateway_bt_mode=1;plat_bt_receiver_on(1);int pairing=plat_bt_receiver_pairing();
  store_fail=0;tap(B_OCTUP);assert(!gateway_fx_dialog && !gateway_fx_preset_dirty(1) && plat_bt_receiver_pairing()==pairing && !gateway_oct_tracking);
- assert(plat_store_load(OBJ_FX,&persisted,sizeof persisted)==456);
- for(unsigned bad=0;bad<12;bad++){
+ assert(plat_store_load(OBJ_FX,&persisted,sizeof persisted)==522);
+ for(unsigned bad=0;bad<19;bad++){
   gateway_fx_presets_t broken=persisted;
   if(bad==0)broken.selected[0]=8;if(bad==1)broken.selected[1]=255;
   if(bad==2)broken.chain=2;if(bad==3)broken.enabled=4;
   if(bad==4)broken.eq[7].slope[4]=4;if(bad==5)broken.lim[7].release=0;
-  if(bad==6)broken.lim[4].reserved[1]=1;if(bad==7)broken.version=5;
+  if(bad==6)broken.lim[4].reserved[1]=1;if(bad==7)broken.version=6;
   if(bad==8)broken.eq[4].reserved=1;if(bad==9)broken.lim[4].reserved[0]=1;
   if(bad==10){broken.version=3;broken.enabled=0;broken.eq[4].reserved=2;}
   if(bad==11){broken.version=3;broken.enabled=1;}
-  assert(!plat_store_save(OBJ_FX,&broken,sizeof broken));reboot();
-  assert(!gateway_fx_selected[0] && !gateway_fx_selected[1] && !gateway_fx_params.chain && !gateway_fx_preset_dirty(0));
+  if(bad==12)broken.lm_selected=8;if(bad==13)broken.reserved=1;
+  if(bad==14)broken.lm[7].input=301;if(bad==15)broken.lm[7].ceiling=1;
+  if(bad==16)broken.lm[7].release=0;
+  if(bad==17)broken.lm[7].reserved[0]=1;if(bad==18)broken.lm[7].reserved[1]=1;
+  assert(!plat_store_save(OBJ_FX,&broken,broken.version==3?456:sizeof broken));reboot();
+  assert(!gateway_fx_selected[0] && !gateway_fx_selected[1] && !gateway_fx_selected[2] && !gateway_fx_params.chain && !gateway_fx_preset_dirty(0));
   assert(gateway_fx_params.eq && gateway_fx_params.lim);
  }
  independent_bypass();assert(!cv_cuts && !cpu_work_depth);

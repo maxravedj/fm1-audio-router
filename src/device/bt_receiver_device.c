@@ -43,24 +43,59 @@ int plat_bt_receiver_on(int on)
     if(on) {
         plat_ble_enable(0);ble_start();
         if(!own_bta_attached) {uint32_t f=irq_save();fm1_guard_unlock_top();bti_attach();fm1_guard_lock_top();irq_restore(f);own_bta_attached=1;}
+#ifdef APP_BT_MULTIPOINT
+        if(!br_on){
+            br_on=1;br_pairing=0;br_audio_link=255;br_held_valid=br_held_next=0;
+            for(unsigned i=0;i<BR_LINKS;i++){
+                br_current=(uint8_t)i;br_reset();brl.on=1;brl.pairing=brl.closing=0;
+                brl.reconnect_hold=0;br_retry_at=fm1_ms+3000u+1000u*i;br_retry_index=(uint8_t)i;br_listen();
+            }
+            br_current=0;
+        }
+#else
         if(!brl.on){br_reset();br_retry_at=fm1_ms+3000;br_retry_index=0;brl.reconnect_hold=0;brl.on=1;brl.pairing=0;br_listen();}
+#endif
         return bti_busy()?0:-1;
     }
+#ifdef APP_BT_MULTIPOINT
+    br_on=br_pairing=0;
+    fm1_br_irqs_hold(1);bti_run_stop();fm1_br_irqs_hold(0);
+    for(unsigned i=0;i<BR_LINKS;i++){
+        br_current=(uint8_t)i;brl.on=brl.pairing=brl.closing=0;brl.generation++;br_reset();
+    }
+    br_audio_link=255;br_current=0;
+#else
     if(brl.on){brl.on=0;brl.pairing=0;br_drop(1,BR_FAIL_USER,0);}
+#endif
     return 0;
 }
 void plat_bt_receiver_pair(int on)
 {
     br_pair(on);
 }
-int plat_bt_receiver_pairing(void) {return brl.on&&brl.pairing;}
-int plat_bt_receiver_connected(void) {return brl.on&&brl.encrypted&&brl.setup&&brl.phase==BR_LINKED;}
+int plat_bt_receiver_pairing(void) {
+#ifdef APP_BT_MULTIPOINT
+    return br_on && br_pairing;
+#else
+    return brl.on&&brl.pairing;
+#endif
+}
+int plat_bt_receiver_connected(void) {
+    for(unsigned i=0;i<BR_LINKS;i++)if(br_links[i].on && !br_links[i].closing && br_links[i].encrypted &&
+        br_links[i].setup && br_links[i].phase==BR_LINKED)return 1;
+    return 0;
+}
 int plat_bt_receiver_codec(void)
 {
-    if(!plat_bt_receiver_connected() || brc.profile.state==BTR_IDLE)return PLAT_BT_CODEC_NONE;
-    return brc.profile.codec==BTR_CODEC_SBC?PLAT_BT_CODEC_SBC:
-        brc.profile.codec==BTR_CODEC_AAC?PLAT_BT_CODEC_AAC:
-        brc.profile.codec==BTR_CODEC_APTX?PLAT_BT_CODEC_APTX:brc.profile.codec==BTR_CODEC_APTX_HD?PLAT_BT_CODEC_APTX_HD:brc.profile.codec==BTR_CODEC_LDAC?PLAT_BT_CODEC_LDAC:PLAT_BT_CODEC_NONE;
+    unsigned selected=0;
+#ifdef APP_BT_MULTIPOINT
+    selected=br_selected_link();
+#endif
+    const struct btr_profile *profile=&br_channels[selected].profile;
+    if(!plat_bt_receiver_connected() || profile->state==BTR_IDLE)return PLAT_BT_CODEC_NONE;
+    return profile->codec==BTR_CODEC_SBC?PLAT_BT_CODEC_SBC:
+        profile->codec==BTR_CODEC_AAC?PLAT_BT_CODEC_AAC:
+        profile->codec==BTR_CODEC_APTX?PLAT_BT_CODEC_APTX:profile->codec==BTR_CODEC_APTX_HD?PLAT_BT_CODEC_APTX_HD:profile->codec==BTR_CODEC_LDAC?PLAT_BT_CODEC_LDAC:PLAT_BT_CODEC_NONE;
 }
 unsigned plat_bt_receiver_graphs(void)
 {
@@ -87,5 +122,14 @@ void plat_bt_receiver_codecs(unsigned mask)
 {
     if(!mask || mask>31 || btr_codec_mask==mask)return;
     btr_codec_mask=(uint8_t)mask;
+#ifdef APP_BT_MULTIPOINT
+    uint8_t saved=br_current;
+    for(unsigned i=0;i<BR_LINKS;i++){
+        br_current=(uint8_t)i;
+        if(brl.on && brl.phase>=BR_CONNECTING)br_drop(1,BR_FAIL_USER,0);
+    }
+    br_current=saved;
+#else
     if(brl.on && brl.phase>=BR_CONNECTING)br_drop(1,BR_FAIL_USER,0);
+#endif
 }

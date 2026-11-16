@@ -5,14 +5,16 @@ from pathlib import Path
 import argparse, os, subprocess
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--auth-only',action='store_true',help='run receiver session and shared SSP tests; skip unchanged page timing/LMP tests')
+parser.add_argument('--multipoint-only',action='store_true',help='run the two-client receiver/control register model only')
 args=parser.parse_args()
 APP=Path(__file__).resolve().parents[1]
 SRC=APP.parents[1]
 OUT=(APP/'build').resolve()/'bt-page-tests';OUT.mkdir(exist_ok=True)
-for source in (APP/'tests/bt_page_test.c',APP/'tests/bt_link_test.c',SRC/'tests/bt/bt_ssp_test.c',SRC/'tests/bt/bt_lmp_test.c'):
-    if args.auth_only and source.stem not in {'bt_link_test','bt_ssp_test'}:continue
+for source in (APP/'tests/bt_page_test.c',APP/'tests/bt_link_test.c',APP/'tests/bt_multipoint_test.c',SRC/'tests/bt/bt_ssp_test.c',SRC/'tests/bt/bt_lmp_test.c'):
+    if args.auth_only and source.stem not in {'bt_link_test','bt_ssp_test','bt_multipoint_test'}:continue
+    if args.multipoint_only and source.stem!='bt_multipoint_test':continue
     binary=OUT/source.stem
-    decoder=sorted((SRC/'bt/br/sbc_dec').glob('*.c')) if source.stem=='bt_link_test' else []
+    decoder=sorted((SRC/'bt/br/sbc_dec').glob('*.c')) if source.stem in {'bt_link_test','bt_multipoint_test'} else []
     subprocess.run([os.environ.get('CC','cc'),'-std=c99','-O1','-g',f'-I{SRC / "bt/br/sbc_dec"}',
         '-fsanitize=address,undefined','-fno-sanitize-recover=all',str(source),*map(str,decoder),'-lm','-o',str(binary)],check=True)
     subprocess.run([str(binary)],check=True)

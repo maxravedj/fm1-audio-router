@@ -2,12 +2,14 @@
 /* Bounded protocol metadata only: never addresses, link keys, nonces or PCM.
  * Main owns traces/faults. The TX handover hook only counts/stores integers. */
 #define BR_TRACE_N 16u
-struct br_trace { uint32_t ms;uint16_t op;uint8_t tid,before,after; };
+struct br_trace { uint32_t ms;uint16_t op;uint8_t tid:1,before:7;uint8_t after; };
+_Static_assert(sizeof(struct br_trace)==8 && BTP_FAILED<128,"lossless bounded SSP trace packing");
 static struct {
     volatile uint32_t sent,last_tx;
     uint32_t trace_w,last_op;
     struct br_trace trace[BR_TRACE_N];
-} brd;
+} br_debug[BR_LINKS];
+#define brd (br_debug[br_current])
 static struct {
     uint32_t valid,reason,detail,phase,sec,at,age,gap,good,bad,syncs,carries,bit,offset,sent,pending,last_tx,last_op,rxbit,status;
     uint32_t trace_n;
@@ -44,7 +46,7 @@ static char *br_debug_numbers(char *p,uint32_t a,uint32_t b,uint32_t c)
 {
     p=put_dec(p,a);*p++=' ';p=put_dec(p,b);*p++=' ';p=put_dec(p,c);*p=0;return p;
 }
-static const char *br_debug_line(uint32_t row)
+static const char *br_debug_line_current(uint32_t row)
 {
     static char text[48];const char *label=0;uint32_t a=0,b=0,c=0;
     switch(row) {
@@ -98,6 +100,22 @@ static const char *br_debug_line(uint32_t row)
         }
         i-=6;
 #endif
+#ifdef BTR_RX_DROPPED
+        if(!i){label="BT ingress ";a=BTR_RX_DROPPED();b=BTR_RX_QUEUED();c=BTI_RING;break;}
+        i--;
+#endif
+#ifdef APP_BT_MULTIPOINT
+        if(i<3){
+            if(!i){label="BT links ";for(unsigned j=0;j<BR_LINKS;j++)a+=br_links[j].encrypted!=0;
+                b=br_audio_link<BR_LINKS?br_audio_link+1u:0;c=br_radio+1u;
+            }else{
+                unsigned peer=i-1u;label=peer?"BT peer2 ":"BT peer1 ";
+                a=br_links[peer].phase;b=br_ssp[peer].st;c=br_channels[peer].profile.state;
+            }
+            break;
+        }
+        i-=3;
+#endif
 #ifdef APP_BT_LDAC
         if(brc.profile.codec==BTR_CODEC_LDAC){
             if(i<5){label=btr_ldac_debug(i,&a,&b,&c);break;}
@@ -114,4 +132,15 @@ static const char *br_debug_line(uint32_t row)
     }
     char *p=text;while(*label)*p++=*label++;
     br_debug_numbers(p,a,b,c);return text;
+}
+static const char *br_debug_line(uint32_t row)
+{
+#ifdef APP_BT_MULTIPOINT
+    uint8_t saved=br_current;br_current=(uint8_t)br_selected_link();
+#endif
+    const char *line=br_debug_line_current(row);
+#ifdef APP_BT_MULTIPOINT
+    br_current=saved;
+#endif
+    return line;
 }

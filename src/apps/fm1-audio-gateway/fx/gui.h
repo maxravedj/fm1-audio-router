@@ -61,7 +61,7 @@ static void gateway_fx_curves(const fx_params_t *p,uint8_t curves[6][FX_GRAPH_W]
             curves[i][x]=gateway_fx_y(db);
             if(p->band[i].on)total+=db;
         }
-        curves[5][x]=gateway_fx_y(p->eq?total:0);
+        curves[5][x]=gateway_fx_y(total);
     }
 }
 static void gateway_fx_graph(void)
@@ -72,7 +72,7 @@ static void gateway_fx_graph(void)
     for(unsigned band=34;band<155;band+=APP_CANVAS_PX/240u){
         unsigned h=155-band;if(h>APP_CANVAS_PX/240u)h=APP_CANVAS_PX/240u;
         cv_begin(240,h,C_BLACK);cv_oy=-(int)band;
-        for(unsigned x=0;x<FX_GRAPH_W;x++){
+        if(gateway_fx_params.eq)for(unsigned x=0;x<FX_GRAPH_W;x++){
             unsigned y=curves[5][x],lo=y<87?y:87,hi=y<87?87:y;
             cv_rect(FX_GRAPH_X+x,lo,1,hi-lo,RGB(22,24,13));
         }
@@ -187,8 +187,14 @@ static void gateway_fx_limiter_region(unsigned left,unsigned top,unsigned width,
         if(full || left){gateway_peak_label(text,gateway_fx_meter[0].peak>gateway_fx_meter[1].peak?gateway_fx_meter[0].peak:gateway_fx_meter[1].peak);
         cv_text(158-(int)left+(58-text_w(&FONT_XS,text))/2,35,&FONT_XS,text,active?C_WHITE:C_GRAY);}
         if(full){gateway_fx_limiter_value(48,"K1 INPUT",gateway_fx_params.input,1,"dB");
-        gateway_fx_limiter_value(99,"K2 RELEASE",gateway_fx_params.release,0,"ms");
-        gateway_fx_limiter_value(150,"K3 CEILING",gateway_fx_params.ceiling,1,"dB");}
+        if(gateway_dynamics_mode==FX_DYNAMICS_LM){
+            gateway_fx_limiter_value(99,"K2 CEILING",gateway_fx_params.ceiling,1,"dB");
+            int space=FX_LIMITER_SCALE_RIGHT-text_w(&FONT_T,"-60");
+            gateway_fx_center(0,150,space,"RELEASE",C_GRAY);
+            cv_text((space-text_w(&FONT_L,"AUTO"))/2,166,&FONT_L,"AUTO",C_WHITE);
+        }else{
+            gateway_fx_limiter_value(99,"K2 RELEASE",gateway_fx_params.release,0,"ms");
+            gateway_fx_limiter_value(150,"K3 CEILING",gateway_fx_params.ceiling,1,"dB");}}
         cv_oy=0;cv_blit(left,band);
     }
 }
@@ -225,7 +231,7 @@ static void gateway_fx_status(void)
 static void gateway_fx_draw(void)
 {
     if(gateway_fx_dialog){
-        char text[40];gateway_fx_format(text,gateway_fx_dialog==2?"Initialize preset ":"Save preset ",gateway_fx_selected[gateway_fx_limiter]+1,0,"?");
+        char text[40];gateway_fx_format(text,gateway_fx_dialog==2?"Initialize preset ":"Save preset ",gateway_fx_selected[gateway_fx_preset_index(gateway_fx_limiter)]+1,0,"?");
         for(unsigned band=0;band<96;band+=APP_CANVAS_PX/216u){
             unsigned h=96-band;if(h>APP_CANVAS_PX/216u)h=APP_CANVAS_PX/216u;
             cv_begin(216,h,RGB(18,24,31));cv_oy=-(int)band;
@@ -241,8 +247,10 @@ static void gateway_fx_draw(void)
         return;
     }
     if(!gateway_fx_limiter){gateway_fx_eq_draw();return;}
-    cv_begin(240,16,C_BLACK);cv_text(5,1,&FONT_T,"FX: PEAK LIMITER",gateway_fx_params.lim?C_WHITE:C_GRAY);
-    char text[40];gateway_fx_format(text,"Preset ",gateway_fx_selected[1]+1,0,"");
+    cv_begin(240,16,C_BLACK);
+    const char *title=gateway_dynamics_mode==FX_DYNAMICS_LM?"FX: DYNAMICS: LM-Maximizer":"FX: DYNAMICS: Peak Limiter";
+    cv_text(5,1,&FONT_T,title,gateway_fx_params.lim?C_WHITE:C_GRAY);
+    char text[40];gateway_fx_format(text,"Preset ",gateway_fx_selected[gateway_fx_preset_index(1)]+1,0,"");
     cv_text(235-text_w(&FONT_T,text),1,&FONT_T,text,gateway_fx_preset_dirty(1)?RGB(255,212,40):C_WHITE);
     cv_blit(0,18);gateway_fx_status_valid=0;
     if(gateway_screenshot_painting)gateway_fx_limiter_region(0,34,240,206,1);else gateway_fx_status();

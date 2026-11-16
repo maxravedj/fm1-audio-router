@@ -92,7 +92,7 @@ static void migration(void)
         if(bad<NE)s.midi_position[bad]=128;
         if(bad==NE)s.vectorscope_color=GATEWAY_WAVE_COLORS;
         if(bad==NE+3)s.version=18;
-        if(bad==NE+4)s.vectorscope_color|=128u;
+        if(bad==NE+4){s.version=22;s.vectorscope_color|=128u;}
         if(bad==NE+5)s.vectorscope_color=(s.vectorscope_color&15u)|112u;
         unsigned len=bad==NE+1?24:bad==NE+2?31:32;
         assert(!plat_store_save(OBJ_SETTINGS,&s,len));reboot_app();assert(gateway_zoom==6);
