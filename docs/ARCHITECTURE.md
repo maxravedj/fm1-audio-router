@@ -74,7 +74,10 @@ Spectrum reuses its int16 PCM staging buffer for the complex float FFT,
 expanding backwards after reading the DC mean. Quarter-wave twiddles are
 reflected from one cosine table for the remaining phases. Capture plus FFT scratch is 69,640 bytes;
 stereo power analysis, FFT resolution and Hann normalization are
-unchanged.
+unchanged. Each FFT stage visits phases before independent butterfly groups,
+reusing each reconstructed cosine/sine pair (4,095 pairs per transform instead
+of 24,576). Media service checkpoints remain bounded to 128 butterflies, with
+no extra table allocation; the window stays at 4,096 samples and refresh at 33 ms.
 
 Waveform history keeps six levels (1 to 1024 samples per bucket). The unused
 4096-sample level is removed: every displayed window, including 8 seconds at
@@ -155,6 +158,12 @@ banks, selected positions and explicit preset saves, with one shared Dynamics
 bypass flag. Migration copies the old shared presets and selection into both
 banks without a boot-time write. The larger record uses three payload pages
 plus the final commit header in the existing FX A/B sectors.
+
+LM-Maximizer exposes threshold as `ceiling − input gain` while retaining the
+AFX v5 gain encoding. Ceiling edits adjust that gain by the same dB delta,
+preserving the limiting threshold. Legacy LM thresholds outside −30..0 dB
+are clamped only in the working bank; explicit preset SAVE owns persistence.
+Peak Limiter's input-gain controls and saved values are unchanged.
 
 Relevant physical flash offsets:
 

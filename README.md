@@ -29,7 +29,7 @@
 # Installation
 1. Flash m-bootloader with [M-Flasher](https://github.com/jvitkauskas/m-flasher)
 2. Turn off FM-1 and turn on while holding **REC** button
-3. Flash [latest firmware](https://github.com/maxravedj/fm1-audio-router/releases/latest/download/fm1-audio-router-v0.6.0.fwsc) with M-Flasher
+3. Flash [latest firmware](https://github.com/maxravedj/fm1-audio-router/releases/latest/download/fm1-audio-router-v0.6.1.fwsc) with M-Flasher
 
 See additional [installation instructions](docs/INSTALL.md)
 
@@ -44,7 +44,7 @@ Connect up to two devices; the last device to start playback takes over and paus
 ### FX chain
 Hold **FX** button to enable or disable FX chain. Press **SEL** on specific FX screen to bypass that FX
 - EQ: use **SELECT** to cycle through five bands and post-EQ gain, **ALGORITHM** to select filter type, **K1** for frequency, **K2** for gain or slope, **K3** for Q or resonance
-- Dynamics: choose Peak Limiter or the LoudMax-inspired LM-Maximizer in Settings. **K1** sets input gain. Peak Limiter uses **K2** for release and **K3** for ceiling; LM-Maximizer uses **K2** for ceiling and automatic release.
+- Dynamics: choose Peak Limiter or the LoudMax-inspired LM-Maximizer in Settings. Peak Limiter uses **K1** for input gain, **K2** for release and **K3** for ceiling. LM-Maximizer uses **K1** for threshold and **K3** for ceiling, with automatic release; **K2** is unused.
 
 Use **PRESETS** knob to scroll presets. EQ, Peak Limiter and LM-Maximizer each have 8 independent slots; Dynamics bypass is shared between its two modes. Use **SAVE** to store changes to the current preset. See [dynamics details](docs/DYNAMICS.md).
 

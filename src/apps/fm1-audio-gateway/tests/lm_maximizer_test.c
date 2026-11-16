@@ -119,4 +119,45 @@ static void input_history(void)
     assert(fabsf(visible.inverse-control.inverse)<.001f && paused.inverse>control.inverse+.1f);
     puts("PASS: sustained input causally arms/captures the long tail; subthreshold input separates ignored, visible-only hold and hidden pause, then visible hold rejoins recovery");
 }
-int main(void){setbuf(stdout,NULL);latency_and_ceiling();streaming_and_isolation();release_oracle();mode_switches();input_history();}
+static void preset_reset(void)
+{
+    fx_params_t p;fx_bank_t b;fx_engine_t e;setup(&p,&b,&e);
+    for(unsigned i=0;i<40000;i++){
+        int32_t f[2]={16000000,-8000000};fx_process(&e,f,1,4096);
+    }
+    for(unsigned i=0;i<LM_HOLD+200;i++){
+        int32_t f[2]={10000,-5000};fx_process(&e,f,1,4096);
+    }
+    assert(e.detector.lm.captured>1 && e.gain<.8f);
+    fx_engine_t retained=e;
+    b.reset_lm=1;fx_publish(&e,&b);
+    b.reset_lm=0;fx_publish(&e,&b); /* An edit before audio runs cannot cancel it. */
+    assert(e.pending.reset_lm && e.detector.lm.captured==retained.detector.lm.captured);
+    unsigned reset_at=0;
+    for(unsigned i=0;i<2u*FX_BYPASS_FADE+20u;i++){
+        float old=e.detector.lm.captured;
+        int32_t f[2]={10000,-5000},g[2]={10000,-5000};
+        fx_process(&e,f,1,4096);fx_process(&retained,g,1,4096);
+        assert(!memcmp(e.delay,retained.delay,sizeof e.delay) && !memcmp(e.z,retained.z,sizeof e.z));
+        assert(e.at==retained.at && e.time==retained.time && e.latency_mode==FX_DYNAMICS_LM && e.latency_on);
+        if(old && !e.detector.lm.captured){
+            assert(!reset_at && !e.bypass_level && !f[0] && !f[1]);reset_at=i+1;
+            assert(!e.detector.lm.charge_s && !e.detector.lm.charge_f && !e.detector.lm.history_peak &&
+                   !e.detector.lm.medium_hold && !e.detector.lm.long_hold && !e.detector.lm.visible_hold);
+        }
+        if(reset_at)assert(e.gain==1 && e.detector.lm.medium==1 && e.detector.lm.long_env==1);
+        if(i>=2u*FX_BYPASS_FADE)assert(abs(f[0]-10000)<=1 && abs(f[1]+5000)<=1);
+    }
+    assert(reset_at==FX_BYPASS_FADE && !e.pending.reset_lm && !e.fade && e.bypass_level==FX_BYPASS_FADE);
+    assert(retained.detector.lm.captured>1 && retained.gain<.8f); /* Ordinary edit retains history. */
+    /* An already bypassed detector resets without changing dry audio/latency. */
+    b.lim=0;fx_init(&e,&b);e.detector.lm=retained.detector.lm;
+    b.reset_lm=1;fx_publish(&e,&b);
+    for(unsigned i=0;i<FX_FADE+1u;i++){
+        int32_t f[2]={10000,-5000};fx_process(&e,f,1,4096);
+        assert(f[0]==10000 && f[1]==-5000 && !e.latency_on && e.bypass_level==FX_BYPASS_FADE);
+        assert(!e.detector.lm.captured && !e.detector.lm.charge_s);
+    }
+    puts("PASS: pending LM reset survives coalescing, clears real long-release history exactly at 5-ms silence, 5-ms recovery, warm EQ/delay and bypass without a dip");
+}
+int main(void){setbuf(stdout,NULL);latency_and_ceiling();streaming_and_isolation();release_oracle();mode_switches();input_history();preset_reset();}

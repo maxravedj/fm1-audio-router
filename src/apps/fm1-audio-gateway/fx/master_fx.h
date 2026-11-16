@@ -31,7 +31,9 @@ typedef struct {
     uint8_t slope[FX_BANDS],tail; /* 0..3 -> 12/24/36/48 dB/oct; v1 prefix retained. */
 } fx_params_t;
 typedef struct { float a1,a2,a3,m0,m1,m2; } fx_coef_t;
-typedef struct { fx_coef_t c[FX_BANDS][FX_STAGES]; uint8_t stages[FX_BANDS]; float post,input,ceiling,release; uint32_t mask,lim,dynamics; } fx_bank_t;
+/* reset_lm occupies existing alignment padding; it is a transient request,
+ * never a saved parameter. The audio owner consumes it at a silent boundary. */
+typedef struct { fx_coef_t c[FX_BANDS][FX_STAGES]; uint8_t stages[FX_BANDS],reset_lm; float post,input,ceiling,release; uint32_t mask,lim,dynamics; } fx_bank_t;
 typedef struct {
     fx_bank_t bank[2],pending;
     volatile uint32_t generation;
@@ -141,9 +143,17 @@ static void fx_init(fx_engine_t *e,const fx_bank_t *b)
 {
     memset(e,0,sizeof *e);
     memcpy(&e->bank[0],b,sizeof *b);memcpy(&e->bank[1],b,sizeof *b);memcpy(&e->pending,b,sizeof *b);
+    e->bank[0].reset_lm=e->bank[1].reset_lm=e->pending.reset_lm=0;
     e->latency_mode=e->detector_mode=b->dynamics;
     fx_detector_reset(e);e->latency_on=e->detector_on=b->lim;
     e->bypass_level=FX_BYPASS_FADE;e->reduction_q16=65536u;
+}
+/* Foreground publication under the caller's short IRQ lock. Coalescing edits
+ * cannot cancel an unconsumed preset reset, including on an idle USB route. */
+static void fx_publish(fx_engine_t *e,const fx_bank_t *b)
+{
+    unsigned reset=e->pending.reset_lm;
+    e->pending=*b;e->pending.reset_lm|=reset;e->generation++;
 }
 static float fx_filter(fx_engine_t *e,unsigned k,unsigned ch,float in)
 {
@@ -168,6 +178,7 @@ static void fx_process(fx_engine_t *e,int32_t *pcm,uint32_t n,float master_gain)
     /* Pending is copied by the audio owner only after the preceding transition. */
     if(!e->fade && e->seen!=e->generation){
         unsigned next=e->active^1u;e->bank[next]=e->pending;e->seen=e->generation;
+        e->pending.reset_lm=0;
         /* Limiter/post-gain edits leave the upstream EQ path unchanged.
          * Its warm state must follow the bank, rather than injecting a new
          * filter startup transient into an otherwise transparent edit. */
@@ -188,14 +199,20 @@ static void fx_process(fx_engine_t *e,int32_t *pcm,uint32_t n,float master_gain)
             delayed[ch]=e->delay[e->at][ch];e->delay[e->at][ch]=x[ch];
         }
         unsigned target=e->fade?k^1u:k;
-        const fx_bank_t *b=&e->bank[target];
+        fx_bank_t *b=&e->bank[target];
         /* Fade to exact silence before changing time alignment. The delay
          * stays warm even in bypass; no interpolation of time or dry/wet comb.
          * Reversing a request reverses the existing envelope, without jumps. */
-        if(b->lim!=e->latency_on || (b->lim && b->dynamics!=e->latency_mode)){
+        if(b->lim!=e->latency_on || (b->lim && b->dynamics!=e->latency_mode) || (b->reset_lm && e->latency_on)){
             if(e->bypass_level)e->bypass_level--;
             if(!e->bypass_level){e->latency_on=b->lim;e->latency_mode=b->dynamics;}
         }else if(e->bypass_level<FX_BYPASS_FADE)e->bypass_level++;
+        /* Preset recall drops all charging/hold/release and peak-deque state.
+         * Keep EQ and delay warm. Active resets use the existing 5-ms down/up
+         * envelope; an already bypassed detector can reset without a dip. */
+        if(b->reset_lm && (!e->latency_on || !e->bypass_level)){
+            e->detector_mode=b->dynamics;fx_detector_reset(e);b->reset_lm=0;
+        }
         if(e->latency_on && e->latency_mode==FX_DYNAMICS_LM){
             unsigned tap=(e->at+FX_DELAY-LM_LOOK)&(FX_DELAY-1u);
             delayed[0]=e->delay[tap][0];delayed[1]=e->delay[tap][1];

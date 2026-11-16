@@ -135,19 +135,29 @@ static void gateway_spectrum_analyze(void)
             gateway_fft[j][0] = re; gateway_fft[j][1] = im;
         }
     }
+    /* Butterfly groups in a stage are independent. Visit the phase first so
+     * each cosine/sine pair is reconstructed once, then reused by all groups:
+     * 4095 pairs instead of 24576, without growing the quarter-wave table.
+     * Count actual butterflies for bounded media service even in early stages
+     * where one phase spans thousands of groups. */
+    uint32_t visits = 0;
     for (len = 2; len <= PLAT_SPECTRUM_FRAMES; len *= 2u) {
         uint32_t half = len / 2u, stride = PLAT_SPECTRUM_FRAMES / len;
-        for (start = 0; start < PLAT_SPECTRUM_FRAMES; start += len)
-            for (j = 0; j < half; j++) {
-                if(!((start+j)&127u))plat_bt_receiver_service();
+        for (j = 0; j < half; j++) {
+            uint32_t phase = j * stride, quarter = PLAT_SPECTRUM_FRAMES / 4u;
+            uint32_t reflected = phase <= quarter ? phase : 2u * quarter - phase;
+            float wr = gateway_twiddle[reflected], wi = -gateway_twiddle[quarter - reflected];
+            if (phase > quarter) wr = -wr;
+            for (start = 0; start < PLAT_SPECTRUM_FRAMES; start += len) {
+                if (!(visits++ & 127u)) plat_bt_receiver_service();
                 uint32_t a = start + j, z = a + half;
-                float wr = gateway_twiddle_part(j * stride,0), wi = gateway_twiddle_part(j * stride,1);
                 float re = wr * gateway_fft[z][0] - wi * gateway_fft[z][1];
                 float im = wr * gateway_fft[z][1] + wi * gateway_fft[z][0];
                 gateway_fft[z][0] = gateway_fft[a][0] - re;
                 gateway_fft[z][1] = gateway_fft[a][1] - im;
                 gateway_fft[a][0] += re; gateway_fft[a][1] += im;
             }
+        }
     }
     for (b = 0; b < GATEWAY_SPECTRUM_BANDS; b++) {
         plat_bt_receiver_service();

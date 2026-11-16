@@ -1,3 +1,2 @@
-- Bluetooth multipoint
-- New FX: LM-Maximizer - maximizer inspired by LoudMax VST
-- UI/UX improvements
+- LM-Maximizer controls improvements and state reset when changing presets
+- Spectrum optimization
