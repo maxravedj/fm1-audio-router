@@ -1,2 +1,1 @@
-- LM-Maximizer controls improvements and state reset when changing presets
-- Spectrum optimization
+- Steadier MASTER fader and gain readout in the mixer, with the same knob response for audio.

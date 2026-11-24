@@ -44,6 +44,16 @@ int main(void){
  const unsigned positions[]={0,410,2048,3072,4096};
  const char *const labels[]={"-INF","-60.0","-30.0","-15.0","0.0"};
  for(unsigned i=0;i<5;i++){master=positions[i];gateway_mixer_draw(0);header(3,"-24.0",labels[i]);scale();}
+ /* Small ADC changes must not repaint either the MASTER label or fader.
+  * Near the bottom of the curve, two ADC counts easily change a printed digit. */
+ master=410;gateway_mixer_draw(0);header(3,"-24.0","-60.0");
+ unsigned before=blits;
+ for(unsigned i=0;i<8;i++){
+  master=i&1u?402:418;gateway_mixer_draw(0);assert(blits==before);
+ }
+ master=2048;gateway_mixer_draw(0);header(3,"-24.0","-30.0");
+ master=8;gateway_mixer_draw(0);
+ master=0;gateway_mixer_draw(0);header(3,"-24.0","-INF");
  assert(!cv_cuts && !cpu_work_depth);
  puts("PASS: 16-pixel stereo bars, shared Home-1 dB scale at left retained on incremental edits, 5-pixel fader gap, exact meter/fader-centred peak/gain text without units, bottom names without numbers, neighbouring labels retained on incremental edits");
 }

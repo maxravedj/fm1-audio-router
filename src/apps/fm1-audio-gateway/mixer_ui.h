@@ -33,7 +33,14 @@ static void gateway_mixer_draw(int force)
         for(unsigned t=0;t<7;t++)cv_text(18-text_w(&FONT_T,ticks[t]),145-levels[t]*145/600,&FONT_T,ticks[t],C_GRAY);
         cv_blit(0,58);
     }
-    uint32_t master=gateway_shot_frozen?gateway_shot_panel.master:plat_master();if(master>4096)master=4096;
+    uint32_t master=gateway_shot_frozen?gateway_shot_panel.master:plat_master();
+    if(master>=4096)master=4096;
+    else if(!force && master){
+        /* Ignore up to two ADC counts around the last displayed position.
+         * Larger moves update immediately, with no change to audio gain. */
+        int32_t delta=(int32_t)master-(int32_t)gateway_mixer_fader_key[3];
+        if(delta>=-8 && delta<=8)master=gateway_mixer_fader_key[3];
+    }
     for(unsigned g=0;g<4;g++){
         unsigned base=20+55*g,pair=g==0?0:g==1?4:g==2?6:2;
         int muted=gateway_mixer_cut(g);
@@ -46,13 +53,16 @@ static void gateway_mixer_draw(int force)
         }
         unsigned held=gateway_meter[pair].peak>gateway_meter[pair+1].peak?gateway_meter[pair].peak:gateway_meter[pair+1].peak;
         uint32_t peak_key=held|((unsigned)muted<<16);
-        int db=g<3?gateway_mix_db[g]:gateway_master_db(master);
+        int db=g<3?gateway_mix_db[g]:0;
         uint32_t fader_key=g<3?(unsigned)(db-GATEWAY_GAIN_OFF):master;
         if(force || peak_key!=gateway_mixer_peak_key[g] || fader_key!=gateway_mixer_fader_key[g]){
             char text[40];cv_begin(55,16,C_BLACK);
             gateway_peak_label(text,held);cv_text(17-text_w(&FONT_T,text)/2,0,&FONT_T,text,muted?RGB(160,160,160):C_WHITE);
             if(g<3?db<=GATEWAY_GAIN_OFF:!master)memcpy(text,"-INF",5);
-            else gateway_fx_format(text,"",db<=GATEWAY_GAIN_MIN?(db-5)/10:db,db<=GATEWAY_GAIN_MIN?0:1,"");
+            else {
+                int gain_db=g<3?db:gateway_master_db(master);
+                gateway_fx_format(text,"",gain_db<=GATEWAY_GAIN_MIN?(gain_db-5)/10:gain_db,gain_db<=GATEWAY_GAIN_MIN?0:1,"");
+            }
             cv_text(44-text_w(&FONT_T,text)/2,0,&FONT_T,text,g<3?RGB(80,170,250):C_WHITE);
             cv_blit(base,40);gateway_mixer_peak_key[g]=peak_key;
         }
